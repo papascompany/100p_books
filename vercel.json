@@ -25,7 +25,7 @@
     }
   },
   "crons": [
-    { "path": "/api/cron/process-emails", "schedule": "*/5 * * * *" }
+    { "path": "/api/cron/process-emails", "schedule": "0 9 * * *" }
   ],
   "headers": [
     {
