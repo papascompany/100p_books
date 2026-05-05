@@ -23,6 +23,7 @@ export interface BuildProgress {
 export interface BuildArgsBase {
   resolveImageUrl: RenderContext["resolveImageUrl"];
   resolveBackgroundUrl?: RenderContext["resolveBackgroundUrl"];
+  resolveClipart?: RenderContext["resolveClipart"];
   onProgress?: (p: BuildProgress) => void;
   /** PDF 메타데이터. */
   meta?: { title?: string; author?: string };
@@ -49,6 +50,7 @@ export async function buildInteriorPdf(args: BuildInteriorArgs): Promise<Buffer>
   const renderCtx: RenderContext = {
     resolveImageUrl: args.resolveImageUrl,
     resolveBackgroundUrl: args.resolveBackgroundUrl,
+    resolveClipart: args.resolveClipart,
   };
 
   // 병렬 PNG 렌더 — 동시성 RENDER_CONCURRENCY
@@ -112,6 +114,7 @@ export async function buildCoverPdf(args: BuildCoverArgs): Promise<Buffer> {
   const png = await renderPageToPng(args.coverDoc, {
     resolveImageUrl: args.resolveImageUrl,
     resolveBackgroundUrl: args.resolveBackgroundUrl,
+    resolveClipart: args.resolveClipart,
   });
   args.onProgress?.({ done: 1, total: 1, phase: "render" });
 

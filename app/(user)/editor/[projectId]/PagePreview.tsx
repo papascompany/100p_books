@@ -3,6 +3,7 @@
 import type { CSSProperties } from "react";
 
 import type {
+  ClipartObject,
   LayoutObject,
   PageDoc,
   PhotoObject,
@@ -71,6 +72,7 @@ function renderObject(
 ) {
   if (obj.type === "photo") return renderPhoto(obj, scale, photoUrls);
   if (obj.type === "text") return renderText(obj, scale);
+  if (obj.type === "clipart") return renderClipart(obj, scale);
   return renderRect(obj, scale);
 }
 
@@ -155,6 +157,33 @@ function renderText(obj: TextObject, scale: number) {
   return (
     <div key={obj.objectId} style={style}>
       <span style={{ display: "block", width: "100%" }}>{display}</span>
+    </div>
+  );
+}
+
+function renderClipart(obj: ClipartObject, scale: number) {
+  const style: CSSProperties = {
+    ...baseBoxStyle(obj, scale),
+    transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
+    transformOrigin: "center",
+    opacity: obj.opacity ?? 1,
+    overflow: "hidden",
+  };
+  return (
+    <div key={obj.objectId} style={style}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={obj.src}
+        alt=""
+        loading="lazy"
+        draggable={false}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "contain",
+          display: "block",
+        }}
+      />
     </div>
   );
 }

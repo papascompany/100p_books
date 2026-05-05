@@ -10,6 +10,7 @@ import { PDFS_BUCKET, PDF_SIGNED_TTL_SEC } from "./constants";
 import { collectFontFamilies, registerProjectFonts } from "./fonts";
 import { createJob, updateJob, type PdfJob } from "./jobs";
 import { createPhotoResolver } from "./photos";
+import { createResourceResolver } from "./resources";
 
 /**
  * `/api/pdf/build` (사용자가 직접 다운로드용 PDF를 만드는 케이스) 와
@@ -169,10 +170,11 @@ export async function runProjectPdfBuild(
   ]);
   await registerProjectFonts({ families });
 
-  // 6) photo resolver
+  // 6) photo resolver + resource resolver (clipart / background)
   const { resolve: resolvePhoto } = createPhotoResolver({
     projectId: args.projectId,
   });
+  const resourceResolver = createResourceResolver();
 
   // 7) 빌드 + 업로드
   const result: {
@@ -202,6 +204,8 @@ export async function runProjectPdfBuild(
         pages: pageDocs,
         bookSize,
         resolveImageUrl: resolvePhoto,
+        resolveBackgroundUrl: resourceResolver.resolveBackground,
+        resolveClipart: resourceResolver.resolveClipart,
         meta: args.meta ?? {
           title: project.title ?? "Untitled",
           author: "100p_books",
@@ -241,6 +245,8 @@ export async function runProjectPdfBuild(
         bookSize,
         pageCount: interiorPageCount,
         resolveImageUrl: resolvePhoto,
+        resolveBackgroundUrl: resourceResolver.resolveBackground,
+        resolveClipart: resourceResolver.resolveClipart,
         meta: args.meta ?? {
           title: project.title ?? "Untitled",
           author: "100p_books",

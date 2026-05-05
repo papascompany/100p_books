@@ -60,12 +60,15 @@ function makeMockCanvas(objects: TaggedFabricObject[]): {
 
 /** mock TaggedFabricObject — origin = center 가정. */
 function tag(
-  oType: "photo" | "text" | "rect",
+  oType: "photo" | "text" | "rect" | "clipart",
   partial: Partial<TaggedFabricObject> & {
     leftMm: number;
     topMm: number;
     widthMm: number;
     heightMm: number;
+    opacity?: number;
+    clipartSrc?: string;
+    resourceId?: string;
   },
 ): TaggedFabricObject {
   const widthPx = mmToPx(partial.widthMm, DPI);
@@ -76,6 +79,8 @@ function tag(
     oType,
     objectId: partial.objectId ?? `id-${oType}`,
     photoId: partial.photoId,
+    resourceId: partial.resourceId,
+    clipartSrc: partial.clipartSrc,
     placeholderSlot: partial.placeholderSlot,
     cropMode: partial.cropMode,
     borderRadiusMm: partial.borderRadiusMm,
@@ -89,6 +94,7 @@ function tag(
     left,
     top,
     angle: partial.angle ?? 0,
+    opacity: partial.opacity ?? 1,
     fill: partial.fill ?? "#ffffff",
     fontFamily: "Pretendard",
     fontSize: ptToPx(12, DPI),
@@ -205,6 +211,127 @@ describe("fabricToPageDoc", () => {
       DPI,
     );
     expect(doc.objects).toHaveLength(0);
+  });
+});
+
+describe("ClipartObject 라운드트립", () => {
+  it("clipartSrc / resourceId / opacity 모두 보존", () => {
+    const ca = tag("clipart", {
+      leftMm: 10,
+      topMm: 10,
+      widthMm: 30,
+      heightMm: 30,
+      angle: 15,
+      opacity: 0.7,
+      clipartSrc: "https://example.com/sign/resources/cliparts/abc.png?token=xyz",
+      resourceId: "res-123",
+    });
+    const doc = fabricToPageDoc(
+      makeMockCanvas([ca]) as unknown as Parameters<typeof fabricToPageDoc>[0],
+      META,
+      DPI,
+    );
+    expect(doc.objects).toHaveLength(1);
+    const out = doc.objects[0]!;
+    expect(out.type).toBe("clipart");
+    if (out.type === "clipart") {
+      expect(out.src).toBe(
+        "https://example.com/sign/resources/cliparts/abc.png?token=xyz",
+      );
+      expect(out.resourceId).toBe("res-123");
+      expect(out.leftMm).toBeCloseTo(10, 4);
+      expect(out.topMm).toBeCloseTo(10, 4);
+      expect(out.widthMm).toBeCloseTo(30, 4);
+      expect(out.heightMm).toBeCloseTo(30, 4);
+      expect(out.rotation).toBe(15);
+      expect(out.opacity).toBe(0.7);
+    }
+  });
+
+  it("clipartSrc 누락 시 직렬화에서 제외", () => {
+    const orphan = tag("clipart", {
+      leftMm: 0,
+      topMm: 0,
+      widthMm: 10,
+      heightMm: 10,
+    });
+    delete (orphan as Partial<TaggedFabricObject>).clipartSrc;
+    const doc = fabricToPageDoc(
+      makeMockCanvas([orphan]) as unknown as Parameters<
+        typeof fabricToPageDoc
+      >[0],
+      META,
+      DPI,
+    );
+    expect(doc.objects).toHaveLength(0);
+  });
+
+  it("opacity 1 (기본값) 은 직렬화 결과에 미포함", () => {
+    const ca = tag("clipart", {
+      leftMm: 0,
+      topMm: 0,
+      widthMm: 10,
+      heightMm: 10,
+      opacity: 1,
+      clipartSrc: "https://example.com/x.png",
+    });
+    const doc = fabricToPageDoc(
+      makeMockCanvas([ca]) as unknown as Parameters<typeof fabricToPageDoc>[0],
+      META,
+      DPI,
+    );
+    const out = doc.objects[0]!;
+    expect(out.type).toBe("clipart");
+    if (out.type === "clipart") {
+      expect(out.opacity).toBeUndefined();
+    }
+  });
+});
+
+describe("isPageDoc 가드 — clipart 포함", () => {
+  it("clipart 객체가 포함된 PageDoc 통과", async () => {
+    const { isPageDoc, PAGEDOC_VERSION } = await import("@/lib/layout/types");
+    const doc = {
+      version: PAGEDOC_VERSION,
+      bookSizeId: "b1",
+      pageNo: 1,
+      layoutMode: "polaroid",
+      widthMm: 145,
+      heightMm: 145,
+      bleedMm: 2,
+      backgroundColor: "#ffffff",
+      objects: [
+        {
+          type: "clipart",
+          objectId: "c1",
+          leftMm: 0,
+          topMm: 0,
+          widthMm: 30,
+          heightMm: 30,
+          rotation: 0,
+          src: "https://example.com/x.png",
+        },
+      ],
+    };
+    expect(isPageDoc(doc)).toBe(true);
+  });
+
+  it("알려지지 않은 type 은 reject", async () => {
+    const { isPageDoc, PAGEDOC_VERSION } = await import("@/lib/layout/types");
+    const doc = {
+      version: PAGEDOC_VERSION,
+      bookSizeId: "b1",
+      pageNo: 1,
+      layoutMode: "polaroid",
+      widthMm: 145,
+      heightMm: 145,
+      bleedMm: 2,
+      backgroundColor: "#fff",
+      objects: [
+        { type: "unknownTypeFoo", objectId: "x" },
+      ],
+    };
+    expect(isPageDoc(doc)).toBe(false);
   });
 });
 

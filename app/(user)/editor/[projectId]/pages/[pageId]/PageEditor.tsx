@@ -257,11 +257,11 @@ export default function PageEditor({
                   stageRef.current?.addText({ fontFamily: family });
                 }
               }}
-              onPickClipart={(url) => {
-                void stageRef.current?.addClipart(url);
+              onPickClipart={(url, resourceId) => {
+                void stageRef.current?.addClipart(url, resourceId);
               }}
               onPickBackground={(url) => {
-                stageRef.current?.setBackground(url);
+                stageRef.current?.setBackground({ type: "resource", url });
                 setDirty(true);
               }}
             />
@@ -338,12 +338,12 @@ export default function PageEditor({
           <ResourcePalette
             initialTab={toolSheet}
             onPickFont={() => {}}
-            onPickClipart={(url) => {
-              void stageRef.current?.addClipart(url);
+            onPickClipart={(url, resourceId) => {
+              void stageRef.current?.addClipart(url, resourceId);
               setToolSheet(null);
             }}
             onPickBackground={(url) => {
-              stageRef.current?.setBackground(url);
+              stageRef.current?.setBackground({ type: "resource", url });
               setDirty(true);
               setToolSheet(null);
             }}
@@ -371,8 +371,8 @@ export default function PageEditor({
           <ResourcePalette
             initialTab="clipart"
             onPickFont={() => {}}
-            onPickClipart={(url) => {
-              void stageRef.current?.addClipart(url);
+            onPickClipart={(url, resourceId) => {
+              void stageRef.current?.addClipart(url, resourceId);
               setToolSheet(null);
             }}
             onPickBackground={() => {}}

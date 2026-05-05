@@ -7,13 +7,36 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ptToPx, type TaggedFabricObject } from "@/lib/fabric/serialize";
 
+import type { SetBackgroundInput } from "./FabricStage";
+
+export interface CanvasBackgroundOption {
+  /** 단색 적용 — color picker. */
+  onColor?: (color: string) => void;
+  /** 사진 그리드 열기. 호출자가 photoId 를 골라 setBackground 호출. */
+  onPickPhoto?: () => void;
+  /** 리소스 카탈로그 열기. */
+  onPickResource?: () => void;
+  /** 배경 제거. */
+  onClear?: () => void;
+  /** 현재 배경색 (color picker 기본값). */
+  currentColor?: string;
+}
+
 export interface SelectionPanelProps {
   selection: TaggedFabricObject | null;
   /** 현재 캔버스 DPI (pt ↔ px 변환에 사용). */
   dpi: number;
   /** 변경 발생 시 강제 push (debounce 와 무관) — 자동 저장 트리거. */
   onChange?: () => void;
+  /**
+   * 선택 객체가 없을 때 노출되는 "캔버스 배경" 섹션 핸들러.
+   * 미지정 시 빈 안내 문구만 표시.
+   */
+  background?: CanvasBackgroundOption;
 }
+
+/** SelectionPanel 외부에서 setBackground 시 사용할 헬퍼 (입력 매핑 단순화). */
+export type { SetBackgroundInput };
 
 /**
  * 선택 객체에 따라 다른 속성 편집 UI.
@@ -27,11 +50,15 @@ export default function SelectionPanel({
   selection,
   dpi,
   onChange,
+  background,
 }: SelectionPanelProps) {
   if (!selection) {
     return (
-      <div className="rounded-md border border-dashed bg-white/40 p-4 text-sm text-muted-foreground">
-        편집할 객체를 선택하세요.
+      <div className="space-y-3">
+        <div className="rounded-md border border-dashed bg-white/40 p-4 text-sm text-muted-foreground">
+          편집할 객체를 선택하세요.
+        </div>
+        {background ? <CanvasBackgroundSection {...background} /> : null}
       </div>
     );
   }
@@ -62,6 +89,65 @@ export default function SelectionPanel({
     );
   }
   return null;
+}
+
+function CanvasBackgroundSection({
+  onColor,
+  onPickPhoto,
+  onPickResource,
+  onClear,
+  currentColor,
+}: CanvasBackgroundOption) {
+  return (
+    <section className="rounded-md border bg-white/60 p-3">
+      <h3 className="mb-2 text-sm font-semibold">캔버스 배경</h3>
+      <div className="space-y-2">
+        {onColor ? (
+          <label className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span>단색</span>
+            <Input
+              type="color"
+              value={currentColor ?? "#ffffff"}
+              onChange={(e) => onColor(e.target.value)}
+              className="h-8 w-16 p-0"
+            />
+          </label>
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {onPickPhoto ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={onPickPhoto}
+            >
+              사진에서 선택
+            </Button>
+          ) : null}
+          {onPickResource ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={onPickResource}
+            >
+              배경 카탈로그
+            </Button>
+          ) : null}
+          {onClear ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={onClear}
+            >
+              제거
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function TextEditor({

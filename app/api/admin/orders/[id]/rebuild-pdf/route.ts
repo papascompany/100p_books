@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { fail, ok } from "@/app/api/_lib/response";
 import { withAdmin } from "@/lib/admin/auth";
+import { logAdminAction } from "@/lib/admin/audit";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { runProjectPdfBuild } from "@/lib/pdf/build-job";
 
@@ -24,7 +25,7 @@ const BodySchema = z
  *   - 기존 cover_pdf_key/interior_pdf_key 와 동일 path 로 덮어쓰기 (upsert).
  *   - 새 키 / 사이즈는 변하지 않으므로 DB 갱신은 키가 비어 있을 때만 수행.
  */
-export const POST = withAdmin<{ id: string }>(async (req, ctx) => {
+export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
   const raw = (await req.json().catch(() => ({}))) as unknown;
   const parsed = BodySchema.safeParse(raw ?? {});
   if (!parsed.success) {
@@ -79,6 +80,20 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx) => {
   if (Object.keys(update).length > 0) {
     await admin.from("orders").update(update).eq("id", orderId);
   }
+
+  await logAdminAction({
+    actor: { id: user.id, email: user.email },
+    action: "order.pdf_rebuild",
+    targetType: "order",
+    targetId: ctx.params.id,
+    details: {
+      target,
+      coverKey: result.coverKey ?? null,
+      interiorKey: result.interiorKey ?? null,
+      durationMs: result.durationMs,
+    },
+    request: req,
+  });
 
   return ok({
     rebuilt: true,

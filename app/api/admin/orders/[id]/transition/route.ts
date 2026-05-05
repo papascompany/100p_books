@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { fail, ok } from "@/app/api/_lib/response";
 import { withAdmin } from "@/lib/admin/auth";
+import { logAdminAction } from "@/lib/admin/audit";
 import { createAdminSupabase } from "@/lib/db/admin";
 import type { OrderStatus } from "@/lib/db/types";
 import {
@@ -31,7 +32,7 @@ const BodySchema = z.object({
  *   - shipped → delivered 시 delivered_at 타임스탬프.
  *   - paid → in_production 으로 갈 때 별도 메타 없음.
  */
-export const POST = withAdmin<{ id: string }>(async (req, ctx) => {
+export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
   const raw = (await req.json().catch(() => ({}))) as unknown;
   const parsed = BodySchema.safeParse(raw);
   if (!parsed.success) {
@@ -96,5 +97,22 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx) => {
   if (updErr || !updated) {
     return fail("ORDER_UPDATE_FAILED", updErr?.message ?? "갱신 실패", 500);
   }
+
+  // 감사 로그 — 상태 전이 + tracking 메타
+  await logAdminAction({
+    actor: { id: user.id, email: user.email },
+    action: "order.transition",
+    targetType: "order",
+    targetId: ctx.params.id,
+    details: {
+      from,
+      to: target,
+      ...(target === "shipped"
+        ? { trackingNo, trackingCarrier }
+        : {}),
+    },
+    request: req,
+  });
+
   return ok({ item: updated });
 });

@@ -391,12 +391,12 @@ export default function CoverEditor({
                   setDirty(true);
                 }
               }}
-              onPickClipart={(url) => {
-                void stageRef.current?.addClipart(url);
+              onPickClipart={(url, resourceId) => {
+                void stageRef.current?.addClipart(url, resourceId);
                 setDirty(true);
               }}
               onPickBackground={(url) => {
-                stageRef.current?.setBackground(url);
+                stageRef.current?.setBackground({ type: "resource", url });
                 setDirty(true);
               }}
             />
@@ -483,13 +483,13 @@ export default function CoverEditor({
           <ResourcePalette
             initialTab={toolSheet}
             onPickFont={() => {}}
-            onPickClipart={(url) => {
-              void stageRef.current?.addClipart(url);
+            onPickClipart={(url, resourceId) => {
+              void stageRef.current?.addClipart(url, resourceId);
               setDirty(true);
               setToolSheet(null);
             }}
             onPickBackground={(url) => {
-              stageRef.current?.setBackground(url);
+              stageRef.current?.setBackground({ type: "resource", url });
               setDirty(true);
               setToolSheet(null);
             }}

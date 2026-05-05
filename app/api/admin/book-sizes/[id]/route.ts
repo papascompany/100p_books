@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { ok, fail } from "@/app/api/_lib/response";
 import { withAdmin } from "@/lib/admin/auth";
+import { logAdminAction } from "@/lib/admin/audit";
 import { createAdminSupabase } from "@/lib/db/admin";
 
 export const runtime = "nodejs";
@@ -36,7 +37,7 @@ export const GET = withAdmin<{ id: string }>(async (_req, ctx) => {
   return ok({ item: data });
 });
 
-export const PATCH = withAdmin<{ id: string }>(async (req, ctx) => {
+export const PATCH = withAdmin<{ id: string }>(async (req, ctx, user) => {
   const raw = (await req.json().catch(() => ({}))) as unknown;
   const parsed = PatchSchema.safeParse(raw);
   if (!parsed.success) {
@@ -58,10 +59,20 @@ export const PATCH = withAdmin<{ id: string }>(async (req, ctx) => {
     .maybeSingle();
   if (error) return fail("BOOK_SIZE_UPDATE_FAILED", error.message, 500);
   if (!data) return fail("NOT_FOUND", "책 사이즈를 찾을 수 없습니다.", 404);
+
+  await logAdminAction({
+    actor: { id: user.id, email: user.email },
+    action: "book_size.update",
+    targetType: "book_size",
+    targetId: ctx.params.id,
+    details: { changedFields: Object.keys(parsed.data) },
+    request: req,
+  });
+
   return ok({ item: data });
 });
 
-export const DELETE = withAdmin<{ id: string }>(async (_req, ctx) => {
+export const DELETE = withAdmin<{ id: string }>(async (req, ctx, user) => {
   const admin = createAdminSupabase();
   // FK (projects.book_size_id) 가 있는 경우 삭제 차단 — 안전하게 active=false 권장.
   const { count, error: refErr } = await admin
@@ -81,5 +92,14 @@ export const DELETE = withAdmin<{ id: string }>(async (_req, ctx) => {
     .delete()
     .eq("id", ctx.params.id);
   if (error) return fail("BOOK_SIZE_DELETE_FAILED", error.message, 500);
+
+  await logAdminAction({
+    actor: { id: user.id, email: user.email },
+    action: "book_size.delete",
+    targetType: "book_size",
+    targetId: ctx.params.id,
+    request: req,
+  });
+
   return ok({ deleted: true });
 });

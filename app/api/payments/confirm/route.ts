@@ -8,7 +8,7 @@ import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import { assertTransition } from "@/lib/orders/state";
 import { confirmTossPayment, TossError } from "@/lib/payments/toss";
-import { runProjectPdfBuild, PdfBuildError } from "@/lib/pdf/build-job";
+import { enqueueAndRunPdfJob } from "@/lib/pdf/job-runner";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -167,43 +167,43 @@ export async function POST(req: Request) {
       .update({ status: "ordered" })
       .eq("id", order.project_id);
 
-    // 5) PDF 빌드 잡 — 실패해도 결제는 살려둠.
-    let pdfError: string | null = null;
-    try {
-      const result = await runProjectPdfBuild({
+    // 5) PDF 빌드 잡 — 영속 큐(pdf_build_jobs) 에 등록 후 즉시 실행.
+    //    실패해도 결제는 살려둠. 잡 행이 남아있어 관리자가 재시도 가능.
+    const buildResult = await enqueueAndRunPdfJob(
+      {
+        orderId: order.id,
         projectId: order.project_id,
         userId: order.user_id,
         target: "all",
+      },
+      {
         signUrls: false,
         uploadPath: (key) => `${order.user_id}/${order.id}/${key}`,
         meta: { author: "100p_books" },
-      });
+        onSuccess: async ({ coverKey, interiorKey }) => {
+          if (!coverKey && !interiorKey) return;
+          const patch: Record<string, unknown> = {};
+          if (coverKey) patch.cover_pdf_key = coverKey;
+          if (interiorKey) patch.interior_pdf_key = interiorKey;
+          await admin.from("orders").update(patch).eq("id", order.id);
+        },
+      },
+    );
 
-      if (result.coverKey || result.interiorKey) {
-        const patch: Record<string, unknown> = {};
-        if (result.coverKey) patch.cover_pdf_key = result.coverKey;
-        if (result.interiorKey) patch.interior_pdf_key = result.interiorKey;
-        await admin.from("orders").update(patch).eq("id", order.id);
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      pdfError = msg;
+    if (!buildResult.ok) {
       console.error(
         "[payments/confirm] PDF build failed for order",
         order.id,
-        msg,
+        buildResult.error,
       );
-      if (!(e instanceof PdfBuildError)) {
-        // 비-빌드 에러는 한번 더 던져 모니터링에 잡히도록.
-        // 단, 결제 자체는 성공이므로 클라엔 success 를 응답한다.
-      }
     }
 
     return ok({
       orderId: order.id,
       status: "paid" as const,
       redirectUrl: `/order/${order.id}/success`,
-      pdfError,
+      pdfError: buildResult.ok ? null : buildResult.error ?? "PDF 빌드 실패",
+      pdfJobId: buildResult.jobId || null,
     });
   } catch (err) {
     return failFromError(err);

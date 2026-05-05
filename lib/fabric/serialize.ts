@@ -26,6 +26,7 @@
 import * as fabric from "fabric";
 
 import type {
+  ClipartObject,
   LayoutObject,
   PageDoc,
   PhotoObject,
@@ -56,6 +57,8 @@ export const FABRIC_EXTRA_PROPS = [
   "objectId",
   "oType",
   "photoId",
+  "resourceId",
+  "clipartSrc",
   "placeholderSlot",
   "cropMode",
   "borderRadiusMm",
@@ -69,8 +72,12 @@ export const FABRIC_EXTRA_PROPS = [
 /** 우리 커스텀 프로퍼티가 부착된 Fabric 객체 타입 (느슨). */
 export interface TaggedFabricObject extends fabric.FabricObject {
   objectId?: string;
-  oType?: "photo" | "text" | "rect";
+  oType?: "photo" | "text" | "rect" | "clipart";
   photoId?: string;
+  /** 클립아트 — resources.id 보존 (signedUrl 만료 시 재발급). */
+  resourceId?: string;
+  /** 클립아트 — 원본 src URL (signedUrl 또는 public). */
+  clipartSrc?: string;
   placeholderSlot?: boolean;
   cropMode?: "cover" | "contain";
   borderRadiusMm?: number;
@@ -143,6 +150,9 @@ export async function pageDocToFabric(
     }
     if (obj.type === "text") {
       return buildText(obj, dpi);
+    }
+    if (obj.type === "clipart") {
+      return buildClipart(obj, dpi);
     }
     return buildRect(obj, dpi);
   });
@@ -331,6 +341,76 @@ function buildText(obj: TextObject, dpi: number): TaggedFabricObject {
   return tagged;
 }
 
+/**
+ * 클립아트 객체 — fabric.Image.fromURL.
+ *  - photoId 가 없는 외부 리소스. resourceId/src 를 커스텀 프로퍼티로 보존.
+ *  - cover 모드 고정 (슬롯 박스에 가득 — 회전 후에도 box-aligned 클립).
+ *  - 로드 실패 시 회색 placeholder 로 대체.
+ */
+async function buildClipart(
+  obj: ClipartObject,
+  dpi: number,
+): Promise<TaggedFabricObject> {
+  const { left, top, width, height } = centerLeftTop(obj, dpi);
+
+  let img: fabric.FabricImage;
+  try {
+    img = await fabric.FabricImage.fromURL(obj.src, {
+      crossOrigin: "anonymous",
+    });
+  } catch {
+    // 로드 실패 → 회색 박스로 대체.
+    const rect = new fabric.Rect({
+      left,
+      top,
+      originX: "center",
+      originY: "center",
+      width,
+      height,
+      fill: "#eef0f4",
+      stroke: "rgba(0,0,0,0.15)",
+      strokeDashArray: [3, 3],
+      angle: obj.rotation || 0,
+      opacity: obj.opacity ?? 1,
+    });
+    const tagged = rect as TaggedFabricObject;
+    tagged.objectId = obj.objectId;
+    tagged.oType = "clipart";
+    tagged.resourceId = obj.resourceId;
+    tagged.clipartSrc = obj.src;
+    tagged.originalWidthMm = obj.widthMm;
+    tagged.originalHeightMm = obj.heightMm;
+    return tagged;
+  }
+
+  const iw = img.width ?? 1;
+  const ih = img.height ?? 1;
+  // 클립아트는 비율 유지 + contain (PDF 와 클라가 동일 결과를 내도록).
+  const scale = Math.min(width / iw, height / ih);
+
+  img.set({
+    left,
+    top,
+    originX: "center",
+    originY: "center",
+    scaleX: scale,
+    scaleY: scale,
+    angle: obj.rotation || 0,
+    opacity: obj.opacity ?? 1,
+    selectable: true,
+    hasRotatingPoint: true,
+  });
+
+  const tagged = img as TaggedFabricObject;
+  tagged.objectId = obj.objectId;
+  tagged.oType = "clipart";
+  tagged.resourceId = obj.resourceId;
+  tagged.clipartSrc = obj.src;
+  tagged.originalWidthMm = obj.widthMm;
+  tagged.originalHeightMm = obj.heightMm;
+  return tagged;
+}
+
 function buildRect(obj: RectObject, dpi: number): TaggedFabricObject {
   const { left, top, width, height } = centerLeftTop(obj, dpi);
   const radiusPx = mmToPx(obj.borderRadiusMm ?? 0, dpi);
@@ -509,6 +589,27 @@ function serializeOne(
     }
     if (o.placeholderSlot) rect.placeholderSlot = true;
     return rect;
+  }
+
+  if (o.oType === "clipart") {
+    // src 가 누락된 클립아트는 저장 불가 → 스킵.
+    const src = o.clipartSrc;
+    if (!src) return null;
+    const ca: ClipartObject = {
+      type: "clipart",
+      objectId,
+      leftMm,
+      topMm,
+      widthMm,
+      heightMm,
+      rotation,
+      src,
+    };
+    if (o.resourceId) ca.resourceId = o.resourceId;
+    if (typeof o.opacity === "number" && o.opacity !== 1) {
+      ca.opacity = o.opacity;
+    }
+    return ca;
   }
 
   return null;

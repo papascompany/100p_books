@@ -74,7 +74,30 @@ export interface RectObject {
   placeholderSlot?: boolean;
 }
 
-export type LayoutObject = PhotoObject | TextObject | RectObject;
+/**
+ * 서버 리소스(클립아트) 카탈로그에서 캔버스에 추가된 이미지.
+ *  - photoId 기반이 아닌 외부 리소스 — `resources` 테이블의 id 와 url 보존.
+ *  - signedUrl 발급 만료 가능 — 서버 PDF 렌더 시점에 resourceId 로 재발급.
+ *  - cropMode 는 항상 cover (슬롯 박스에 가득 — 회전 후에도 박스로 클립).
+ */
+export interface ClipartObject {
+  type: "clipart";
+  objectId: string;
+  leftMm: number;
+  topMm: number;
+  widthMm: number;
+  heightMm: number;
+  /** degrees (중심 기준, 양수=시계방향). 기본 0. */
+  rotation: number;
+  /** 서버 리소스 URL (signedUrl 또는 public). resources.id 보존을 위해 별도 필드. */
+  src: string;
+  /** resources.id — signedUrl 만료 시 재발급용. */
+  resourceId?: string;
+  /** 0..1. 미지정 시 1. */
+  opacity?: number;
+}
+
+export type LayoutObject = PhotoObject | TextObject | RectObject | ClipartObject;
 
 /**
  * 페이지/표지 배경 이미지(선택). backgroundColor 는 항상 유지하고,
@@ -109,17 +132,34 @@ export interface PageDoc {
   objects: LayoutObject[];
 }
 
+/** 알려진 LayoutObject.type 들. 신규 타입 추가 시 여기도 갱신. */
+const KNOWN_OBJECT_TYPES = new Set<string>([
+  "photo",
+  "text",
+  "rect",
+  "clipart",
+]);
+
 /** 런타임 가드 — M3 에디터 로드 시 신뢰 경계 확인용. */
 export function isPageDoc(v: unknown): v is PageDoc {
   if (!v || typeof v !== "object") return false;
   const d = v as Partial<PageDoc>;
-  return (
-    d.version === PAGEDOC_VERSION &&
-    typeof d.bookSizeId === "string" &&
-    typeof d.pageNo === "number" &&
-    typeof d.widthMm === "number" &&
-    typeof d.heightMm === "number" &&
-    d.bleedMm === 2 &&
-    Array.isArray(d.objects)
-  );
+  if (
+    d.version !== PAGEDOC_VERSION ||
+    typeof d.bookSizeId !== "string" ||
+    typeof d.pageNo !== "number" ||
+    typeof d.widthMm !== "number" ||
+    typeof d.heightMm !== "number" ||
+    d.bleedMm !== 2 ||
+    !Array.isArray(d.objects)
+  ) {
+    return false;
+  }
+  // 알려지지 않은 type 만 reject — 기존 photo/text/rect/clipart 는 모두 통과.
+  for (const obj of d.objects) {
+    if (!obj || typeof obj !== "object") return false;
+    const t = (obj as { type?: unknown }).type;
+    if (typeof t !== "string" || !KNOWN_OBJECT_TYPES.has(t)) return false;
+  }
+  return true;
 }

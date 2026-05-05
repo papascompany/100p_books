@@ -21,6 +21,8 @@ const NAV: NavItem[] = [
   { href: "/admin/resources/clipart", label: "클립아트", match: "prefix" },
   { href: "/admin/resources/background", label: "배경", match: "prefix" },
   { href: "/admin/users", label: "사용자", match: "prefix" },
+  { href: "/admin/jobs", label: "PDF 잡", match: "prefix" },
+  { href: "/admin/audit", label: "감사 로그", match: "prefix" },
 ];
 
 export default function AdminSidebar({ email }: { email?: string | null }) {

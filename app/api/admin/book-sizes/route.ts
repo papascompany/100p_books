@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { ok, fail } from "@/app/api/_lib/response";
 import { withAdmin } from "@/lib/admin/auth";
+import { logAdminAction } from "@/lib/admin/audit";
 import { createAdminSupabase } from "@/lib/db/admin";
 
 export const runtime = "nodejs";
@@ -35,7 +36,7 @@ export const GET = withAdmin(async () => {
 });
 
 /** POST — 신규 등록. */
-export const POST = withAdmin(async (req) => {
+export const POST = withAdmin(async (req, _ctx, user) => {
   const raw = (await req.json().catch(() => ({}))) as unknown;
   const parsed = SizeSchema.safeParse(raw);
   if (!parsed.success) {
@@ -57,5 +58,15 @@ export const POST = withAdmin(async (req) => {
   if (error || !data) {
     return fail("BOOK_SIZE_INSERT_FAILED", error?.message ?? "실패", 500);
   }
+
+  await logAdminAction({
+    actor: { id: user.id, email: user.email },
+    action: "book_size.create",
+    targetType: "book_size",
+    targetId: data.id,
+    details: { name: data.name },
+    request: req,
+  });
+
   return ok({ item: data }, { status: 201 });
 });

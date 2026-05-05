@@ -21,10 +21,10 @@ export interface ResourcePaletteProps {
   initialTab?: ResourceTab;
   /** 폰트 클릭 — 기존 텍스트 선택돼 있으면 fontFamily 변경, 없으면 새 텍스트 추가. */
   onPickFont: (family: string, url: string) => void;
-  /** 클립아트(또는 사진) 추가. */
-  onPickClipart: (url: string) => void;
-  /** 배경 색/이미지. (M3 에선 이미지 url) */
-  onPickBackground: (url: string) => void;
+  /** 클립아트(또는 사진) 추가. resourceId 는 PageDoc 에 보존되어 PDF 빌드 시 signedUrl 재발급에 사용. */
+  onPickClipart: (url: string, resourceId: string) => void;
+  /** 배경 색/이미지. (이미지 url + resourceId — 서버 렌더 재발급용) */
+  onPickBackground: (url: string, resourceId: string) => void;
   className?: string;
 }
 
@@ -177,8 +177,8 @@ export default function ResourcePalette({
                   className="block aspect-square w-full overflow-hidden rounded-md border border-border bg-white transition-transform hover:scale-[1.02]"
                   onClick={() =>
                     tab === "clipart"
-                      ? onPickClipart(it.url)
-                      : onPickBackground(it.url)
+                      ? onPickClipart(it.url, it.id)
+                      : onPickBackground(it.url, it.id)
                   }
                   aria-label={it.name}
                 >

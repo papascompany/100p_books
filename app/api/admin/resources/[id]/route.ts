@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { fail, ok } from "@/app/api/_lib/response";
 import { withAdmin } from "@/lib/admin/auth";
+import { logAdminAction } from "@/lib/admin/audit";
 import { RESOURCES_BUCKET } from "@/lib/admin/resources";
 import { findResourceUsage } from "@/lib/admin/resource-usage";
 import { createAdminSupabase } from "@/lib/db/admin";
@@ -19,7 +20,7 @@ const PatchSchema = z
   })
   .refine((v) => Object.keys(v).length > 0, "변경할 필드가 없습니다.");
 
-export const PATCH = withAdmin<{ id: string }>(async (req, ctx) => {
+export const PATCH = withAdmin<{ id: string }>(async (req, ctx, user) => {
   const raw = (await req.json().catch(() => ({}))) as unknown;
   const parsed = PatchSchema.safeParse(raw);
   if (!parsed.success) {
@@ -39,10 +40,20 @@ export const PATCH = withAdmin<{ id: string }>(async (req, ctx) => {
     .maybeSingle();
   if (error) return fail("RESOURCE_UPDATE_FAILED", error.message, 500);
   if (!data) return fail("NOT_FOUND", "리소스를 찾을 수 없습니다.", 404);
+
+  await logAdminAction({
+    actor: { id: user.id, email: user.email },
+    action: "resource.update",
+    targetType: "resource",
+    targetId: ctx.params.id,
+    details: { changedFields: Object.keys(parsed.data) },
+    request: req,
+  });
+
   return ok({ item: data });
 });
 
-export const DELETE = withAdmin<{ id: string }>(async (req, ctx) => {
+export const DELETE = withAdmin<{ id: string }>(async (req, ctx, user) => {
   const admin = createAdminSupabase();
   const url = new URL(req.url);
   const force = url.searchParams.get("force") === "true";
@@ -97,5 +108,15 @@ export const DELETE = withAdmin<{ id: string }>(async (req, ctx) => {
     .delete()
     .eq("id", ctx.params.id);
   if (delErr) return fail("RESOURCE_DELETE_FAILED", delErr.message, 500);
+
+  await logAdminAction({
+    actor: { id: user.id, email: user.email },
+    action: "resource.delete",
+    targetType: "resource",
+    targetId: ctx.params.id,
+    details: { force },
+    request: req,
+  });
+
   return ok({ deleted: true, forced: force });
 });

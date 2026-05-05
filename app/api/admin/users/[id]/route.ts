@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { fail, ok } from "@/app/api/_lib/response";
 import { withAdmin } from "@/lib/admin/auth";
+import { logAdminAction } from "@/lib/admin/audit";
 import { createAdminSupabase } from "@/lib/db/admin";
 
 export const runtime = "nodejs";
@@ -36,6 +37,14 @@ export const PATCH = withAdmin<{ id: string }>(async (req, ctx, user) => {
   }
 
   const admin = createAdminSupabase();
+  // 이전 role 조회 (감사 로그 from)
+  const { data: prev } = await admin
+    .from("profiles")
+    .select("role")
+    .eq("id", ctx.params.id)
+    .maybeSingle();
+  const fromRole = prev?.role ?? null;
+
   const { data, error } = await admin
     .from("profiles")
     .update({ role })
@@ -44,5 +53,15 @@ export const PATCH = withAdmin<{ id: string }>(async (req, ctx, user) => {
     .maybeSingle();
   if (error) return fail("USER_UPDATE_FAILED", error.message, 500);
   if (!data) return fail("NOT_FOUND", "사용자를 찾을 수 없습니다.", 404);
+
+  await logAdminAction({
+    actor: { id: user.id, email: user.email },
+    action: "user.role_change",
+    targetType: "user",
+    targetId: ctx.params.id,
+    details: { from: fromRole, to: role },
+    request: req,
+  });
+
   return ok({ item: data });
 });

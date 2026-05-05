@@ -10,6 +10,7 @@ import {
 type LoadedImage = Image;
 
 import type {
+  ClipartObject,
   LayoutObject,
   PageDoc,
   PhotoObject,
@@ -48,6 +49,11 @@ export interface RenderContext {
   resolveBackgroundUrl?: (input: {
     photoId?: string;
     url?: string;
+  }) => Promise<Buffer | null>;
+  /** 클립아트(외부 리소스) 다운로드. resourceId 우선, 없으면 src URL. */
+  resolveClipart?: (input: {
+    resourceId?: string;
+    src: string;
   }) => Promise<Buffer | null>;
 }
 
@@ -142,6 +148,7 @@ async function drawObject(
   if (obj.type === "photo") return drawPhoto(cx, obj, dpi, ctx);
   if (obj.type === "text") return drawText(cx, obj, dpi);
   if (obj.type === "rect") return drawRect(cx, obj, dpi);
+  if (obj.type === "clipart") return drawClipart(cx, obj, dpi, ctx);
 }
 
 async function drawPhoto(
@@ -237,6 +244,85 @@ function drawPhotoPlaceholder(
   cx.lineWidth = 1;
   cx.setLineDash([4, 4]);
   cx.stroke();
+  cx.restore();
+}
+
+/**
+ * 클립아트(외부 리소스 이미지) 그리기.
+ *  - resolveClipart 가 우선 — resourceId 가 있으면 admin 으로 새 signedUrl 발급/다운로드.
+ *  - 없으면 src 를 fetch (외부 public URL 또는 만료되지 않은 signedUrl).
+ *  - cropMode 는 contain 고정 (클라 buildClipart 와 동일 결과).
+ *  - opacity 적용. 회전은 PhotoObject 와 동일하게 중심 기준.
+ */
+async function drawClipart(
+  cx: SKRSContext2D,
+  obj: ClipartObject,
+  dpi: number,
+  ctx: RenderContext,
+): Promise<void> {
+  const xPx = mmToPx(obj.leftMm, dpi);
+  const yPx = mmToPx(obj.topMm, dpi);
+  const wPx = mmToPx(obj.widthMm, dpi);
+  const hPx = mmToPx(obj.heightMm, dpi);
+
+  let buf: Buffer | null = null;
+  try {
+    if (ctx.resolveClipart) {
+      buf = await ctx.resolveClipart({
+        resourceId: obj.resourceId,
+        src: obj.src,
+      });
+    }
+    if (!buf) {
+      // fallback: 직접 fetch
+      const r = await fetch(obj.src);
+      if (r.ok) {
+        const ab = await r.arrayBuffer();
+        buf = Buffer.from(ab);
+      }
+    }
+  } catch (e) {
+    console.warn(
+      `[pdf/render] clipart load failed (${obj.resourceId ?? obj.src}): ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+
+  if (!buf) {
+    // placeholder 회색 박스
+    cx.save();
+    cx.translate(xPx + wPx / 2, yPx + hPx / 2);
+    if (obj.rotation) cx.rotate((obj.rotation * Math.PI) / 180);
+    cx.globalAlpha = obj.opacity ?? 1;
+    cx.fillStyle = "#eef0f4";
+    cx.fillRect(-wPx / 2, -hPx / 2, wPx, hPx);
+    cx.restore();
+    return;
+  }
+
+  let img;
+  try {
+    img = await loadImage(buf);
+  } catch (e) {
+    console.warn(
+      `[pdf/render] clipart decode failed: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    return;
+  }
+
+  cx.save();
+  const cxx = xPx + wPx / 2;
+  const cyy = yPx + hPx / 2;
+  cx.translate(cxx, cyy);
+  if (obj.rotation) cx.rotate((obj.rotation * Math.PI) / 180);
+  cx.globalAlpha = Math.max(0, Math.min(1, obj.opacity ?? 1));
+
+  // contain — 슬롯 안에 비율 유지
+  const iw = img.width;
+  const ih = img.height;
+  const s = Math.min(wPx / iw, hPx / ih);
+  const drawW = iw * s;
+  const drawH = ih * s;
+  cx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
   cx.restore();
 }
 

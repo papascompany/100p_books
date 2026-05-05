@@ -67,6 +67,45 @@ export default async function AdminOrderDetailPage({
   if (!data) notFound();
   const o = data as unknown as OrderRow;
 
+  // 가장 최근 PDF 빌드 잡 — 실패 잡이 있으면 재시도 버튼 노출
+  const { data: latestJob } = await (
+    admin as unknown as {
+      from: (t: string) => {
+        select: (cols: string) => {
+          eq: (
+            k: string,
+            v: string,
+          ) => {
+            order: (
+              c: string,
+              o: { ascending: boolean },
+            ) => {
+              limit: (
+                n: number,
+              ) => {
+                maybeSingle: () => Promise<{
+                  data: {
+                    id: string;
+                    status: string;
+                    attempt: number;
+                    max_attempts: number;
+                    last_error: string | null;
+                  } | null;
+                }>;
+              };
+            };
+          };
+        };
+      };
+    }
+  )
+    .from("pdf_build_jobs")
+    .select("id, status, attempt, max_attempts, last_error")
+    .eq("order_id", params.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   // PDF signed URL (있을 때만)
   let coverUrl: string | null = null;
   let interiorUrl: string | null = null;
@@ -194,6 +233,17 @@ export default async function AdminOrderDetailPage({
           status={o.status}
           trackingNo={o.tracking_no}
           trackingCarrier={o.tracking_carrier}
+          pdfJob={
+            latestJob
+              ? {
+                  id: latestJob.id,
+                  status: latestJob.status,
+                  attempt: latestJob.attempt,
+                  maxAttempts: latestJob.max_attempts,
+                  lastError: latestJob.last_error,
+                }
+              : null
+          }
         />
       </Section>
     </div>

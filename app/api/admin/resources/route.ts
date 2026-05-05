@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { fail, ok } from "@/app/api/_lib/response";
 import { withAdmin } from "@/lib/admin/auth";
+import { logAdminAction } from "@/lib/admin/audit";
 import {
   RESOURCES_BUCKET,
   extOf,
@@ -54,7 +55,7 @@ export const GET = withAdmin(async (req) => {
  *   3. storage upload (실패 시 row 삭제)
  *   4. (배경 한정) sharp probe — width >= 2400px 검증, 실패 시 삭제
  */
-export const POST = withAdmin(async (req) => {
+export const POST = withAdmin(async (req, _ctx, user) => {
   const form = await req.formData().catch(() => null);
   if (!form) return fail("INVALID_BODY", "multipart/form-data 가 필요합니다.", 400);
 
@@ -169,6 +170,15 @@ export const POST = withAdmin(async (req) => {
     await admin.from("resources").delete().eq("id", inserted.id);
     return fail("UPDATE_FAILED", updErr?.message ?? "메타 갱신 실패", 500);
   }
+
+  await logAdminAction({
+    actor: { id: user.id, email: user.email },
+    action: "resource.create",
+    targetType: "resource",
+    targetId: final.id,
+    details: { type: final.type, name: final.name, storage_key: final.storage_key },
+    request: req,
+  });
 
   return ok(
     { item: final, constraint: RESOURCE_CONSTRAINTS[t] },

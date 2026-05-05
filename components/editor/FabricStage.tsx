@@ -34,6 +34,20 @@ import type { PageDoc } from "@/lib/layout/types";
 /** 프리뷰 DPI 기본값. Architecture 합의: 미리보기 72, PDF 출력 300. */
 export const PREVIEW_DPI = 72;
 
+/**
+ * setBackground 입력 타입.
+ *  - 문자열은 후방 호환 (color shortcut, http(s)/data:/path 시 이미지로 시도).
+ *  - 명시적 객체는 type 별 처리.
+ *  - null 은 배경 제거 (단색은 #ffffff 로 리셋).
+ */
+export type SetBackgroundInput =
+  | string
+  | { type: "color"; color: string }
+  | { type: "photo"; photoId: string; url: string }
+  | { type: "resource"; url: string }
+  | { type: "none" }
+  | null;
+
 export interface FabricStageHandle {
   loadDoc: (doc: PageDoc, photoUrls: Record<string, string>) => Promise<void>;
   serialize: (meta: PageDocMeta) => PageDoc;
@@ -44,8 +58,8 @@ export interface FabricStageHandle {
     fontSizePt?: number;
     fill?: string;
   }) => void;
-  addClipart: (url: string) => Promise<void>;
-  setBackground: (value: string) => void;
+  addClipart: (url: string, resourceId?: string) => Promise<void>;
+  setBackground: (value: SetBackgroundInput) => void;
   undo: () => void;
   redo: () => void;
   remove: () => void;
@@ -450,7 +464,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
     );
 
     const addClipart = useCallback(
-      async (url: string) => {
+      async (url: string, resourceId?: string) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const img = await fabric.FabricImage.fromURL(url, {
@@ -469,12 +483,16 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
           scaleX: scale,
           scaleY: scale,
         });
-        // 클립아트는 photoId 없음 → "rect" 로도 분류 어색.
-        // PageDoc 직렬화 시 photoId 가 없으므로 photo 직렬화는 스킵된다.
-        // 추후 ClipartObject 스키마 도입 전까지는 캔버스 임시 자산 (저장되지 않음).
+        // M11: ClipartObject 영속화 — oType="clipart", clipartSrc/resourceId 보존.
         const tagged = img as TaggedFabricObject;
         tagged.objectId = nanoid(12);
-        // oType 미부여 → fabricToPageDoc 에서 무시 (저장 제외) — 주의: M3 임시 처리
+        tagged.oType = "clipart";
+        tagged.clipartSrc = url;
+        if (resourceId) tagged.resourceId = resourceId;
+        const ih = img.height ?? 1;
+        // contain 비율 — serialize 시 widthMm/heightMm 는 fabric box 스케일 결과 사용
+        tagged.originalWidthMm = widthMm * 0.3;
+        tagged.originalHeightMm = (ih * scale * 25.4) / dpi;
         canvas.add(img);
         canvas.setActiveObject(img);
         canvas.requestRenderAll();
@@ -483,16 +501,12 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
     );
 
     const setBackground = useCallback(
-      (value: string) => {
+      (value: SetBackgroundInput) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
-        const looksLikeUrl =
-          value.startsWith("http") ||
-          value.startsWith("/") ||
-          value.startsWith("data:");
-        if (looksLikeUrl) {
-          // 배경 이미지 — 캔버스 전체 크기로 채움
-          void fabric.FabricImage.fromURL(value, {
+
+        const applyImage = (url: string, photoId?: string) => {
+          void fabric.FabricImage.fromURL(url, {
             crossOrigin: "anonymous",
           }).then((img) => {
             const sx = stagePxSize.w / (img.width ?? 1);
@@ -507,14 +521,56 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
               selectable: false,
               evented: false,
             });
+            // Stage 가 backgroundImage 메타를 보존하려면 별도 ref 필요 — 직렬화는
+            // FabricStage 가 아닌 페이지 에디터에서 PageDoc.backgroundImage 로 처리.
+            (img as unknown as { __bgPhotoId?: string }).__bgPhotoId = photoId;
+            (img as unknown as { __bgUrl?: string }).__bgUrl = url;
             canvas.backgroundImage = img;
             canvas.requestRenderAll();
           });
-        } else {
-          canvas.backgroundColor = value;
+        };
+
+        const clearImage = () => {
           (canvas as unknown as { backgroundImage: unknown }).backgroundImage =
             undefined;
+        };
+
+        // null / { type: "none" } — 배경 제거 (흰색 채움)
+        if (value === null || (typeof value === "object" && value.type === "none")) {
+          canvas.backgroundColor = "#ffffff";
+          clearImage();
           canvas.requestRenderAll();
+          return;
+        }
+
+        if (typeof value === "string") {
+          // 후방 호환 — color shortcut or url shortcut
+          const looksLikeUrl =
+            value.startsWith("http") ||
+            value.startsWith("/") ||
+            value.startsWith("data:");
+          if (looksLikeUrl) {
+            applyImage(value);
+          } else {
+            canvas.backgroundColor = value;
+            clearImage();
+            canvas.requestRenderAll();
+          }
+          return;
+        }
+
+        switch (value.type) {
+          case "color":
+            canvas.backgroundColor = value.color;
+            clearImage();
+            canvas.requestRenderAll();
+            break;
+          case "photo":
+            applyImage(value.url, value.photoId);
+            break;
+          case "resource":
+            applyImage(value.url);
+            break;
         }
       },
       [stagePxSize],

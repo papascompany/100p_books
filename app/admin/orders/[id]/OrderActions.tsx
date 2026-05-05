@@ -26,16 +26,26 @@ const CARRIER_OPTIONS = [
   { value: "etc", label: "기타" },
 ];
 
+export interface PdfJobBrief {
+  id: string;
+  status: string;
+  attempt: number;
+  maxAttempts: number;
+  lastError: string | null;
+}
+
 export default function OrderActions({
   orderId,
   status,
   trackingNo,
   trackingCarrier,
+  pdfJob,
 }: {
   orderId: string;
   status: OrderStatus;
   trackingNo: string | null;
   trackingCarrier: string | null;
+  pdfJob?: PdfJobBrief | null;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -120,6 +130,36 @@ export default function OrderActions({
     }
   };
 
+  const retryPdfJob = async () => {
+    if (!confirm("실패한 PDF 빌드 잡을 재시도합니다. 계속하시겠습니까?")) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/admin/orders/${orderId}/retry-pdf`, {
+        method: "POST",
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.ok) {
+        toast({
+          variant: "destructive",
+          title: "PDF 재시도 실패",
+          description: j?.error?.message ?? "알 수 없는 오류",
+        });
+        return;
+      }
+      toast({
+        variant: "success",
+        title: "PDF 재시도 완료",
+        description: "잡 상태를 확인하세요.",
+      });
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const showRetry = pdfJob && pdfJob.status === "failed";
+  const retryDisabled = pdfJob ? pdfJob.attempt >= pdfJob.maxAttempts : true;
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
@@ -160,7 +200,35 @@ export default function OrderActions({
         >
           PDF 재생성
         </Button>
+        {showRetry ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={retryPdfJob}
+            disabled={busy || retryDisabled}
+            type="button"
+            title={
+              retryDisabled
+                ? `최대 시도(${pdfJob.maxAttempts}) 초과`
+                : `시도 ${pdfJob.attempt}/${pdfJob.maxAttempts}`
+            }
+          >
+            PDF 빌드 재시도
+            <span className="ml-1 text-[10px] text-muted-foreground">
+              ({pdfJob.attempt}/{pdfJob.maxAttempts})
+            </span>
+          </Button>
+        ) : null}
       </div>
+
+      {pdfJob && pdfJob.status === "failed" && pdfJob.lastError ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
+          <strong>마지막 빌드 에러:</strong>
+          <pre className="mt-1 whitespace-pre-wrap font-mono text-[11px]">
+            {pdfJob.lastError}
+          </pre>
+        </div>
+      ) : null}
 
       {showShip ? (
         <div className="rounded-xl border bg-muted/30 p-3">
