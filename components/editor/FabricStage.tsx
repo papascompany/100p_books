@@ -29,7 +29,7 @@ import {
   applyPhotoUrlsToCanvas,
   startUrlRefresher,
 } from "@/lib/fabric/url-refresher";
-import type { PageDoc } from "@/lib/layout/types";
+import type { LayoutObject, PageDoc } from "@/lib/layout/types";
 
 /** 프리뷰 DPI 기본값. Architecture 합의: 미리보기 72, PDF 출력 300. */
 export const PREVIEW_DPI = 72;
@@ -59,6 +59,18 @@ export interface FabricStageHandle {
     fill?: string;
   }) => void;
   addClipart: (url: string, resourceId?: string) => Promise<void>;
+  /**
+   * PageDoc.LayoutObject 를 캔버스에 붙여넣음.
+   *  - photoUrls: photo 객체일 때 signed URL 매핑 (없으면 fallback rect).
+   *  - 좌표는 PageDoc 의 trim 기준 → bleed 보정 자동 처리.
+   *  - 새 활성 객체로 설정.
+   */
+  pasteLayoutObject: (
+    obj: LayoutObject,
+    photoUrls?: Record<string, string>,
+  ) => Promise<void>;
+  /** 현재 선택 객체 즉시 복제 (+5mm offset). */
+  duplicateSelected: () => Promise<void>;
   setBackground: (value: SetBackgroundInput) => void;
   undo: () => void;
   redo: () => void;
@@ -66,6 +78,9 @@ export interface FabricStageHandle {
   bringForward: () => void;
   sendBackward: () => void;
   getSelection: () => TaggedFabricObject | null;
+  /** 외부 클립보드 등이 사용. */
+  getDpi: () => number;
+  getBleedMm: () => number;
   refreshPhotoUrls: (urls: Record<string, string>) => Promise<void>;
   canUndo: () => boolean;
   canRedo: () => boolean;
@@ -500,6 +515,85 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       [bleedMm, dpi, widthMm, heightMm],
     );
 
+    const pasteLayoutObject = useCallback(
+      async (obj: LayoutObject, photoUrls?: Record<string, string>) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const built = await pageDocToFabric(
+          {
+            version: "1",
+            bookSizeId: "paste",
+            pageNo: 0,
+            layoutMode: "polaroid",
+            widthMm,
+            heightMm,
+            bleedMm: bleedMm as 2,
+            backgroundColor: "#ffffff",
+            objects: [obj],
+          },
+          {
+            canvas,
+            dpi,
+            photoUrls: photoUrls ?? {},
+          },
+        );
+
+        const bleedPx = mmToPx(bleedMm, dpi);
+        for (const o of built) {
+          o.set({
+            left: (o.left ?? 0) + bleedPx,
+            top: (o.top ?? 0) + bleedPx,
+          });
+          canvas.add(o);
+          canvas.setActiveObject(o);
+        }
+        canvas.requestRenderAll();
+      },
+      [bleedMm, dpi, widthMm, heightMm],
+    );
+
+    const duplicateSelected = useCallback(async () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const sel = canvas.getActiveObject() as TaggedFabricObject | null;
+      if (!sel || !sel.oType) return;
+
+      // 객체를 trim 기준 좌표로 임시 이동해 fabricToPageDoc 직렬화 후 paste.
+      const bleedPx = mmToPx(bleedMm, dpi);
+      const origLeft = sel.left ?? 0;
+      const origTop = sel.top ?? 0;
+      sel.set({ left: origLeft - bleedPx, top: origTop - bleedPx });
+      const meta: PageDocMeta = {
+        version: "1",
+        bookSizeId: "duplicate",
+        pageNo: 0,
+        layoutMode: "polaroid",
+        widthMm,
+        heightMm,
+        bleedMm: bleedMm as 2,
+        backgroundColor: "#ffffff",
+      };
+      const fakeCanvas = {
+        getObjects: () => [sel],
+      } as unknown as fabric.Canvas;
+      const doc = fabricToPageDoc(fakeCanvas, meta, dpi);
+      sel.set({ left: origLeft, top: origTop });
+
+      if (doc.objects.length === 0) return;
+      const layoutObj = doc.objects[0]!;
+      const DUP_OFFSET_MM = 5;
+      const cloned = {
+        ...layoutObj,
+        objectId: "",
+        leftMm: layoutObj.leftMm + DUP_OFFSET_MM,
+        topMm: layoutObj.topMm + DUP_OFFSET_MM,
+      } as LayoutObject;
+      // 새 objectId 부여는 pageDocToFabric 가 보존하므로 직접 nanoid.
+      cloned.objectId = nanoid(12);
+      await pasteLayoutObject(cloned, {});
+    }, [bleedMm, dpi, widthMm, heightMm, pasteLayoutObject]);
+
     const setBackground = useCallback(
       (value: SetBackgroundInput) => {
         const canvas = canvasRef.current;
@@ -653,6 +747,8 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         addPhoto,
         addText,
         addClipart,
+        pasteLayoutObject,
+        duplicateSelected,
         setBackground,
         undo,
         redo,
@@ -660,6 +756,8 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         bringForward,
         sendBackward,
         getSelection,
+        getDpi: () => dpi,
+        getBleedMm: () => bleedMm,
         refreshPhotoUrls,
         canUndo: () => historyRef.current.canUndo,
         canRedo: () => historyRef.current.canRedo,
@@ -670,6 +768,8 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         addPhoto,
         addText,
         addClipart,
+        pasteLayoutObject,
+        duplicateSelected,
         setBackground,
         undo,
         redo,
@@ -678,6 +778,8 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         sendBackward,
         getSelection,
         refreshPhotoUrls,
+        dpi,
+        bleedMm,
       ],
     );
 

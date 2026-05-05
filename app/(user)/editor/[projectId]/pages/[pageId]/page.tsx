@@ -129,6 +129,7 @@ export default async function EditorSinglePage({ params }: PageProps) {
       bookSize={bookSize}
       prevPageId={prevPage?.id ?? null}
       nextPageId={nextPage?.id ?? null}
+      siblings={list.map((p) => ({ id: p.id, pageNo: p.page_no }))}
     />
   );
 }

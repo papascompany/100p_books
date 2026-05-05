@@ -154,6 +154,18 @@ export interface Database {
         Args: { p_user_id: string };
         Returns: null;
       };
+      reorder_project_pages: {
+        Args: { p_project_id: string; p_page_ids: string[] };
+        Returns: number;
+      };
+      shift_pages_after: {
+        Args: {
+          p_project_id: string;
+          p_after_page_no: number;
+          p_shift?: number;
+        };
+        Returns: null;
+      };
     };
     Enums: Record<string, never>;
   };

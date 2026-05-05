@@ -1,7 +1,8 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, Keyboard, Save } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import CollageTemplateDialog from "@/components/editor/CollageTemplateDialog";
@@ -9,12 +10,25 @@ import FabricStage, {
   PREVIEW_DPI,
   type FabricStageHandle,
 } from "@/components/editor/FabricStage";
+import KeyboardShortcutsHelp, {
+  useShortcutsAutoShow,
+} from "@/components/editor/KeyboardShortcutsHelp";
 import ResourcePalette from "@/components/editor/ResourcePalette";
 import SelectionPanel from "@/components/editor/SelectionPanel";
 import Toolbar, { type ToolbarTool } from "@/components/editor/Toolbar";
 import MobileBottomSheet from "@/components/layout/MobileBottomSheet";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "@/components/ui/use-toast";
 import type { BookSize } from "@/lib/db/types";
+import { fabricClipboard } from "@/lib/fabric/clipboard";
 import type { TaggedFabricObject } from "@/lib/fabric/serialize";
 import { PAGEDOC_VERSION, type PageDoc } from "@/lib/layout/types";
 import { cn } from "@/lib/utils";
@@ -29,6 +43,8 @@ export interface PageEditorProps {
   bookSize: BookSize;
   prevPageId: string | null;
   nextPageId: string | null;
+  /** 프로젝트의 모든 페이지 — 페이지 번호 점프용. */
+  siblings?: { id: string; pageNo: number }[];
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 5000;
@@ -44,6 +60,10 @@ const AUTOSAVE_DEBOUNCE_MS = 5000;
  *   - 수동: "저장" 버튼.
  *   - 자동: 토글(기본 ON). 변경 후 5초 debounce.
  *   - leave guard: 미저장 변경이 있을 때 beforeunload.
+ *
+ * M12 추가:
+ *   - 단축키 (복사/붙여넣기/복제, 페이지 점프, 단축키 안내)
+ *   - 페이지 번호 드롭다운 점프
  */
 export default function PageEditor({
   projectId,
@@ -55,7 +75,9 @@ export default function PageEditor({
   bookSize,
   prevPageId,
   nextPageId,
+  siblings = [],
 }: PageEditorProps) {
+  const router = useRouter();
   const stageRef = useRef<FabricStageHandle>(null);
   const [selection, setSelection] = useState<TaggedFabricObject | null>(null);
   const [canUndo, setCanUndo] = useState(false);
@@ -67,7 +89,21 @@ export default function PageEditor({
   const [error, setError] = useState<string | null>(null);
   const [toolSheet, setToolSheet] = useState<ToolbarTool | null>(null);
   const [collageOpen, setCollageOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [currentDoc, setCurrentDoc] = useState<PageDoc | null>(initialDoc);
+
+  const { shouldShow: shouldAutoShowShortcuts, mark: markShortcutsSeen } =
+    useShortcutsAutoShow();
+
+  // 첫 방문 시 단축키 안내 자동 노출
+  useEffect(() => {
+    if (shouldAutoShowShortcuts) {
+      const t = setTimeout(() => {
+        setShortcutsOpen(true);
+      }, 1200); // 캔버스 로드 후 잠시 뒤
+      return () => clearTimeout(t);
+    }
+  }, [shouldAutoShowShortcuts]);
 
   // 페이지 doc 로드 (FabricStage 마운트 후)
   useEffect(() => {
@@ -144,6 +180,140 @@ export default function PageEditor({
     setToolSheet(tool);
   }, []);
 
+  // ====================== 단축키 핸들러 ======================
+  const copySelection = useCallback(() => {
+    const handle = stageRef.current;
+    if (!handle) return;
+    const sel = handle.getSelection();
+    if (!sel || !sel.oType) {
+      toast({
+        description: "복사할 객체를 선택해주세요.",
+        variant: "warning",
+      });
+      return;
+    }
+    const snap = fabricClipboard.copy(
+      sel,
+      handle.getDpi(),
+      handle.getBleedMm(),
+      pageId,
+    );
+    if (snap) {
+      toast({ description: "복사됨", variant: "success" });
+    }
+  }, [pageId]);
+
+  const pasteFromClipboard = useCallback(async () => {
+    const handle = stageRef.current;
+    if (!handle) return;
+    if (!fabricClipboard.hasContent) {
+      toast({
+        description: "클립보드가 비어있어요.",
+        variant: "warning",
+      });
+      return;
+    }
+    const obj = fabricClipboard.read();
+    if (!obj) return;
+    await handle.pasteLayoutObject(obj, initialPhotoUrls);
+    setDirty(true);
+    toast({ description: "붙여넣기 완료", variant: "success" });
+  }, [initialPhotoUrls]);
+
+  const duplicateSelection = useCallback(async () => {
+    const handle = stageRef.current;
+    if (!handle) return;
+    const sel = handle.getSelection();
+    if (!sel || !sel.oType) {
+      toast({
+        description: "복제할 객체를 선택해주세요.",
+        variant: "warning",
+      });
+      return;
+    }
+    await handle.duplicateSelected();
+    setDirty(true);
+    toast({ description: "복제 완료", variant: "success" });
+  }, []);
+
+  // 입력 중인 폼/텍스트박스에서는 단축키 무시.
+  const isTypingTarget = useCallback((target: EventTarget | null): boolean => {
+    if (!(target instanceof HTMLElement)) return false;
+    const tag = target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+    if (target.isContentEditable) return true;
+    return false;
+  }, []);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      // 모달 열려있으면 ESC 외 전부 패스
+      if (shortcutsOpen || collageOpen) return;
+      if (isTypingTarget(e.target)) return;
+
+      const meta = e.metaKey || e.ctrlKey;
+
+      // 안내 다이얼로그 — `?`
+      if (!meta && e.key === "?" && !e.repeat) {
+        e.preventDefault();
+        setShortcutsOpen(true);
+        return;
+      }
+
+      // 페이지 점프 — J / K, PageDown / PageUp
+      if (!meta && !e.altKey) {
+        if (e.key === "j" || e.key === "J" || e.key === "PageDown") {
+          if (nextPageId) {
+            e.preventDefault();
+            router.push(`/editor/${projectId}/pages/${nextPageId}`);
+          }
+          return;
+        }
+        if (e.key === "k" || e.key === "K" || e.key === "PageUp") {
+          if (prevPageId) {
+            e.preventDefault();
+            router.push(`/editor/${projectId}/pages/${prevPageId}`);
+          }
+          return;
+        }
+      }
+
+      // 복사/붙여넣기/복제
+      if (meta) {
+        const k = e.key.toLowerCase();
+        if (k === "c") {
+          e.preventDefault();
+          copySelection();
+          return;
+        }
+        if (k === "v") {
+          e.preventDefault();
+          void pasteFromClipboard();
+          return;
+        }
+        if (k === "d") {
+          e.preventDefault();
+          void duplicateSelection();
+          return;
+        }
+      }
+    }
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [
+    shortcutsOpen,
+    collageOpen,
+    isTypingTarget,
+    copySelection,
+    pasteFromClipboard,
+    duplicateSelection,
+    nextPageId,
+    prevPageId,
+    projectId,
+    router,
+  ]);
+
   return (
     <div className="flex min-h-[calc(100dvh-4rem)] flex-col">
       {/* 상단 — 페이지 번호 + 네비 + 저장 */}
@@ -152,12 +322,50 @@ export default function PageEditor({
           <Link href={`/editor/${projectId}`}>← 페이지 목록</Link>
         </Button>
         <span className="text-sm text-muted-foreground" aria-live="polite">
-          {projectTitle} · 페이지 {pageNo}
+          {projectTitle} ·
         </span>
+
+        {/* 페이지 번호 드롭다운 — 다른 페이지로 점프 */}
+        {siblings.length > 1 ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" aria-label="페이지로 이동">
+                페이지 {pageNo} / {siblings.length}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="max-h-[60vh] overflow-y-auto"
+            >
+              <DropdownMenuLabel>페이지 점프</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {siblings.map((s) => (
+                <DropdownMenuItem
+                  key={s.id}
+                  disabled={s.id === pageId}
+                  onSelect={() => {
+                    if (s.id !== pageId) {
+                      router.push(`/editor/${projectId}/pages/${s.id}`);
+                    }
+                  }}
+                  className={cn(
+                    s.id === pageId && "font-semibold text-primary",
+                  )}
+                >
+                  페이지 {s.pageNo}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <span className="text-sm text-muted-foreground">
+            페이지 {pageNo}
+          </span>
+        )}
 
         <div className="ml-auto flex items-center gap-2">
           {prevPageId ? (
-            <Button asChild variant="ghost" size="icon" aria-label="이전 페이지">
+            <Button asChild variant="ghost" size="icon" aria-label="이전 페이지 (K)">
               <Link href={`/editor/${projectId}/pages/${prevPageId}`}>
                 <ChevronLeft className="size-5" />
               </Link>
@@ -168,7 +376,7 @@ export default function PageEditor({
             </Button>
           )}
           {nextPageId ? (
-            <Button asChild variant="ghost" size="icon" aria-label="다음 페이지">
+            <Button asChild variant="ghost" size="icon" aria-label="다음 페이지 (J)">
               <Link href={`/editor/${projectId}/pages/${nextPageId}`}>
                 <ChevronRight className="size-5" />
               </Link>
@@ -178,6 +386,15 @@ export default function PageEditor({
               <ChevronRight className="size-5 opacity-30" />
             </Button>
           )}
+
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="키보드 단축키 (?)"
+            onClick={() => setShortcutsOpen(true)}
+          >
+            <Keyboard className="size-5" />
+          </Button>
 
           <label className="hidden items-center gap-2 text-xs text-muted-foreground md:flex">
             <input
@@ -393,6 +610,15 @@ export default function PageEditor({
           }}
         />
       ) : null}
+
+      {/* 키보드 단축키 안내 */}
+      <KeyboardShortcutsHelp
+        open={shortcutsOpen}
+        onOpenChange={(open) => {
+          setShortcutsOpen(open);
+          if (!open) markShortcutsSeen();
+        }}
+      />
     </div>
   );
 }

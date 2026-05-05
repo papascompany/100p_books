@@ -206,3 +206,75 @@ export async function PATCH(req: Request, { params }: Params) {
     return failFromError(err);
   }
 }
+
+/**
+ * DELETE /api/pages/[id]
+ *
+ * 검증:
+ *   1. 로그인.
+ *   2. page → project 소유권 확인.
+ *
+ * 처리:
+ *   - DELETE FROM pages WHERE id = ?
+ *   - 후속 페이지들 page_no -= 1 (shift_pages_after RPC, p_shift=-1)
+ *
+ * 응답: { ok, pageCount }
+ */
+export async function DELETE(_req: Request, { params }: Params) {
+  try {
+    const user = await requireUser();
+    const pageId = params.id;
+    if (!pageId) return fail("INVALID_PARAM", "잘못된 페이지 ID 입니다.", 400);
+
+    const supabase = createServerSupabase();
+
+    const { data: row, error } = await supabase
+      .from("pages")
+      .select("id, project_id, page_no")
+      .eq("id", pageId)
+      .maybeSingle();
+    if (error) return fail("PAGE_QUERY_FAILED", error.message, 500);
+    if (!row) return fail("NOT_FOUND", "페이지를 찾을 수 없습니다.", 404);
+
+    const { data: project, error: projErr } = await supabase
+      .from("projects")
+      .select("id, user_id")
+      .eq("id", row.project_id)
+      .maybeSingle();
+    if (projErr) return fail("PROJECT_QUERY_FAILED", projErr.message, 500);
+    if (!project) return fail("NOT_FOUND", "프로젝트를 찾을 수 없습니다.", 404);
+    if (project.user_id !== user.id) {
+      return fail("FORBIDDEN", "해당 페이지에 대한 권한이 없습니다.", 403);
+    }
+
+    const admin = createAdminSupabase();
+
+    // 1) 페이지 삭제
+    const { error: delErr } = await admin
+      .from("pages")
+      .delete()
+      .eq("id", pageId);
+    if (delErr) return fail("PAGE_DELETE_FAILED", delErr.message, 500);
+
+    // 2) 후속 페이지들 page_no 압축
+    const { error: shiftErr } = await admin.rpc("shift_pages_after", {
+      p_project_id: row.project_id,
+      p_after_page_no: row.page_no,
+      p_shift: -1,
+    });
+    if (shiftErr) {
+      // 압축 실패는 데이터 정합성 이슈지만 삭제는 성공 — 경고만.
+      console.warn("[pages/delete] shift_pages_after failed:", shiftErr.message);
+    }
+
+    // 남은 페이지 수
+    const { count: remainCount } = await supabase
+      .from("pages")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", row.project_id);
+
+    return ok({ ok: true, pageCount: remainCount ?? 0 });
+  } catch (err) {
+    return failFromError(err);
+  }
+}
