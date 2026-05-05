@@ -1,0 +1,34 @@
+# Supabase 원격 프로젝트 설정 (vprifnztvlduhpuwgdau)
+# `supabase config push` 로 원격에 반영.
+
+project_id = "100p_books"
+
+[auth]
+# 매직링크 / OAuth 이후 사용자가 돌아올 기본 URL.
+site_url = "https://100pbooks.vercel.app"
+
+# emailRedirectTo / OAuth callback 에 허용된 URL 패턴.
+# wildcards supported.
+additional_redirect_urls = [
+  "https://100pbooks.vercel.app",
+  "https://100pbooks.vercel.app/**",
+  "https://100pbooks.vercel.app/api/auth/callback",
+  "https://100pbooks.vercel.app/api/auth/callback?**",
+  "http://localhost:3000",
+  "http://localhost:3000/**",
+  "http://localhost:3000/api/auth/callback",
+  "http://localhost:3000/api/auth/callback?**"
+]
+
+# 매직링크 유효 시간 (초). 기본 1시간.
+jwt_expiry = 3600
+
+# 원격 기본값 보존 — config push 가 이 항목을 덮어쓰지 않도록 명시.
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+secure_password_change = false
+max_frequency = "1m0s"
+otp_length = 8
+otp_expiry = 3600

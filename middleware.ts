@@ -7,6 +7,20 @@ import type { Database } from "@/lib/db/types";
  * 세션 쿠키를 새로고침하고 /admin/** · /api/admin/** 는 role=admin 을 강제한다.
  */
 export async function middleware(req: NextRequest) {
+  // Supabase 매직링크/OAuth 후속 ?code= 가 콜백 경로가 아닌 곳에 도착하면
+  // /api/auth/callback 으로 보존하여 라우트 핸들러가 세션 교환을 수행하게 한다.
+  // (Supabase Auth 가 redirect_to path 를 일관되게 strip 하는 동작에 대한 우회.)
+  const codeParam = req.nextUrl.searchParams.get("code");
+  if (codeParam && req.nextUrl.pathname !== "/api/auth/callback") {
+    const url = req.nextUrl.clone();
+    const next = url.pathname === "/" ? "/" : url.pathname;
+    url.pathname = "/api/auth/callback";
+    if (!url.searchParams.has("next")) {
+      url.searchParams.set("next", next);
+    }
+    return NextResponse.redirect(url);
+  }
+
   const res = NextResponse.next({
     request: { headers: req.headers },
   });
