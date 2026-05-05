@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Mail } from "lucide-react";
+import { KeyRound, Loader2, Mail } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -37,6 +37,8 @@ export default function LoginForm() {
   const errorParam = searchParams.get("error");
 
   const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [usePassword, setUsePassword] = React.useState(false);
   const [agreed, setAgreed] = React.useState(false);
   const [status, setStatus] = React.useState<Status>(
     errorParam ? { kind: "error", message: errorParam } : { kind: "idle" },
@@ -61,21 +63,40 @@ export default function LoginForm() {
       });
       return;
     }
+    if (usePassword && !password) {
+      setStatus({ kind: "error", message: "비밀번호를 입력해주세요." });
+      return;
+    }
 
     setStatus({ kind: "submitting" });
 
     try {
       const supabase = getBrowserSupabase();
+
+      if (usePassword) {
+        // 비밀번호 로그인 (이메일 전송 한도 초과 시 폴백)
+        const { error } = await supabase.auth.signInWithPassword({
+          email: trimmed,
+          password,
+        });
+        if (error) {
+          setStatus({
+            kind: "error",
+            message: error.message || "로그인에 실패했습니다.",
+          });
+          return;
+        }
+        // 세션 쿠키가 설정되면 next 경로로 이동
+        window.location.assign(next);
+        return;
+      }
+
       const origin = window.location.origin;
       const redirectTo = `${origin}/api/auth/callback?next=${encodeURIComponent(next)}`;
-
       const { error } = await supabase.auth.signInWithOtp({
         email: trimmed,
-        options: {
-          emailRedirectTo: redirectTo,
-        },
+        options: { emailRedirectTo: redirectTo },
       });
-
       if (error) {
         setStatus({
           kind: "error",
@@ -83,7 +104,6 @@ export default function LoginForm() {
         });
         return;
       }
-
       setStatus({ kind: "sent", email: trimmed });
     } catch (err) {
       setStatus({
@@ -101,7 +121,9 @@ export default function LoginForm() {
           다시 만나 반가워요
         </CardTitle>
         <CardDescription className="mt-2 text-[15px]">
-          이메일로 매직링크를 보내드릴게요. 비밀번호가 필요 없어요.
+          {usePassword
+            ? "이메일과 비밀번호로 로그인해주세요."
+            : "이메일로 매직링크를 보내드릴게요. 비밀번호가 필요 없어요."}
         </CardDescription>
       </CardHeader>
 
@@ -154,6 +176,26 @@ export default function LoginForm() {
               />
             </div>
 
+            {usePassword ? (
+              <div className="flex flex-col gap-1.5">
+                <label
+                  htmlFor="password"
+                  className="text-sm font-medium text-foreground"
+                >
+                  비밀번호
+                </label>
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  disabled={isSubmitting}
+                />
+              </div>
+            ) : null}
+
             <label className="flex items-start gap-2 text-sm text-muted-foreground">
               <input
                 type="checkbox"
@@ -202,7 +244,12 @@ export default function LoginForm() {
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="animate-spin" aria-hidden /> 전송 중...
+                  <Loader2 className="animate-spin" aria-hidden />
+                  {usePassword ? " 로그인 중..." : " 전송 중..."}
+                </>
+              ) : usePassword ? (
+                <>
+                  <KeyRound aria-hidden /> 비밀번호로 로그인
                 </>
               ) : (
                 <>
@@ -210,6 +257,19 @@ export default function LoginForm() {
                 </>
               )}
             </Button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setUsePassword((v) => !v);
+                setStatus({ kind: "idle" });
+              }}
+              className="text-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              {usePassword
+                ? "← 매직링크로 로그인"
+                : "비밀번호로 로그인 (이메일 한도 초과 시)"}
+            </button>
           </form>
         )}
 
