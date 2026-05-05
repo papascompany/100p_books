@@ -1,9 +1,10 @@
 "use client";
 
-import { Save } from "lucide-react";
+import { Eye, Save } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import Cover3DPreview from "@/components/editor/Cover3DPreview";
 import CoverSpineGuide from "@/components/editor/CoverSpineGuide";
 import CoverTemplateDialog from "@/components/editor/CoverTemplateDialog";
 import FabricStage, {
@@ -19,7 +20,11 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 import type { BookSize } from "@/lib/db/types";
 import type { TaggedFabricObject } from "@/lib/fabric/serialize";
-import { calcCoverDimensions } from "@/lib/layout/cover";
+import {
+  buildSpineText,
+  calcCoverDimensions,
+  SPINE_TEXT_MIN_MM,
+} from "@/lib/layout/cover";
 import { PAGEDOC_VERSION, type PageDoc } from "@/lib/layout/types";
 import { cn } from "@/lib/utils";
 
@@ -89,9 +94,14 @@ export default function CoverEditor({
   const [title, setTitle] = useState(projectTitle);
   const [titleSaving, setTitleSaving] = useState(false);
   const lastSavedTitleRef = useRef(projectTitle);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewPng, setPreviewPng] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   // 표지 차원 (책등 두께 표시용)
   const dims = calcCoverDimensions({ bookSize, pageCount });
+  const spineTooNarrow = dims.spineMm < SPINE_TEXT_MIN_MM;
 
   // 첫 마운트 시 doc 로드
   useEffect(() => {
@@ -249,6 +259,67 @@ export default function CoverEditor({
     [photoUrls],
   );
 
+  // 책등 텍스트 자동 추가 (rotation 90)
+  const addSpineText = useCallback(async () => {
+    if (spineTooNarrow) {
+      toast({
+        title: "책등이 좁아요",
+        description: `책등이 ${SPINE_TEXT_MIN_MM}mm 미만이라 텍스트가 잘릴 수 있어요. 페이지 수를 늘려보세요.`,
+        variant: "warning",
+      });
+      return;
+    }
+    const obj = buildSpineText({
+      text: title,
+      spineMm: dims.spineMm,
+      bookHeightMm: dims.bookHeightMm,
+      bookLeftMm: dims.bookWidthMm,
+      bookTopMm: 0,
+    });
+    if (!obj) return;
+    await stageRef.current?.pasteLayoutObject(obj, {});
+    setDirty(true);
+    toast({ description: "책등 텍스트를 추가했어요.", variant: "success" });
+  }, [dims, spineTooNarrow, title]);
+
+  // 3D 미리보기 열기 — 자동저장 후 서버 PNG 미리보기 요청
+  const openPreview = useCallback(async () => {
+    setPreviewOpen(true);
+    setPreviewError(null);
+    setPreviewLoading(true);
+    setPreviewPng(null);
+
+    // dirty 면 먼저 저장 (서버 미리보기는 저장된 cover_json 기반)
+    if (dirty) {
+      try {
+        await save();
+      } catch {
+        // save() 자체가 setError 처리하므로 미리보기는 마지막 저장본으로 진행
+      }
+    }
+
+    try {
+      const res = await fetch(`/api/cover/preview`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ projectId }),
+      });
+      const json = (await res.json()) as {
+        ok: boolean;
+        data?: { pngDataUrl: string };
+        error?: { message: string };
+      };
+      if (!res.ok || !json.ok || !json.data) {
+        throw new Error(json.error?.message ?? "미리보기 생성 실패");
+      }
+      setPreviewPng(json.data.pngDataUrl);
+    } catch (e) {
+      setPreviewError(e instanceof Error ? e.message : "미리보기 생성 실패");
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [dirty, projectId, save]);
+
   return (
     <div className="flex min-h-[calc(100dvh-4rem)] flex-col">
       {/* 상단 헤더 */}
@@ -286,6 +357,15 @@ export default function CoverEditor({
             onClick={() => setTemplateDialogOpen(true)}
           >
             기본 템플릿 적용
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void openPreview()}
+            aria-label="3D 미리보기 열기"
+          >
+            <Eye className="size-4" aria-hidden />
+            <span className="hidden sm:inline ml-1">3D 미리보기</span>
           </Button>
 
           <label className="hidden items-center gap-2 text-xs text-muted-foreground md:flex">
@@ -351,6 +431,25 @@ export default function CoverEditor({
               onClick={addBackCoverText}
             >
               뒷표지에 글 추가
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => void addSpineText()}
+              disabled={spineTooNarrow}
+              title={
+                spineTooNarrow
+                  ? `책등이 ${SPINE_TEXT_MIN_MM}mm 미만이라 텍스트가 잘릴 수 있어요.`
+                  : "책등에 세로 제목 텍스트를 추가합니다."
+              }
+            >
+              책등 텍스트 추가
+              {spineTooNarrow ? (
+                <span className="ml-1 text-[10px] text-muted-foreground">
+                  (너무 좁아요)
+                </span>
+              ) : null}
             </Button>
             <Button
               variant="outline"
@@ -586,6 +685,77 @@ export default function CoverEditor({
           toast({ description: "사진 교체 완료", variant: "success" });
         }}
       />
+
+      {/* 3D 미리보기 다이얼로그 */}
+      {previewOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="표지 3D 미리보기"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px]"
+          onClick={() => setPreviewOpen(false)}
+        >
+          <div
+            className="relative w-[min(94vw,720px)] rounded-xl border border-border bg-background p-5 shadow-soft-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 pb-3">
+              <div>
+                <h2 className="text-base font-semibold">표지 3D 미리보기</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  실제 인쇄/제본 후의 입체 형태를 근사로 보여줘요.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewOpen(false)}
+                aria-label="닫기"
+                className="-mt-1 inline-flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="flex min-h-[360px] items-center justify-center rounded-lg bg-gradient-to-br from-rose-50/40 via-amber-50/30 to-sky-50/40 dark:from-rose-950/20 dark:via-amber-950/20 dark:to-sky-950/20">
+              {previewLoading ? (
+                <div className="text-sm text-muted-foreground" role="status">
+                  미리보기를 그리는 중…
+                </div>
+              ) : previewError ? (
+                <div className="text-sm text-destructive" role="alert">
+                  {previewError}
+                </div>
+              ) : (
+                <Cover3DPreview
+                  coverPng={previewPng ?? undefined}
+                  bookWidthMm={dims.bookWidthMm}
+                  bookHeightMm={dims.bookHeightMm}
+                  spineMm={dims.spineMm}
+                  pageCount={pageCount}
+                />
+              )}
+            </div>
+
+            <div className="mt-3 flex items-center justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void openPreview()}
+                disabled={previewLoading}
+              >
+                다시 그리기
+              </Button>
+              <Button
+                size="sm"
+                variant="gradient"
+                onClick={() => setPreviewOpen(false)}
+              >
+                닫기
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

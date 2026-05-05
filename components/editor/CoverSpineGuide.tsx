@@ -1,6 +1,6 @@
 "use client";
 
-import type { CoverDimensions } from "@/lib/layout/cover";
+import { SPINE_TEXT_MIN_MM, type CoverDimensions } from "@/lib/layout/cover";
 
 export interface CoverSpineGuideProps {
   dims: CoverDimensions;
@@ -63,8 +63,20 @@ export default function CoverSpineGuide({
               width: `${spinePct}%`,
             }}
           >
-            <span className="whitespace-nowrap rounded-full bg-white/80 px-2 py-0.5">
+            <span
+              className={
+                dims.spineMm < SPINE_TEXT_MIN_MM
+                  ? "whitespace-nowrap rounded-full bg-red-50/95 px-2 py-0.5 text-red-600 ring-1 ring-red-300/60"
+                  : "whitespace-nowrap rounded-full bg-white/80 px-2 py-0.5"
+              }
+              title={
+                dims.spineMm < SPINE_TEXT_MIN_MM
+                  ? `책등이 ${SPINE_TEXT_MIN_MM}mm 미만 — 책등 텍스트는 인쇄 시 잘릴 수 있어요. 페이지 수를 늘리면 책등이 두꺼워져요.`
+                  : `책등 ${dims.spineMm.toFixed(2)}mm — 텍스트가 들어가요.`
+              }
+            >
               책등 {dims.spineMm.toFixed(2)}mm · {pageCount}p
+              {dims.spineMm < SPINE_TEXT_MIN_MM ? " · 텍스트 너무 좁아요" : ""}
             </span>
           </div>
         </>

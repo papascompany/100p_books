@@ -72,4 +72,44 @@ describe("buildCoverObjects: 5종 모두", () => {
     );
     expect(placeholders.length).toBeGreaterThanOrEqual(1);
   });
+
+  it.each(ids)(
+    "%s 책등 두께 9mm(>=8mm) → rotation:90 책등 텍스트 1개 포함",
+    (id) => {
+      const objs = buildCoverObjects({
+        templateId: id,
+        dims: DIMS,
+        title: "스파인 테스트",
+        photoId: "p-1",
+      });
+      const spineTexts = objs.filter(
+        (o) => o.type === "text" && o.rotation === 90,
+      );
+      expect(spineTexts.length).toBe(1);
+      const t = spineTexts[0];
+      if (t && t.type === "text") {
+        expect(t.placeholder).toBe("스파인 테스트");
+      }
+    },
+  );
+
+  it.each(ids)(
+    "%s 책등 두께 < 8mm → 책등 텍스트 미포함",
+    (id) => {
+      const narrowDims = calcCoverDimensions({
+        bookSize: BOOK_SIZE,
+        pageCount: 50, // 50 × 0.09 = 4.5mm < 8mm
+      });
+      const objs = buildCoverObjects({
+        templateId: id,
+        dims: narrowDims,
+        title: "얇은 책",
+        photoId: "p-1",
+      });
+      const spineTexts = objs.filter(
+        (o) => o.type === "text" && o.rotation === 90,
+      );
+      expect(spineTexts.length).toBe(0);
+    },
+  );
 });

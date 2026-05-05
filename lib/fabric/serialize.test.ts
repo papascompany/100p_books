@@ -195,6 +195,47 @@ describe("fabricToPageDoc", () => {
     expect(doc.objects[0]!.type).toBe("rect");
   });
 
+  it("TextObject rotation 보존 (책등 텍스트 등)", () => {
+    const t = tag("text", {
+      leftMm: 100,
+      topMm: 50,
+      widthMm: 80,
+      heightMm: 8,
+      angle: 90,
+    });
+    const doc = fabricToPageDoc(
+      makeMockCanvas([t]) as unknown as Parameters<typeof fabricToPageDoc>[0],
+      META,
+      DPI,
+    );
+    expect(doc.objects).toHaveLength(1);
+    const out = doc.objects[0]!;
+    expect(out.type).toBe("text");
+    if (out.type === "text") {
+      expect(out.rotation).toBe(90);
+    }
+  });
+
+  it("TextObject rotation 0 은 결과에 미포함 (기본값)", () => {
+    const t = tag("text", {
+      leftMm: 0,
+      topMm: 0,
+      widthMm: 50,
+      heightMm: 8,
+      angle: 0,
+    });
+    const doc = fabricToPageDoc(
+      makeMockCanvas([t]) as unknown as Parameters<typeof fabricToPageDoc>[0],
+      META,
+      DPI,
+    );
+    const out = doc.objects[0]!;
+    expect(out.type).toBe("text");
+    if (out.type === "text") {
+      expect(out.rotation).toBeUndefined();
+    }
+  });
+
   it("photoId 가 없는 photo 는 스킵 (M3 클립아트 임시처리)", () => {
     const orphan = tag("photo", {
       leftMm: 0,

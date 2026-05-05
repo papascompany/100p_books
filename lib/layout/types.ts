@@ -58,6 +58,12 @@ export interface TextObject {
   lineHeight: number;
   italic?: boolean;
   bold?: boolean;
+  /**
+   * degrees (중심 기준, 양수=시계방향). 기본 0.
+   * 책등 텍스트(세로) 등에 사용. 회전 전 박스(leftMm/topMm/widthMm/heightMm) 의
+   * 중심을 기준으로 시각적으로 회전한다. 미지정 시 0 으로 간주.
+   */
+  rotation?: number;
 }
 
 export interface RectObject {

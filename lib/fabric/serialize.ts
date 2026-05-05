@@ -325,6 +325,7 @@ function buildText(obj: TextObject, dpi: number): TaggedFabricObject {
     fontWeight: obj.bold ? 600 : 400,
     editable: true,
     splitByGrapheme: true,
+    angle: obj.rotation ?? 0,
   });
 
   // 빈 텍스트면 placeholder 흐리게 표시 (실제 text 는 비어 있음)
@@ -569,6 +570,7 @@ function serializeOne(
             ? true
             : undefined,
     };
+    if (rotation) txt.rotation = rotation;
     return txt;
   }
 

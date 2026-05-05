@@ -370,7 +370,10 @@ function drawText(cx: SKRSContext2D, obj: TextObject, dpi: number): void {
   const cxx = xPx + wPx / 2;
   const cyy = yPx + hPx / 2;
   cx.translate(cxx, cyy);
-  // text 객체는 rotation 필드가 없음 (PageDoc TextObject 정의에 없음). 추후 확장 시 적용.
+  // 책등 텍스트 등 세로 회전 지원 — 회전 전 박스의 중심 기준 deg.
+  if (obj.rotation) {
+    cx.rotate((obj.rotation * Math.PI) / 180);
+  }
 
   // 폰트 문자열 — 등록되지 않은 family 는 시스템 폴백에 의존
   const style = obj.italic ? "italic" : "normal";

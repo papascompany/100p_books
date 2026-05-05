@@ -15,8 +15,7 @@
 
 import { nanoid } from "nanoid";
 
-import type { CoverDimensions } from "./cover";
-import { SPINE_TEXT_MIN_MM } from "./cover";
+import { buildSpineText, type CoverDimensions } from "./cover";
 import type {
   LayoutObject,
   PhotoObject,
@@ -59,36 +58,22 @@ function id() {
   return nanoid(12);
 }
 
-/** 책등 텍스트(세로). 두께가 충분할 때만 생성. */
+/**
+ * 책등 텍스트(세로). 두께가 충분할 때만 생성.
+ *  - cover.ts 의 buildSpineText 위임 — 모든 템플릿에서 동일한 회전/좌표 계산을 공유.
+ *  - dims.spineMm < SPINE_TEXT_MIN_MM 일 땐 buildSpineText 가 null 을 반환.
+ */
 function maybeSpineText(
   dims: CoverDimensions,
   title: string,
 ): TextObject | null {
-  if (dims.spineMm < SPINE_TEXT_MIN_MM) return null;
-  const { spine } = regions(dims);
-  // 책등 텍스트 박스: 회전 전 좌표는 가로로 spine.h(=책 높이) × spine.w(=책등 폭).
-  // rotation -90 (반시계) 으로 세로 책등에 들어맞게 한다.
-  // 단순화: 박스를 책등 영역 정중앙에 두고, height 를 spine.w 로 잡는다(회전 후 축 일치).
-  const widthMm = dims.bookHeightMm * 0.6; // 회전 전 가로(=실제 세로 길이)
-  const heightMm = Math.min(spine.w * 0.7, 6); // 회전 전 세로(=실제 가로)
-  const leftMm = spine.x + (spine.w - heightMm) / 2;
-  const topMm = (dims.bookHeightMm - widthMm) / 2;
-  return {
-    type: "text",
-    objectId: id(),
-    leftMm,
-    topMm,
-    widthMm,
-    heightMm,
-    text: "",
-    placeholder: title || "제목",
-    fontFamily: "Pretendard",
-    fontSizePt: 9,
-    fill: "#2b2b2b",
-    align: "center",
-    lineHeight: 1.2,
-    bold: true,
-  };
+  return buildSpineText({
+    text: title,
+    spineMm: dims.spineMm,
+    bookHeightMm: dims.bookHeightMm,
+    bookLeftMm: dims.bookWidthMm,
+    bookTopMm: 0,
+  });
 }
 
 // -----------------------------------------------------------------------------

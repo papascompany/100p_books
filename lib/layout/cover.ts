@@ -17,6 +17,8 @@
  *   - 앞표지: x ∈ [bookWidthMm + spineMm, totalWidthMm]
  */
 
+import { nanoid } from "nanoid";
+
 import type { BookSize } from "@/lib/db/types";
 import {
   buildCoverObjects,
@@ -28,6 +30,7 @@ import {
   PAGEDOC_VERSION,
   type LayoutObject,
   type PageDoc,
+  type TextObject,
 } from "./types";
 
 /** 책등 텍스트 표시 임계 두께 (mm). 미만이면 책등 텍스트 비활성. */
@@ -128,4 +131,61 @@ export function buildDefaultCoverDoc(args: BuildCoverDocArgs): PageDoc {
 /** 안전한 CoverTemplateId 파싱. */
 export function asCoverTemplateId(v: string): CoverTemplateId | null {
   return (v in COVER_TEMPLATES ? (v as CoverTemplateId) : null);
+}
+
+/**
+ * 책등 텍스트 자동 빌더 (rotation=90 시계방향).
+ *
+ * 좌표 규약:
+ *   - leftMm/topMm/widthMm/heightMm 는 **회전 전 박스** 의 trim 좌표.
+ *   - rotation 은 박스 중심 기준 시계방향 90deg 적용.
+ *   - 회전 전 박스: widthMm = bookHeightMm × 0.7 (가로로 길게),
+ *                   heightMm = spineMm × 0.8.
+ *   - 박스 중심을 책등 영역 중앙(bookLeftMm + spineMm/2,
+ *     bookTopMm + bookHeightMm/2)에 두면 시계방향 90 회전 후
+ *     실제 텍스트가 책등 안에 세로로 들어간다.
+ *
+ * spineMm 이 SPINE_TEXT_MIN_MM(8mm) 미만이면 null 반환.
+ */
+export interface BuildSpineTextArgs {
+  text: string;
+  spineMm: number;
+  bookHeightMm: number;
+  fontSizePt?: number;
+  fill?: string;
+  /** 책등 영역 시작 X (= bookWidthMm 또는 펼친 표지에서의 책등 left). */
+  bookLeftMm: number;
+  /** 책등 영역 시작 Y (보통 0). */
+  bookTopMm: number;
+}
+
+export function buildSpineText(args: BuildSpineTextArgs): TextObject | null {
+  if (args.spineMm < SPINE_TEXT_MIN_MM) return null;
+
+  // 회전 전 박스: 가로로 긴 박스 (회전 후 세로로 책등 안에 맞춰짐).
+  const widthMm = args.bookHeightMm * 0.7;
+  const heightMm = args.spineMm * 0.8;
+  // 중심 = 책등 영역의 중앙 (mm).
+  const cxMm = args.bookLeftMm + args.spineMm / 2;
+  const cyMm = args.bookTopMm + args.bookHeightMm / 2;
+  const leftMm = cxMm - widthMm / 2;
+  const topMm = cyMm - heightMm / 2;
+
+  return {
+    type: "text",
+    objectId: nanoid(12),
+    leftMm,
+    topMm,
+    widthMm,
+    heightMm,
+    text: "",
+    placeholder: args.text || "제목",
+    fontFamily: "Pretendard",
+    fontSizePt: args.fontSizePt ?? 9,
+    fill: args.fill ?? "#2b2b2b",
+    align: "center",
+    lineHeight: 1.2,
+    bold: true,
+    rotation: 90,
+  };
 }

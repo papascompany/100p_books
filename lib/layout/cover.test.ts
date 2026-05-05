@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { BookSize } from "@/lib/db/types";
 import {
   buildDefaultCoverDoc,
+  buildSpineText,
   calcCoverDimensions,
   SPINE_TEXT_MIN_MM,
 } from "./cover";
@@ -93,7 +94,7 @@ describe("buildDefaultCoverDoc", () => {
     expect(doc.heightMm).toBe(dims.totalHeightMm);
   });
 
-  it("기본 템플릿(cover-minimal) 객체 생성", () => {
+  it("기본 템플릿(cover-minimal) 객체 생성 + 책등 텍스트 회전", () => {
     const doc = buildDefaultCoverDoc({
       bookSize: A5,
       pageCount: 100,
@@ -109,6 +110,11 @@ describe("buildDefaultCoverDoc", () => {
         o.placeholder.length > 0,
     );
     expect(spineTexts.length).toBeGreaterThanOrEqual(1);
+    // 책등 텍스트는 rotation: 90 (시계방향) 이어야 함
+    const first = spineTexts[0];
+    if (first && first.type === "text") {
+      expect(first.rotation).toBe(90);
+    }
     // 9mm > 8mm threshold sanity
     expect(SPINE_TEXT_MIN_MM).toBeLessThanOrEqual(9);
   });
@@ -152,5 +158,53 @@ describe("buildDefaultCoverDoc", () => {
         templateId: "cover-nonexistent",
       }),
     ).toThrow();
+  });
+});
+
+describe("buildSpineText", () => {
+  it("spineMm < SPINE_TEXT_MIN_MM 이면 null", () => {
+    const out = buildSpineText({
+      text: "title",
+      spineMm: SPINE_TEXT_MIN_MM - 0.1,
+      bookHeightMm: 210,
+      bookLeftMm: 150,
+      bookTopMm: 0,
+    });
+    expect(out).toBeNull();
+  });
+
+  it("spineMm >= SPINE_TEXT_MIN_MM 이면 rotation 90 텍스트", () => {
+    const out = buildSpineText({
+      text: "내 책 제목",
+      spineMm: 9,
+      bookHeightMm: 210,
+      bookLeftMm: 150,
+      bookTopMm: 0,
+    });
+    expect(out).not.toBeNull();
+    if (!out) return;
+    expect(out.type).toBe("text");
+    expect(out.rotation).toBe(90);
+    expect(out.placeholder).toBe("내 책 제목");
+    // 박스 중심 = (책등 중앙, 책 높이 중앙) 이어야 함
+    const cxMm = out.leftMm + out.widthMm / 2;
+    const cyMm = out.topMm + out.heightMm / 2;
+    expect(cxMm).toBeCloseTo(150 + 9 / 2, 5);
+    expect(cyMm).toBeCloseTo(210 / 2, 5);
+    // 박스 크기 — 회전 전 가로(=책 높이의 70%)/세로(=책등 폭의 80%)
+    expect(out.widthMm).toBeCloseTo(210 * 0.7, 5);
+    expect(out.heightMm).toBeCloseTo(9 * 0.8, 5);
+  });
+
+  it("text 가 비어있어도 placeholder 는 fallback '제목'", () => {
+    const out = buildSpineText({
+      text: "",
+      spineMm: 10,
+      bookHeightMm: 200,
+      bookLeftMm: 0,
+      bookTopMm: 0,
+    });
+    expect(out).not.toBeNull();
+    expect(out?.placeholder).toBe("제목");
   });
 });
