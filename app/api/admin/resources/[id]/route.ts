@@ -5,6 +5,7 @@ import { z } from "zod";
 import { fail, ok } from "@/app/api/_lib/response";
 import { withAdmin } from "@/lib/admin/auth";
 import { RESOURCES_BUCKET } from "@/lib/admin/resources";
+import { findResourceUsage } from "@/lib/admin/resource-usage";
 import { createAdminSupabase } from "@/lib/db/admin";
 
 export const runtime = "nodejs";
@@ -41,8 +42,11 @@ export const PATCH = withAdmin<{ id: string }>(async (req, ctx) => {
   return ok({ item: data });
 });
 
-export const DELETE = withAdmin<{ id: string }>(async (_req, ctx) => {
+export const DELETE = withAdmin<{ id: string }>(async (req, ctx) => {
   const admin = createAdminSupabase();
+  const url = new URL(req.url);
+  const force = url.searchParams.get("force") === "true";
+
   const { data: row, error: fetchErr } = await admin
     .from("resources")
     .select("storage_key")
@@ -50,6 +54,33 @@ export const DELETE = withAdmin<{ id: string }>(async (_req, ctx) => {
     .maybeSingle();
   if (fetchErr) return fail("FETCH_FAILED", fetchErr.message, 500);
   if (!row) return fail("NOT_FOUND", "리소스를 찾을 수 없습니다.", 404);
+
+  // 사용중 검사 — force=true 가 아닐 때만 실시
+  if (!force) {
+    let usage;
+    try {
+      usage = await findResourceUsage(ctx.params.id);
+    } catch (e) {
+      // 사용중 검사 실패는 차단 사유 X — 경고 로그만
+      console.warn(
+        "[admin/resources] usage check failed:",
+        e instanceof Error ? e.message : String(e),
+      );
+      usage = { usedInPages: 0, usedInCovers: 0, keywords: [] as string[] };
+    }
+    if (usage.usedInPages + usage.usedInCovers > 0) {
+      return fail(
+        "RESOURCE_IN_USE",
+        "이 리소스는 다른 곳에서 사용 중입니다.",
+        409,
+        {
+          usedInPages: usage.usedInPages,
+          usedInCovers: usage.usedInCovers,
+          keywords: usage.keywords,
+        },
+      );
+    }
+  }
 
   if (row.storage_key && row.storage_key !== "pending") {
     const { error: rmErr } = await admin.storage
@@ -66,5 +97,5 @@ export const DELETE = withAdmin<{ id: string }>(async (_req, ctx) => {
     .delete()
     .eq("id", ctx.params.id);
   if (delErr) return fail("RESOURCE_DELETE_FAILED", delErr.message, 500);
-  return ok({ deleted: true });
+  return ok({ deleted: true, forced: force });
 });

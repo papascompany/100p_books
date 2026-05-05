@@ -479,7 +479,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         canvas.setActiveObject(img);
         canvas.requestRenderAll();
       },
-      [bleedMm, dpi, widthMm],
+      [bleedMm, dpi, widthMm, heightMm],
     );
 
     const setBackground = useCallback(

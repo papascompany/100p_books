@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
 
+import { ThemeProvider, THEME_INIT_SCRIPT } from "@/components/theme/ThemeProvider";
+import Toaster from "@/components/ui/toaster";
+
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -38,8 +41,17 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko" suppressHydrationWarning>
+      <head>
+        {/* hydration 전 즉시 다크클래스 적용 — FOUC 방지 */}
+        <script
+          dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
+        />
+      </head>
       <body className="min-h-screen font-sans antialiased bg-background text-foreground">
-        <div className="flex min-h-screen flex-col">{children}</div>
+        <ThemeProvider>
+          <div className="flex min-h-screen flex-col">{children}</div>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

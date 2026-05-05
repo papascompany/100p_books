@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import * as React from "react";
 
+import ThemeToggle from "@/components/theme/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +50,7 @@ export default function HeaderClient({ isAuthed }: { isAuthed: boolean }) {
       </nav>
 
       <div className="hidden items-center gap-2 md:flex">
+        <ThemeToggle />
         {isAuthed ? (
           <Button asChild variant="ghost" size="icon" aria-label="내 프로필">
             <Link href="/mypage">
@@ -64,6 +66,7 @@ export default function HeaderClient({ isAuthed }: { isAuthed: boolean }) {
 
       {/* 모바일 햄버거 */}
       <div className="flex items-center gap-2 md:hidden">
+        <ThemeToggle />
         <Button
           variant="ghost"
           size="icon"

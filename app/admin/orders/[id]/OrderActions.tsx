@@ -5,6 +5,7 @@ import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/use-toast";
 import type { OrderStatus } from "@/lib/db/types";
 import { canTransition } from "@/lib/orders/state";
 
@@ -37,6 +38,7 @@ export default function OrderActions({
   trackingCarrier: string | null;
 }) {
   const router = useRouter();
+  const { toast } = useToast();
   const [busy, setBusy] = React.useState(false);
   const [tNo, setTNo] = React.useState(trackingNo ?? "");
   const [tCarrier, setTCarrier] = React.useState(trackingCarrier ?? "cj");
@@ -47,7 +49,11 @@ export default function OrderActions({
     extras?: { trackingNo?: string; trackingCarrier?: string },
   ) => {
     if (extras && (!extras.trackingNo || !extras.trackingCarrier)) {
-      alert("송장번호와 배송사를 입력하세요.");
+      toast({
+        variant: "destructive",
+        title: "송장 정보 누락",
+        description: "송장번호와 배송사를 입력하세요.",
+      });
       return;
     }
     if (
@@ -70,9 +76,14 @@ export default function OrderActions({
       });
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.ok) {
-        alert(j?.error?.message ?? "상태 변경 실패");
+        toast({
+          variant: "destructive",
+          title: "상태 변경 실패",
+          description: j?.error?.message ?? "알 수 없는 오류",
+        });
         return;
       }
+      toast({ variant: "success", title: `상태 변경: ${to}` });
       setShowShip(false);
       router.refresh();
     } finally {
@@ -91,10 +102,18 @@ export default function OrderActions({
       });
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.ok) {
-        alert(j?.error?.message ?? "재생성 실패");
+        toast({
+          variant: "destructive",
+          title: "PDF 재생성 실패",
+          description: j?.error?.message ?? "알 수 없는 오류",
+        });
         return;
       }
-      alert("PDF 재생성 완료.");
+      toast({
+        variant: "success",
+        title: "PDF 재생성 완료",
+        description: "표지/내지 PDF 가 갱신되었습니다.",
+      });
       router.refresh();
     } finally {
       setBusy(false);

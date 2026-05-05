@@ -4,12 +4,14 @@ import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/use-toast";
 import type { OrderStatus } from "@/lib/db/types";
 import { ALL_ORDER_STATUSES, ORDER_STATUS_LABEL } from "@/lib/orders/state";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 
 export default function ExportClient() {
+  const { toast } = useToast();
   const [status, setStatus] = React.useState<OrderStatus | "">("");
   const [from, setFrom] = React.useState("");
   const [to, setTo] = React.useState("");
@@ -37,7 +39,11 @@ export default function ExportClient() {
       );
       const j = await r.json();
       if (!j?.ok) {
-        alert(j?.error?.message ?? "조회 실패");
+        toast({
+          variant: "destructive",
+          title: "조회 실패",
+          description: j?.error?.message ?? "알 수 없는 오류",
+        });
         return;
       }
       setCount(j.data.count);
@@ -55,7 +61,11 @@ export default function ExportClient() {
       );
       if (!r.ok) {
         const j = await r.json().catch(() => null);
-        alert(j?.error?.message ?? "다운로드 실패");
+        toast({
+          variant: "destructive",
+          title: "다운로드 실패",
+          description: j?.error?.message ?? "알 수 없는 오류",
+        });
         return;
       }
       const blob = await r.blob();

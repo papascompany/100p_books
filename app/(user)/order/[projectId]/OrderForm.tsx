@@ -1,10 +1,12 @@
 "use client";
 
-import { Loader2, Minus, Plus } from "lucide-react";
+import { Loader2, Minus, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/use-toast";
+import { usePostcode } from "@/lib/address/use-postcode";
 import { calcOrderAmount, type CalcOrderAmountResult } from "@/lib/orders/pricing";
 
 export interface OrderFormProps {
@@ -31,6 +33,8 @@ const PHONE_REGEX = /^(\+?82-?|0)1[016789]-?\d{3,4}-?\d{4}$/;
 const ZIP_REGEX = /^\d{5}$/;
 
 export default function OrderForm(props: OrderFormProps) {
+  const { toast } = useToast();
+  const postcode = usePostcode();
   const [qty, setQty] = useState(1);
   const [address, setAddress] = useState<AddressState>({
     name: "",
@@ -45,6 +49,27 @@ export default function OrderForm(props: OrderFormProps) {
   const [agreeRefund, setAgreeRefund] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const openPostcode = async () => {
+    try {
+      await postcode.open((data) => {
+        setAddress((s) => ({
+          ...s,
+          zip: data.zonecode,
+          addr1: data.address,
+        }));
+        // 상세주소 입력으로 포커스 이동
+        const el = document.getElementById("addr2-input");
+        if (el instanceof HTMLInputElement) el.focus();
+      });
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "우편번호 SDK 로드 실패",
+        description: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
 
   const breakdown = useMemo<CalcOrderAmountResult>(
     () =>
@@ -241,11 +266,15 @@ export default function OrderForm(props: OrderFormProps) {
                   type="button"
                   variant="outline"
                   size="default"
-                  onClick={() => {
-                    // 다음 우편번호 SDK 자리 — 향후 daum.Postcode 통합.
-                    alert("우편번호 검색은 추후 제공됩니다. 직접 입력하세요.");
-                  }}
+                  onClick={() => void openPostcode()}
+                  disabled={postcode.loading}
+                  aria-label="우편번호 검색"
                 >
+                  {postcode.loading ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <Search />
+                  )}
                   검색
                 </Button>
               </div>
@@ -260,6 +289,7 @@ export default function OrderForm(props: OrderFormProps) {
             </Field>
             <Field label="상세주소" className="sm:col-span-2">
               <Input
+                id="addr2-input"
                 value={address.addr2}
                 onChange={(e) => update("addr2", e.target.value)}
                 autoComplete="address-line2"

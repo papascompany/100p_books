@@ -9,7 +9,7 @@
  * 회전된 객체는 bounding rect 의 X/Y 축 정렬만 고려.
  */
 
-import * as fabric from "fabric";
+import type * as fabric from "fabric";
 
 export interface SnapOpts {
   thresholdPx?: number;

@@ -2,9 +2,11 @@
 
 import * as React from "react";
 
+import ResourceDeleteDialog from "@/components/admin/ResourceDeleteDialog";
 import UploadDropzone from "@/components/admin/UploadDropzone";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/use-toast";
 import type { Resource, ResourceType } from "@/lib/db/types";
 
 interface Item extends Resource {}
@@ -22,6 +24,7 @@ const MAX: Record<ResourceType, number> = {
 };
 
 export default function ResourcesClient({ type }: { type: ResourceType }) {
+  const { toast } = useToast();
   const [items, setItems] = React.useState<Item[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState<string | null>(null);
@@ -41,6 +44,13 @@ export default function ResourcesClient({ type }: { type: ResourceType }) {
   const [description, setDescription] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [resetSig, setResetSig] = React.useState(0);
+
+  // 사용중 삭제 다이얼로그 state
+  const [pendingDelete, setPendingDelete] = React.useState<{
+    item: Item;
+    usage: { usedInPages: number; usedInCovers: number } | null;
+  } | null>(null);
+  const [deleteBusy, setDeleteBusy] = React.useState(false);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -79,17 +89,21 @@ export default function ResourcesClient({ type }: { type: ResourceType }) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
-      alert("파일을 선택하세요.");
+      toast({ variant: "destructive", title: "파일을 선택하세요." });
       return;
     }
     if (!name.trim()) {
-      alert("이름을 입력하세요.");
+      toast({ variant: "destructive", title: "이름을 입력하세요." });
       return;
     }
     let meta: Record<string, unknown> = {};
     if (type === "font") {
       if (!family.trim() || !licenseName.trim()) {
-        alert("폰트 family / 라이선스 이름은 필수입니다.");
+        toast({
+          variant: "destructive",
+          title: "필수 항목 누락",
+          description: "폰트 family / 라이선스 이름은 필수입니다.",
+        });
         return;
       }
       meta = {
@@ -118,9 +132,14 @@ export default function ResourcesClient({ type }: { type: ResourceType }) {
       });
       const j = await r.json();
       if (!r.ok || !j?.ok) {
-        alert(j?.error?.message ?? "업로드 실패");
+        toast({
+          variant: "destructive",
+          title: "업로드 실패",
+          description: j?.error?.message ?? "알 수 없는 오류",
+        });
         return;
       }
+      toast({ variant: "success", title: "업로드 완료" });
       resetForm();
       await refresh();
     } finally {
@@ -136,9 +155,17 @@ export default function ResourcesClient({ type }: { type: ResourceType }) {
     });
     const j = await r.json();
     if (!r.ok || !j?.ok) {
-      alert(j?.error?.message ?? "변경 실패");
+      toast({
+        variant: "destructive",
+        title: "변경 실패",
+        description: j?.error?.message ?? "알 수 없는 오류",
+      });
       return;
     }
+    toast({
+      variant: "success",
+      title: item.active ? "비활성화 완료" : "활성화 완료",
+    });
     refresh();
   };
 
@@ -148,11 +175,90 @@ export default function ResourcesClient({ type }: { type: ResourceType }) {
       method: "DELETE",
     });
     const j = await r.json();
-    if (!r.ok || !j?.ok) {
-      alert(j?.error?.message ?? "삭제 실패");
+    if (r.status === 409 && j?.error?.code === "RESOURCE_IN_USE") {
+      // 사용중 — 다이얼로그로 후속 결정
+      const det = (j.error.details ?? {}) as {
+        usedInPages?: number;
+        usedInCovers?: number;
+      };
+      setPendingDelete({
+        item,
+        usage: {
+          usedInPages: det.usedInPages ?? 0,
+          usedInCovers: det.usedInCovers ?? 0,
+        },
+      });
       return;
     }
+    if (!r.ok || !j?.ok) {
+      toast({
+        variant: "destructive",
+        title: "삭제 실패",
+        description: j?.error?.message ?? "알 수 없는 오류",
+      });
+      return;
+    }
+    toast({ variant: "success", title: "삭제 완료" });
     refresh();
+  };
+
+  const deactivatePending = async () => {
+    if (!pendingDelete) return;
+    setDeleteBusy(true);
+    try {
+      const r = await fetch(`/api/admin/resources/${pendingDelete.item.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ active: false }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.ok) {
+        toast({
+          variant: "destructive",
+          title: "비활성화 실패",
+          description: j?.error?.message ?? "알 수 없는 오류",
+        });
+        return;
+      }
+      toast({
+        variant: "success",
+        title: "비활성화 완료",
+        description: "사용자 에디터에서 더 이상 노출되지 않습니다.",
+      });
+      setPendingDelete(null);
+      await refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
+  const forceDeletePending = async () => {
+    if (!pendingDelete) return;
+    setDeleteBusy(true);
+    try {
+      const r = await fetch(
+        `/api/admin/resources/${pendingDelete.item.id}?force=true`,
+        { method: "DELETE" },
+      );
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.ok) {
+        toast({
+          variant: "destructive",
+          title: "강제 삭제 실패",
+          description: j?.error?.message ?? "알 수 없는 오류",
+        });
+        return;
+      }
+      toast({
+        variant: "warning",
+        title: "강제 삭제 완료",
+        description: "PDF 재생성 시 기본값으로 대체됩니다.",
+      });
+      setPendingDelete(null);
+      await refresh();
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   return (
@@ -326,6 +432,18 @@ export default function ResourcesClient({ type }: { type: ResourceType }) {
           </ul>
         )}
       </section>
+
+      <ResourceDeleteDialog
+        open={pendingDelete !== null}
+        onOpenChange={(o) => {
+          if (!o) setPendingDelete(null);
+        }}
+        resourceName={pendingDelete?.item.name ?? ""}
+        usage={pendingDelete?.usage ?? null}
+        busy={deleteBusy}
+        onDeactivate={deactivatePending}
+        onForceDelete={forceDeletePending}
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import * as React from "react";
 import DataTable, { type Column } from "@/components/admin/DataTable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/use-toast";
 import type { Profile, UserRole } from "@/lib/db/types";
 
 const DT = new Intl.DateTimeFormat("ko-KR", {
@@ -21,6 +22,7 @@ interface ListResponse {
 const PAGE_SIZE = 50;
 
 export default function UsersClient() {
+  const { toast } = useToast();
   const [items, setItems] = React.useState<Profile[]>([]);
   const [total, setTotal] = React.useState(0);
   const [q, setQ] = React.useState("");
@@ -73,9 +75,17 @@ export default function UsersClient() {
     });
     const j = await r.json().catch(() => null);
     if (!r.ok || !j?.ok) {
-      alert(j?.error?.message ?? "변경 실패");
+      toast({
+        variant: "destructive",
+        title: "변경 실패",
+        description: j?.error?.message ?? "알 수 없는 오류",
+      });
       return;
     }
+    toast({
+      variant: "success",
+      title: target === "admin" ? "관리자로 승격" : "관리자 권한 해제",
+    });
     refresh();
   };
 

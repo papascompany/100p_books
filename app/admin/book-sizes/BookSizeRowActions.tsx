@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function BookSizeRowActions({
   id,
@@ -14,6 +15,7 @@ export default function BookSizeRowActions({
   active: boolean;
 }) {
   const router = useRouter();
+  const { toast } = useToast();
   const [busy, setBusy] = React.useState(false);
 
   const toggle = async () => {
@@ -26,8 +28,16 @@ export default function BookSizeRowActions({
       });
       if (!r.ok) {
         const j = await r.json().catch(() => null);
-        alert(j?.error?.message ?? "변경 실패");
+        toast({
+          variant: "destructive",
+          title: "변경 실패",
+          description: j?.error?.message ?? "알 수 없는 오류",
+        });
       } else {
+        toast({
+          variant: "success",
+          title: active ? "비활성화 완료" : "활성화 완료",
+        });
         router.refresh();
       }
     } finally {
@@ -42,8 +52,13 @@ export default function BookSizeRowActions({
       const r = await fetch(`/api/admin/book-sizes/${id}`, { method: "DELETE" });
       if (!r.ok) {
         const j = await r.json().catch(() => null);
-        alert(j?.error?.message ?? "삭제 실패");
+        toast({
+          variant: "destructive",
+          title: "삭제 실패",
+          description: j?.error?.message ?? "알 수 없는 오류",
+        });
       } else {
+        toast({ variant: "success", title: "삭제 완료" });
         router.refresh();
       }
     } finally {
