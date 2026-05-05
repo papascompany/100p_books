@@ -1,0 +1,382 @@
+"use client";
+
+import * as fabric from "fabric";
+import { useEffect, useState } from "react";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ptToPx, type TaggedFabricObject } from "@/lib/fabric/serialize";
+
+export interface SelectionPanelProps {
+  selection: TaggedFabricObject | null;
+  /** 현재 캔버스 DPI (pt ↔ px 변환에 사용). */
+  dpi: number;
+  /** 변경 발생 시 강제 push (debounce 와 무관) — 자동 저장 트리거. */
+  onChange?: () => void;
+}
+
+/**
+ * 선택 객체에 따라 다른 속성 편집 UI.
+ *  - 텍스트: family/size/color/align/bold/italic/lineHeight
+ *  - 이미지: cropMode/rotation/opacity/borderRadiusMm
+ *  - 도형:   fill/stroke
+ *
+ * 텍스트 폰트 변경은 ResourcePalette 에서도 가능 — 여기선 시스템 폰트만 빠른 토글.
+ */
+export default function SelectionPanel({
+  selection,
+  dpi,
+  onChange,
+}: SelectionPanelProps) {
+  if (!selection) {
+    return (
+      <div className="rounded-md border border-dashed bg-white/40 p-4 text-sm text-muted-foreground">
+        편집할 객체를 선택하세요.
+      </div>
+    );
+  }
+
+  if (selection.oType === "text") {
+    return (
+      <TextEditor
+        target={selection as fabric.Textbox & TaggedFabricObject}
+        dpi={dpi}
+        onChange={onChange}
+      />
+    );
+  }
+  if (selection.oType === "photo") {
+    return (
+      <PhotoEditor
+        target={selection as fabric.FabricImage & TaggedFabricObject}
+        onChange={onChange}
+      />
+    );
+  }
+  if (selection.oType === "rect") {
+    return (
+      <RectEditor
+        target={selection as fabric.Rect & TaggedFabricObject}
+        onChange={onChange}
+      />
+    );
+  }
+  return null;
+}
+
+function TextEditor({
+  target,
+  dpi,
+  onChange,
+}: {
+  target: fabric.Textbox & TaggedFabricObject;
+  dpi: number;
+  onChange?: () => void;
+}) {
+  const [, force] = useState(0);
+  const update = () => {
+    target.canvas?.fire("object:modified", { target });
+    target.canvas?.requestRenderAll();
+    force((v) => v + 1);
+    onChange?.();
+  };
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold">텍스트</h3>
+
+      <label className="block text-xs text-muted-foreground">
+        폰트
+        <select
+          className="mt-1 block w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
+          value={(target.fontFamily as string) || "Pretendard"}
+          onChange={(e) => {
+            target.set({ fontFamily: e.target.value });
+            update();
+          }}
+        >
+          <option value="Pretendard">Pretendard</option>
+          <option value="Playfair Display">Playfair Display</option>
+          <option value="serif">Serif</option>
+          <option value="sans-serif">Sans-serif</option>
+        </select>
+      </label>
+
+      <div className="flex gap-2">
+        <label className="block flex-1 text-xs text-muted-foreground">
+          크기(pt)
+          <Input
+            type="number"
+            min={6}
+            max={200}
+            value={Math.round(((target.fontSize ?? 14) * 72) / dpi)}
+            onChange={(e) => {
+              const pt = Number(e.target.value);
+              if (!Number.isFinite(pt) || pt <= 0) return;
+              target.set({ fontSize: ptToPx(pt, dpi) });
+              update();
+            }}
+          />
+        </label>
+        <label className="block w-24 text-xs text-muted-foreground">
+          색
+          <Input
+            type="color"
+            value={
+              typeof target.fill === "string" ? target.fill : "#2b2b2b"
+            }
+            onChange={(e) => {
+              target.set({ fill: e.target.value });
+              update();
+            }}
+          />
+        </label>
+      </div>
+
+      <div className="flex gap-2">
+        {(["left", "center", "right"] as const).map((a) => (
+          <Button
+            key={a}
+            type="button"
+            size="sm"
+            variant={target.textAlign === a ? "default" : "outline"}
+            onClick={() => {
+              target.set({ textAlign: a });
+              update();
+            }}
+          >
+            {a === "left" ? "왼쪽" : a === "center" ? "가운데" : "오른쪽"}
+          </Button>
+        ))}
+      </div>
+
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          variant={target.fontWeight === 600 ? "default" : "outline"}
+          onClick={() => {
+            target.set({
+              fontWeight: target.fontWeight === 600 ? 400 : 600,
+            });
+            update();
+          }}
+        >
+          굵게
+        </Button>
+        <Button
+          size="sm"
+          variant={target.fontStyle === "italic" ? "default" : "outline"}
+          onClick={() => {
+            target.set({
+              fontStyle: target.fontStyle === "italic" ? "normal" : "italic",
+            });
+            update();
+          }}
+        >
+          기울임
+        </Button>
+      </div>
+
+      <label className="block text-xs text-muted-foreground">
+        줄 간격 ({(target.lineHeight ?? 1.4).toFixed(2)})
+        <input
+          type="range"
+          min={1}
+          max={2}
+          step={0.05}
+          value={target.lineHeight ?? 1.4}
+          onChange={(e) => {
+            target.set({ lineHeight: Number(e.target.value) });
+            update();
+          }}
+          className="mt-1 w-full"
+        />
+      </label>
+    </div>
+  );
+}
+
+function PhotoEditor({
+  target,
+  onChange,
+}: {
+  target: fabric.FabricImage & TaggedFabricObject;
+  onChange?: () => void;
+}) {
+  const [, force] = useState(0);
+  const update = () => {
+    target.canvas?.fire("object:modified", { target });
+    target.canvas?.requestRenderAll();
+    force((v) => v + 1);
+    onChange?.();
+  };
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold">사진</h3>
+
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          variant={target.cropMode === "cover" ? "default" : "outline"}
+          onClick={() => {
+            target.cropMode = "cover";
+            update();
+          }}
+        >
+          꽉 채우기
+        </Button>
+        <Button
+          size="sm"
+          variant={target.cropMode === "contain" ? "default" : "outline"}
+          onClick={() => {
+            target.cropMode = "contain";
+            update();
+          }}
+        >
+          맞춰 넣기
+        </Button>
+      </div>
+
+      <label className="block text-xs text-muted-foreground">
+        회전 ({Math.round(target.angle ?? 0)}°)
+        <input
+          type="range"
+          min={-180}
+          max={180}
+          step={1}
+          value={target.angle ?? 0}
+          onChange={(e) => {
+            target.set({ angle: Number(e.target.value) });
+            update();
+          }}
+          className="mt-1 w-full"
+        />
+      </label>
+
+      <label className="block text-xs text-muted-foreground">
+        투명도 ({Math.round((target.opacity ?? 1) * 100)}%)
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={target.opacity ?? 1}
+          onChange={(e) => {
+            target.set({ opacity: Number(e.target.value) });
+            update();
+          }}
+          className="mt-1 w-full"
+        />
+      </label>
+
+      <label className="block text-xs text-muted-foreground">
+        둥근 모서리 ({Math.round(target.borderRadiusMm ?? 0)}mm)
+        <input
+          type="range"
+          min={0}
+          max={20}
+          step={0.5}
+          value={target.borderRadiusMm ?? 0}
+          onChange={(e) => {
+            target.borderRadiusMm = Number(e.target.value);
+            update();
+          }}
+          className="mt-1 w-full"
+        />
+      </label>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={Boolean(target.shadow)}
+          onChange={(e) => {
+            if (e.target.checked) {
+              target.shadow = new fabric.Shadow({
+                blur: 8,
+                offsetX: 0,
+                offsetY: 4,
+                color: "rgba(0,0,0,0.15)",
+              });
+              target.shadowBlurMm = 2;
+              target.shadowOffsetYMm = 1;
+              target.shadowColor = "rgba(0,0,0,0.15)";
+            } else {
+              (target as unknown as { shadow: fabric.Shadow | null }).shadow =
+                null;
+              target.shadowBlurMm = undefined;
+              target.shadowOffsetYMm = undefined;
+              target.shadowColor = undefined;
+            }
+            update();
+          }}
+        />
+        그림자
+      </label>
+    </div>
+  );
+}
+
+function RectEditor({
+  target,
+  onChange,
+}: {
+  target: fabric.Rect & TaggedFabricObject;
+  onChange?: () => void;
+}) {
+  const [, force] = useState(0);
+  const update = () => {
+    target.canvas?.fire("object:modified", { target });
+    target.canvas?.requestRenderAll();
+    force((v) => v + 1);
+    onChange?.();
+  };
+
+  // target 변경 시 강제 리렌더 (참조만 바뀌어도)
+  useEffect(() => {
+    force((v) => v + 1);
+  }, [target]);
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold">도형</h3>
+      <label className="block text-xs text-muted-foreground">
+        채움 색
+        <Input
+          type="color"
+          value={typeof target.fill === "string" ? target.fill : "#ffffff"}
+          onChange={(e) => {
+            target.set({ fill: e.target.value });
+            update();
+          }}
+        />
+      </label>
+      <label className="block text-xs text-muted-foreground">
+        테두리 색
+        <Input
+          type="color"
+          value={typeof target.stroke === "string" ? target.stroke : "#000000"}
+          onChange={(e) => {
+            target.set({ stroke: e.target.value });
+            update();
+          }}
+        />
+      </label>
+      <label className="block text-xs text-muted-foreground">
+        테두리 두께 ({target.strokeWidth ?? 0}px)
+        <input
+          type="range"
+          min={0}
+          max={10}
+          step={1}
+          value={target.strokeWidth ?? 0}
+          onChange={(e) => {
+            target.set({ strokeWidth: Number(e.target.value) });
+            update();
+          }}
+          className="mt-1 w-full"
+        />
+      </label>
+    </div>
+  );
+}

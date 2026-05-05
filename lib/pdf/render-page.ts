@@ -1,0 +1,392 @@
+import "server-only";
+
+import {
+  createCanvas,
+  loadImage,
+  type SKRSContext2D,
+  type Image,
+} from "@napi-rs/canvas";
+
+type LoadedImage = Image;
+
+import type {
+  LayoutObject,
+  PageDoc,
+  PhotoObject,
+  RectObject,
+  TextObject,
+} from "@/lib/layout/types";
+
+import { mmToPx, ptToPx, PRINT_DPI } from "./constants";
+import { wrapMixedText } from "./text-wrap";
+
+/**
+ * PageDoc → 300dpi PNG 버퍼.
+ *
+ * 좌표계:
+ *   - PageDoc 좌표는 trim 좌상단 원점 mm.
+ *   - 캔버스는 (widthMm + 2*bleedMm) × (heightMm + 2*bleedMm) mm.
+ *   - 따라서 객체 그리기 전에 ctx.translate(bleedPx, bleedPx) 로 trim 원점 정렬.
+ *
+ * 객체 회전:
+ *   - PageDoc 의 rotation 은 객체 중심 기준 deg, 양수=시계방향.
+ *   - 캔버스에서는 ctx.translate(centerX, centerY); ctx.rotate(rad) 로 처리.
+ *
+ * 사진 cropMode:
+ *   - cover: 슬롯을 가득 채우도록 비율 유지 + 슬롯 박스로 클리핑.
+ *   - contain: 슬롯 안에 비율 유지하여 들어가도록.
+ */
+
+export interface RenderContext {
+  /** 출력 DPI. 기본 300. */
+  dpi?: number;
+  /** sub-pixel anti-alias 품질. true 면 imageSmoothingQuality="high". */
+  highQuality?: boolean;
+  /** photoId → 원본 buffer (jpeg/png/webp). */
+  resolveImageUrl: (photoIdOrUrl: string) => Promise<Buffer>;
+  /** 배경 이미지 URL/photoId 처리 (선택). */
+  resolveBackgroundUrl?: (input: {
+    photoId?: string;
+    url?: string;
+  }) => Promise<Buffer | null>;
+}
+
+export async function renderPageToPng(
+  doc: PageDoc,
+  ctx: RenderContext,
+): Promise<Buffer> {
+  const dpi = ctx.dpi ?? PRINT_DPI;
+  const bleedMm = doc.bleedMm; // 항상 2 (PageDoc 규약)
+
+  const totalWmm = doc.widthMm + bleedMm * 2;
+  const totalHmm = doc.heightMm + bleedMm * 2;
+  const wPx = Math.round(mmToPx(totalWmm, dpi));
+  const hPx = Math.round(mmToPx(totalHmm, dpi));
+
+  const canvas = createCanvas(wPx, hPx);
+  const cx = canvas.getContext("2d");
+
+  // 부동소수 정밀: integer translate 권장 — 우리 좌표는 모두 mm 단위라 충돌 적음.
+  cx.imageSmoothingEnabled = true;
+  if (ctx.highQuality !== false) {
+    cx.imageSmoothingQuality = "high";
+  }
+
+  // 1) backgroundColor
+  cx.save();
+  cx.fillStyle = doc.backgroundColor || "#ffffff";
+  cx.fillRect(0, 0, wPx, hPx);
+  cx.restore();
+
+  // bleed offset → 이후 모든 좌표는 trim 원점 기준.
+  const bleedPx = mmToPx(bleedMm, dpi);
+  cx.save();
+  cx.translate(bleedPx, bleedPx);
+
+  // trim 영역 사이즈
+  const trimWPx = mmToPx(doc.widthMm, dpi);
+  const trimHPx = mmToPx(doc.heightMm, dpi);
+
+  // 2) backgroundImage (trim 박스에 cover/contain)
+  if (doc.backgroundImage) {
+    try {
+      const buf = await (ctx.resolveBackgroundUrl?.(doc.backgroundImage) ??
+        Promise.resolve(null));
+      // photoId 가 있으면 일반 photo resolver fallback
+      const buffer =
+        buf ??
+        (doc.backgroundImage.photoId
+          ? await ctx.resolveImageUrl(doc.backgroundImage.photoId)
+          : null);
+      if (buffer) {
+        const img = await loadImage(buffer);
+        await drawCoverContain(
+          cx,
+          img,
+          0,
+          0,
+          trimWPx,
+          trimHPx,
+          doc.backgroundImage.cropMode,
+          doc.backgroundImage.opacity,
+        );
+      }
+    } catch (e) {
+      console.warn(
+        "[pdf/render] background image load failed:",
+        e instanceof Error ? e.message : String(e),
+      );
+    }
+  }
+
+  // 3) objects (배열 순서 = z-order, 뒤에 있을수록 위에 그려짐)
+  for (const obj of doc.objects) {
+    await drawObject(cx, obj, dpi, ctx);
+  }
+
+  cx.restore();
+
+  return canvas.toBuffer("image/png");
+}
+
+// =====================================================================
+// drawing helpers
+// =====================================================================
+
+async function drawObject(
+  cx: SKRSContext2D,
+  obj: LayoutObject,
+  dpi: number,
+  ctx: RenderContext,
+): Promise<void> {
+  if (obj.type === "photo") return drawPhoto(cx, obj, dpi, ctx);
+  if (obj.type === "text") return drawText(cx, obj, dpi);
+  if (obj.type === "rect") return drawRect(cx, obj, dpi);
+}
+
+async function drawPhoto(
+  cx: SKRSContext2D,
+  obj: PhotoObject,
+  dpi: number,
+  ctx: RenderContext,
+): Promise<void> {
+  const xPx = mmToPx(obj.leftMm, dpi);
+  const yPx = mmToPx(obj.topMm, dpi);
+  const wPx = mmToPx(obj.widthMm, dpi);
+  const hPx = mmToPx(obj.heightMm, dpi);
+  const radiusPx = mmToPx(obj.borderRadiusMm ?? 0, dpi);
+
+  let img: LoadedImage;
+  try {
+    const buf = await ctx.resolveImageUrl(obj.photoId);
+    img = await loadImage(buf);
+  } catch (e) {
+    // 이미지 로드 실패 → placeholder
+    drawPhotoPlaceholder(cx, xPx, yPx, wPx, hPx, radiusPx, obj.rotation);
+    console.warn(
+      `[pdf/render] photo ${obj.photoId} load failed: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    return;
+  }
+
+  cx.save();
+
+  // 회전: 중심점 이동 → rotate
+  const cxx = xPx + wPx / 2;
+  const cyy = yPx + hPx / 2;
+  cx.translate(cxx, cyy);
+  if (obj.rotation) {
+    cx.rotate((obj.rotation * Math.PI) / 180);
+  }
+
+  // shadow (rotate 적용 후, 이미지 그리기 직전)
+  if (obj.shadow) {
+    cx.shadowColor = obj.shadow.color;
+    cx.shadowBlur = mmToPx(obj.shadow.blurMm, dpi);
+    cx.shadowOffsetX = 0;
+    cx.shadowOffsetY = mmToPx(obj.shadow.offsetYMm, dpi);
+  }
+
+  // clipping path (slot box, 회전된 좌표계에서 -w/2, -h/2 박스)
+  if (radiusPx > 0) {
+    cx.beginPath();
+    pathRoundRect(cx, -wPx / 2, -hPx / 2, wPx, hPx, radiusPx);
+    cx.clip();
+    // shadow 는 clip 바깥으로 새지 않으므로 별도 처리 — clip 후엔 shadow 무력화됨.
+    // 그림자를 살리려면 clip 전에 fillRect 로 배경을 그리거나 별도 단계가 필요.
+    // 본 단계에서는 borderRadius + shadow 동시 적용은 그림자가 잘릴 수 있음 — 알려진 한계.
+  } else {
+    cx.beginPath();
+    cx.rect(-wPx / 2, -hPx / 2, wPx, hPx);
+    cx.clip();
+  }
+
+  // crop fit
+  const iw = img.width;
+  const ih = img.height;
+  const scaleCover = Math.max(wPx / iw, hPx / ih);
+  const scaleContain = Math.min(wPx / iw, hPx / ih);
+  const s = obj.cropMode === "contain" ? scaleContain : scaleCover;
+  const drawW = iw * s;
+  const drawH = ih * s;
+  cx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+
+  cx.restore();
+}
+
+function drawPhotoPlaceholder(
+  cx: SKRSContext2D,
+  xPx: number,
+  yPx: number,
+  wPx: number,
+  hPx: number,
+  radiusPx: number,
+  rotation: number,
+): void {
+  cx.save();
+  const cxx = xPx + wPx / 2;
+  const cyy = yPx + hPx / 2;
+  cx.translate(cxx, cyy);
+  if (rotation) cx.rotate((rotation * Math.PI) / 180);
+  cx.fillStyle = "#e6e2db";
+  cx.beginPath();
+  if (radiusPx > 0) pathRoundRect(cx, -wPx / 2, -hPx / 2, wPx, hPx, radiusPx);
+  else cx.rect(-wPx / 2, -hPx / 2, wPx, hPx);
+  cx.fill();
+  cx.strokeStyle = "rgba(0,0,0,0.2)";
+  cx.lineWidth = 1;
+  cx.setLineDash([4, 4]);
+  cx.stroke();
+  cx.restore();
+}
+
+function drawRect(cx: SKRSContext2D, obj: RectObject, dpi: number): void {
+  const xPx = mmToPx(obj.leftMm, dpi);
+  const yPx = mmToPx(obj.topMm, dpi);
+  const wPx = mmToPx(obj.widthMm, dpi);
+  const hPx = mmToPx(obj.heightMm, dpi);
+  const radiusPx = mmToPx(obj.borderRadiusMm ?? 0, dpi);
+
+  cx.save();
+  const cxx = xPx + wPx / 2;
+  const cyy = yPx + hPx / 2;
+  cx.translate(cxx, cyy);
+  if (obj.rotation) cx.rotate((obj.rotation * Math.PI) / 180);
+
+  cx.beginPath();
+  if (radiusPx > 0) pathRoundRect(cx, -wPx / 2, -hPx / 2, wPx, hPx, radiusPx);
+  else cx.rect(-wPx / 2, -hPx / 2, wPx, hPx);
+
+  if (obj.placeholderSlot) {
+    // 빈 슬롯: 채우지 않고 점선 테두리만
+    cx.strokeStyle = "rgba(0,0,0,0.25)";
+    cx.lineWidth = mmToPx(0.3, dpi);
+    cx.setLineDash([mmToPx(2, dpi), mmToPx(1.4, dpi)]);
+    cx.stroke();
+  } else {
+    cx.fillStyle = obj.fill || "#ffffff";
+    cx.fill();
+  }
+
+  cx.restore();
+}
+
+function drawText(cx: SKRSContext2D, obj: TextObject, dpi: number): void {
+  const xPx = mmToPx(obj.leftMm, dpi);
+  const yPx = mmToPx(obj.topMm, dpi);
+  const wPx = mmToPx(obj.widthMm, dpi);
+  const hPx = mmToPx(obj.heightMm, dpi);
+  const fontSizePx = ptToPx(obj.fontSizePt, dpi);
+
+  cx.save();
+
+  // 회전: 박스 중심
+  const cxx = xPx + wPx / 2;
+  const cyy = yPx + hPx / 2;
+  cx.translate(cxx, cyy);
+  // text 객체는 rotation 필드가 없음 (PageDoc TextObject 정의에 없음). 추후 확장 시 적용.
+
+  // 폰트 문자열 — 등록되지 않은 family 는 시스템 폴백에 의존
+  const style = obj.italic ? "italic" : "normal";
+  const weight = obj.bold ? "700" : "400";
+  cx.font = `${style} ${weight} ${fontSizePx}px "${escapeFamily(obj.fontFamily)}", "Pretendard", sans-serif`;
+  cx.fillStyle = obj.fill || "#2b2b2b";
+  cx.textBaseline = "alphabetic";
+
+  // 줄바꿈
+  const lines = wrapMixedText(obj.text || "", {
+    measure: (s) => cx.measureText(s).width,
+    maxWidthPx: wPx,
+  });
+  const lineHeightPx = fontSizePx * (obj.lineHeight ?? 1.4);
+  const totalHPx = lineHeightPx * lines.length;
+
+  // align (가로)
+  let tx = -wPx / 2;
+  if (obj.align === "center") {
+    cx.textAlign = "center";
+    tx = 0;
+  } else if (obj.align === "right") {
+    cx.textAlign = "right";
+    tx = wPx / 2;
+  } else {
+    cx.textAlign = "left";
+    tx = -wPx / 2;
+  }
+
+  // 세로 중앙 정렬 (슬롯 박스 기준). 첫 줄 baseline 위치.
+  // 캔버스 textBaseline=alphabetic 기준, 첫 줄의 baseline ≈ -totalH/2 + 폰트 ascent.
+  // ascent 추정: lineHeight 의 80% (한글/라틴 평균).
+  const firstBaseline = -totalHPx / 2 + lineHeightPx * 0.8;
+
+  for (let i = 0; i < lines.length; i++) {
+    const ty = firstBaseline + i * lineHeightPx;
+    cx.fillText(lines[i]!, tx, ty);
+  }
+
+  cx.restore();
+  // 박스 폭/높이를 명시적으로 사용하지 않더라도 미래 디버그/박스 시각화용.
+  void hPx;
+}
+
+/** rounded rect path. canvas 표준 roundRect 가 있으면 사용. */
+function pathRoundRect(
+  cx: SKRSContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  const radius = Math.min(r, w / 2, h / 2);
+  const c = cx as unknown as { roundRect?: (x: number, y: number, w: number, h: number, r: number) => void };
+  if (typeof c.roundRect === "function") {
+    c.roundRect(x, y, w, h, radius);
+    return;
+  }
+  cx.moveTo(x + radius, y);
+  cx.lineTo(x + w - radius, y);
+  cx.quadraticCurveTo(x + w, y, x + w, y + radius);
+  cx.lineTo(x + w, y + h - radius);
+  cx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+  cx.lineTo(x + radius, y + h);
+  cx.quadraticCurveTo(x, y + h, x, y + h - radius);
+  cx.lineTo(x, y + radius);
+  cx.quadraticCurveTo(x, y, x + radius, y);
+  cx.closePath();
+}
+
+async function drawCoverContain(
+  cx: SKRSContext2D,
+  img: LoadedImage,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  cropMode: "cover" | "contain",
+  opacity: number,
+): Promise<void> {
+  const iw = img.width;
+  const ih = img.height;
+  const scaleCover = Math.max(w / iw, h / ih);
+  const scaleContain = Math.min(w / iw, h / ih);
+  const s = cropMode === "contain" ? scaleContain : scaleCover;
+  const drawW = iw * s;
+  const drawH = ih * s;
+  const dx = x + (w - drawW) / 2;
+  const dy = y + (h - drawH) / 2;
+
+  cx.save();
+  // cover 시 trim 박스 밖으로 새지 않게 clip
+  cx.beginPath();
+  cx.rect(x, y, w, h);
+  cx.clip();
+  cx.globalAlpha = Math.max(0, Math.min(1, opacity ?? 1));
+  cx.drawImage(img, dx, dy, drawW, drawH);
+  cx.restore();
+}
+
+/** font-family 이름에 들어간 따옴표/이스케이프 위험 문자 제거. */
+function escapeFamily(family: string): string {
+  return family.replace(/["\\\n\r]/g, "");
+}

@@ -1,0 +1,270 @@
+# 100p_books — 100페이지 포토북 제작 웹앱
+
+> 사진 최대 100장으로 나만의 포토북을 만들고, 인쇄용 PDF로 주문하는 모바일 친화 웹앱.
+> Fabric.js 기반의 캔바 수준 표지·내지 에디터, 300dpi 고해상도 출력, 관리자 콘솔 포함.
+
+[![Built with Next.js 14](https://img.shields.io/badge/Next.js-14.2-black?logo=next.js)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178c6?logo=typescript)](https://www.typescriptlang.org/)
+[![Supabase](https://img.shields.io/badge/Supabase-Auth%20%2B%20DB%20%2B%20Storage-3FCF8E?logo=supabase)](https://supabase.com/)
+[![Fabric.js 6](https://img.shields.io/badge/Fabric.js-6.x-FE6E3A)](http://fabricjs.com/)
+[![License](https://img.shields.io/badge/license-Private-lightgrey)](#)
+
+---
+
+## ✨ 핵심 기능
+
+### 사용자 플로우
+1. **사진 업로드** — 드래그&드롭 / 멀티 셀렉트, iOS HEIC 자동 변환, 동시 6 청크 업로드, 최대 100장
+2. **자동 편집** — 4가지 정렬(EXIF 촬영시각 / 파일명 / 업로드순 / 랜덤) × 2가지 레이아웃(폴라로이드 / 콜라주 6종)
+3. **상세 편집** — Fabric.js 6 기반 모바일 친화 에디터 (핀치 줌, 회전, 스냅 가이드, Undo/Redo 50스텝)
+4. **표지 편집** — 앞표지 + 책등 + 뒤표지 펼친 캔버스, 5종 템플릿, 책등 두께 자동 계산
+5. **주문 + 결제** — 토스페이먼츠 통합, 멱등 confirm, amount 3중 검증
+6. **PDF 다운로드** — 300dpi · 사방 2mm 재단선(bleed) · 표지/내지 분리 PDF, SSE 진행률
+
+### 관리자 콘솔 (`/admin`)
+- 책 사이즈 CRUD (A5 / 14.5×14.5 / 20×20 + 자유 추가)
+- 폰트 / 클립아트 / 배경 리소스 업로드 (라이선스 메타 포함)
+- 주문 리스트, 상태 머신 전이, 송장 번호 등록
+- 송장 Excel 다운로드 (CJ대한통운 호환 컬럼)
+- 주문별 PDF 재생성, 사용자 role 관리
+
+---
+
+## 🏗 기술 스택
+
+| 레이어 | 선택 |
+|---|---|
+| 프레임워크 | **Next.js 14 (App Router)** + TypeScript 5.5 |
+| 스타일 | **Tailwind CSS** + shadcn/ui + Pretendard / Playfair Display |
+| 상태 | Zustand |
+| 에디터 | **Fabric.js 6.x** (직렬화·제스처·히스토리·스냅·폰트 동적 로드) |
+| DB / Auth / Storage | **Supabase** (Postgres + RLS + Storage 4 버킷) |
+| 결제 | **TossPayments** SDK |
+| PDF | **`@napi-rs/canvas` + `pdf-lib` + `@pdf-lib/fontkit`** (자체 렌더러, Fabric 서버 의존 X) |
+| 이미지 | sharp (서버) + heic2any/exifr (클라) |
+| 송장 | exceljs |
+| 테스트 | Vitest 2 + jsdom |
+| 배포 | Vercel + Supabase |
+
+---
+
+## 📁 디렉토리 구조
+
+```
+100p_books/
+├── .claude/agents/          # 9종 도메인 서브에이전트 (오토파일럿)
+├── app/
+│   ├── (auth)/login/        # 매직링크 로그인
+│   ├── (user)/
+│   │   ├── upload/          # M1 사진 업로드
+│   │   ├── editor/[projectId]/
+│   │   │   ├── pages/[pageId]/  # M3 단일 페이지 편집
+│   │   │   └── ...          # M2 자동 편집 + 프리뷰
+│   │   ├── cover/[projectId]/   # M4 표지 편집
+│   │   ├── order/[projectId]/   # M6 주문/결제
+│   │   └── mypage/orders/   # 주문 내역
+│   ├── admin/               # M7 관리자 콘솔
+│   └── api/                 # 28개 라우트
+├── components/
+│   ├── editor/              # FabricStage, Toolbar, SelectionPanel, ResourcePalette, …
+│   ├── admin/               # StatCard, DataTable, StatusBadge, UploadDropzone
+│   ├── layout/              # Header, Footer, MobileBottomSheet
+│   └── ui/                  # shadcn primitives (button, input, card)
+├── lib/
+│   ├── auth/session.ts      # requireUser / requireAdmin
+│   ├── db/                  # Supabase 클라이언트 (server/browser/admin)
+│   ├── image/               # HEIC 변환, EXIF, 업로드 큐
+│   ├── layout/              # PageDoc 스키마, 정렬, 폴라로이드/콜라주/표지 빌더
+│   ├── fabric/              # 직렬화, 제스처, 히스토리, 스냅, URL 갱신
+│   ├── pdf/                 # 렌더러, 빌더, crop mark, text-wrap
+│   ├── orders/              # 가격/상태 머신
+│   ├── payments/            # 토스 confirm/조회
+│   └── admin/               # excel 송장 빌더
+├── supabase/migrations/     # 9개 SQL (스키마 + RLS + 시드 + Storage + RPC + tracking)
+├── PLAN.md                  # 마일스톤·일정
+├── ARCHITECTURE.md          # DPI·좌표계·PDF 파이프라인
+├── PROGRESS.md              # 진행 상황·이벤트 로그
+└── QA_REPORT.md             # 최종 정적 QA 리포트
+```
+
+---
+
+## 🔑 데이터 모델
+
+| 테이블 | 핵심 컬럼 |
+|---|---|
+| `profiles` | id, email, role |
+| `book_sizes` | name, width_mm, height_mm, cover_w/h_mm, spine_formula_per_page, active |
+| `projects` | user_id, book_size_id, title, status, **cover_json**, layout_mode |
+| `photos` | project_id, storage_key, thumb_key, exif_taken_at, order_idx, width, height |
+| `pages` | project_id, page_no, layout_mode, **fabric_json** (PageDoc) |
+| `resources` | type[font/clipart/background], name, storage_key, meta, active |
+| `orders` | project_id, user_id, qty, amount, address, status, toss_payment_key, cover_pdf_key, interior_pdf_key, tracking_no, tracking_carrier |
+
+**RLS**: 사용자 라우트는 `auth.uid()` 기반, admin 라우트는 `is_admin()` 헬퍼로 보호. orders 쓰기는 service_role만.
+
+**Storage 버킷**: `photo-originals`(private) / `photo-thumbs`(private) / `pdfs`(private) / `resources`(인증 사용자 SELECT)
+
+---
+
+## 📐 PageDoc 스키마 (정본)
+
+`lib/layout/types.ts` 기반의 중립 스키마. Fabric.js와 서버 PDF 렌더러 양쪽이 동일 스키마를 다룹니다.
+
+```ts
+interface PageDoc {
+  version: "1";
+  bookSizeId: string;
+  pageNo: number;
+  layoutMode: "polaroid" | "collage" | "cover";
+  widthMm: number;
+  heightMm: number;
+  bleedMm: 2;
+  backgroundColor: string;
+  backgroundImage?: { photoId?: string; url?: string; cropMode: "cover" | "contain"; opacity: number };
+  objects: Array<PhotoObject | TextObject | RectObject>;
+}
+```
+
+- 좌표 단위: **mm** (trim 좌상단 원점)
+- 폰트: **pt**
+- bleed 2mm는 trim 바깥. PDF는 trim + bleed 전체 영역을 렌더하고 4모서리에 crop mark.
+- 클라(Fabric) ↔ 서버(`@napi-rs/canvas`) 양방향: `lib/fabric/serialize.ts`
+
+---
+
+## 🖨 PDF 파이프라인
+
+```
+1. POST /api/pdf/build  { projectId, target: "cover"|"interior"|"all" }
+   → 소유권 검증 + pages/cover_json 로드
+2. lib/pdf/render-page.ts (자체 PNG 렌더러)
+   → mm→px(300dpi), bleed 적용, photo/text/rect 그리기, sharp orientation 정규화
+3. lib/pdf/build.ts
+   → pdf-lib 로 PNG 합성, crop mark 8개(+ 표지 책등 마크), 폰트 임베딩
+4. Storage 업로드: pdfs/{userId}/{projectId|orderId}/{cover,interior}.pdf
+5. 응답: signed URL (1시간)
+
+진행률: GET /api/pdf/progress?jobId=  (SSE)
+```
+
+성능 목표: **100p PDF < 60s** (Active CPU)
+
+---
+
+## 🤖 서브에이전트 (오토파일럿 개발)
+
+`.claude/agents/` 에 9종 도메인 에이전트 정의. 각 마일스톤은 담당 에이전트에 위임:
+
+| 에이전트 | 담당 |
+|---|---|
+| `orchestrator` | 마스터 조율 (PLAN → 위임 → QA) |
+| `frontend-ui` | 인스타 감성 페이지·컴포넌트 |
+| `fabric-editor` | Fabric.js 캔버스 / 직렬화 / 제스처 |
+| `layout-engine` | 자동 편집 / 정렬 / 콜라주 |
+| `pdf-generator` | 300dpi PDF 파이프라인 |
+| `image-pipeline` | 업로드 / EXIF / HEIC |
+| `admin-panel` | 관리자 CRUD / Excel |
+| `backend-api` | API / DB / RLS / 결제 |
+| `qa-reviewer` | 코드 리뷰 / a11y / 성능 |
+
+---
+
+## 🚀 로컬 실행 가이드
+
+### 1. 의존성 설치
+```bash
+pnpm install
+```
+필수: Node.js ≥ 20 (현재 25 LTS 권장), pnpm ≥ 9
+
+### 2. 환경변수
+```bash
+cp .env.example .env.local
+```
+`.env.local` 편집 — Supabase URL/키, 토스페이먼츠 테스트 키 입력.
+
+### 3. Supabase 연동
+```bash
+supabase login
+supabase link --project-ref <PROJECT_REF>
+supabase db push                  # 마이그레이션 9종 일괄 적용
+```
+
+### 4. 첫 admin 계정 만들기
+가입 후 Supabase SQL Editor에서:
+```sql
+update public.profiles set role = 'admin' where email = '<your-email>';
+```
+
+### 5. 개발 서버
+```bash
+pnpm dev          # → http://localhost:3000
+pnpm typecheck    # tsc --noEmit
+pnpm lint         # next lint
+pnpm test         # vitest
+pnpm build        # production 빌드
+```
+
+---
+
+## 📊 빌드/품질 현황
+
+| 검증 | 결과 |
+|---|---|
+| `pnpm install` | ✅ 15.5초 |
+| `pnpm typecheck` | ✅ 에러 0건 |
+| `pnpm lint` | ✅ 에러 0건 (경고 2건, 무해) |
+| `pnpm test` | ✅ 12 파일 / 106 통과 / 1 skip |
+| `pnpm build` | ✅ 모든 라우트 production 빌드 성공 |
+
+[QA_REPORT.md](QA_REPORT.md) 참고.
+
+---
+
+## 🗺 마일스톤
+
+| ID | 이름 | 상태 |
+|---|---|---|
+| M0 | Next + Supabase + Tailwind + shadcn 부트스트랩 | ✅ |
+| M1 | 사진 업로드 파이프라인 (HEIC, EXIF, 100장) | ✅ |
+| M2 | 자동 편집 / 폴라로이드 / 콜라주 6종 | ✅ |
+| M3 | Fabric.js v6 에디터 (캔바 수준 모바일 UX) | ✅ |
+| M4 | 표지 에디터 (5템플릿 + 책등 자동) | ✅ |
+| M5 | 300dpi PDF 파이프라인 (bleed + crop mark) | ✅ |
+| M6 | 토스 결제 + 주문 + PDF 빌드 잡 | ✅ |
+| M7 | 관리자 콘솔 + 송장 Excel | ✅ |
+| M8 | 정적 QA · 폴리싱 | ✅ |
+
+상세: [PLAN.md](PLAN.md) / [PROGRESS.md](PROGRESS.md)
+
+---
+
+## 🛡 보안 원칙
+
+- `service_role` / `TOSS_SECRET_KEY` 는 `lib/db/admin.ts` / `lib/payments/toss.ts` 에서만 사용 (`server-only` + 런타임 가드)
+- 모든 사용자 API 라우트: `requireUser()` + 소유권 검증 (RLS 1차 + 라우트 2차)
+- 관리자 API: 미들웨어 + `requireAdmin()` 이중 보호
+- GPS EXIF 절대 저장 금지 (클라+서버 `gps:false` + pick 화이트리스트)
+- 결제 amount: 클라 입력 신뢰 X, 서버 재계산 + 토스 응답 amount 이중 검증
+- Storage RLS: `{userId}/...` 폴더 스코프
+
+---
+
+## 📜 라이선스 / 저작권
+
+© 2026 papascompany — Private. 외부 배포 전 라이선스 명시 필요.
+
+서드파티 폰트 / 클립아트 / 배경 등 리소스는 관리자 등록 시 라이선스 메타 정보 필수.
+
+---
+
+## 📞 개발 컨텍스트
+
+- 사양: [PLAN.md](PLAN.md)
+- 아키텍처: [ARCHITECTURE.md](ARCHITECTURE.md)
+- 진행 로그: [PROGRESS.md](PROGRESS.md)
+- QA 리포트: [QA_REPORT.md](QA_REPORT.md)
+- 프로젝트 규약: [CLAUDE.md](CLAUDE.md)
+
+오토파일럿으로 M0~M8 9개 마일스톤을 순차 위임·검수·패치한 결과물입니다.

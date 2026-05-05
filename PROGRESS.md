@@ -1,0 +1,68 @@
+# 진행 상황
+
+> `orchestrator` 에이전트가 각 마일스톤 종료 시 이 파일을 업데이트합니다.
+
+## 마일스톤 트래커
+
+| ID | 이름 | 상태 | 담당 | 완료일 |
+|---|---|---|---|---|
+| M0 | 부트스트랩 | ✅ done | backend-api + frontend-ui | 2026-04-25 |
+| M1 | 이미지 파이프라인 | ✅ done | image-pipeline | 2026-04-25 |
+| M2 | 자동 편집 / 폴라로이드 | ✅ done | layout-engine | 2026-04-25 |
+| M3 | Fabric.js 에디터 | ✅ done | fabric-editor | 2026-04-25 |
+| M4 | 표지 에디터 | ✅ done | fabric-editor | 2026-04-25 |
+| M5 | PDF 생성 | ✅ done | pdf-generator | 2026-04-25 |
+| M6 | 주문·결제 | ✅ done | backend-api | 2026-04-25 |
+| M7 | 관리자 콘솔 | ✅ done | admin-panel | 2026-04-25 |
+| M8 | QA & 폴리싱 | ✅ done | qa-reviewer | 2026-04-25 |
+
+상태 이모지: ⬜ pending · 🔄 in_progress · ✅ done · ⛔ blocked
+
+## 최근 이벤트
+- 2026-04-25: 프로젝트 계획 수립, 에이전트 9종 정의 완료.
+- 2026-04-25: **M0 부트스트랩 완료**. 19개 파일 생성. QA 통과 (M 1건 즉시 수정, L 2건은 후속 마일스톤으로 이관).
+- 2026-04-25: **M1 이미지 파이프라인 완료**. 16개 파일 생성 + package.json Edit. QA [H] 1건 즉시 수정 (complete 라우트에서 실제 blob 크기 재검증 추가 — 20MB 초과 시 객체 삭제+에러).
+- 2026-04-25: **M2 자동 편집/폴라로이드 완료**. `lib/layout/**` (types/sort/polaroid/collage/templates/generate + 3종 테스트) + `/api/layout/generate` + `/api/pages` + `/editor/[projectId]` (page + EditorClient + TopBar + GenerateControls + PreviewGrid + PagePreview) 총 15개 파일 신설. 의존성 추가 없음.
+- 2026-04-25: **M2 QA 후속 패치** — [M] `/api/pages` photos 조회에 `project_id` 스코프 추가 (IDOR 사전 차단). [M] 재생성 트랜잭션화: 마이그레이션 `0005_layout_rpc.sql` 추가하여 `regenerate_project_pages` RPC로 update+delete+insert를 단일 트랜잭션 처리 (`/api/layout/generate` 라우트도 RPC 호출로 교체, data-loss 방지). [L] TopBar 비활성 주문 버튼을 `<Button disabled>`로 교체. fabric-editor.md 직렬화 규약을 실제 PageDoc 스키마로 동기화 (M3 어댑터 위치 명시).
+- 2026-04-25: **M3 Fabric.js 에디터 완료**. 의존성 `fabric@6.4.3`+`jsdom` 추가. `lib/fabric/{serialize,history,gestures,snap,fonts,url-refresher}.ts` + 2개 테스트. 컴포넌트 `FabricStage/Toolbar/SelectionPanel/ResourcePalette/CollageTemplateDialog`. API `/api/pages/[id]` (GET+PATCH, isPageDoc 검증 + bookSize/pageNo 일치) + `/api/resources`. 단일 페이지 편집 라우트 `/editor/[projectId]/pages/[pageId]`. 마이그레이션 `0006_pages_updated_at.sql`. 자동저장 5s + beforeunload guard.
+- 2026-04-25: **M5 PDF 생성 완료**. 의존성 `@napi-rs/canvas`+`@pdf-lib/fontkit`+`pdf-lib` 추가, `next.config.ts` `serverExternalPackages` → `experimental.serverComponentsExternalPackages` 로 교체 (M0 이월 정리). `lib/pdf/{constants,photos,fonts,text-wrap,crop-mark,render-page,build,jobs}.ts` + `build.test.ts`. API `/api/pdf/build` (POST, target=interior|cover|all, 인라인 처리, signed URL 반환) + `/api/pdf/progress` (SSE, in-memory jobs 레지스트리). 마이그레이션 `0007_pdf_storage.sql` (private `pdfs` 버킷 + RLS — 사용자 자신의 `{userId}/...` 만 SELECT). 자체 PNG 렌더러 (Fabric 의존 없이 PageDoc → 300dpi PNG, mm/pt 좌표계, 한/영 혼합 word-wrap). pdf-lib 합성 + 4모서리 crop mark + 표지 책등 마크. 사진 LRU 캐시 (100MB). UI: `editor/[projectId]/PdfActions.tsx` (표지/내지/전체 다운로드 + 진행률 SSE).
+- 2026-04-25: **M6 주문·결제 완료**. 의존성 `@tosspayments/payment-sdk@^1.9.1` 추가. 신규 — `lib/orders/{pricing,state}.ts` + 2개 테스트, `lib/payments/toss.ts` (confirm + fetch 헬퍼, TossError), `lib/pdf/build-job.ts` (M5 빌드 로직 추출 — `runProjectPdfBuild`). API — `/api/orders/create` (POST, Zod 검증 + 가격 재계산 + tossOrderId 발급), `/api/payments/confirm` (POST, 토스 검증 + amount 이중 검증 + status='paid' 전이 + 인라인 PDF 빌드 → orders.cover/interior_pdf_key), `/api/payments/webhook` (POST, optional X-Webhook-Secret + paymentKey 직접 조회로 amount 이중 검증). UI — `/order/[projectId]` (서버 prefetch + OrderForm 클라: 수량 stepper / 배송지 / 약관 / sticky CTA / 토스 SDK 동적 import), `/order/[projectId]/success` + SuccessClient (StrictMode dedupe + confirm 호출), `/order/[projectId]/fail`, `/mypage/orders`, `/mypage/orders/[orderId]` + OrderPdfButtons (signedUrl 발급), `/mypage` → orders 리다이렉트. M5의 `app/api/pdf/build/route.ts` 도 `runProjectPdfBuild` 호출로 리팩터(중복 제거). RLS 점검 — orders SELECT 사용자 본인, INSERT/UPDATE 는 service_role(`createAdminSupabase()`)로만. amount 위변조 방지 — 클라 amount 신뢰 X, 서버에서 재계산하고 토스 응답 totalAmount 와 비교. 멱등성 — confirm 재호출 시 동일 paymentKey + amount + status>=paid 면 success 반환. .env.example 갱신 (`TOSS_WEBHOOK_SECRET` 추가).
+- 2026-04-25: **M7 관리자 콘솔 완료**. 의존성 `exceljs@^4.4.0` 추가. 마이그레이션 `0008_orders_tracking.sql` (tracking_no/tracking_carrier/shipped_at/delivered_at + idx_orders_status_paid_at) + `0009_resources_storage.sql` (`resources` 버킷 + RLS — service_role write/auth read). 신규 — `lib/admin/{auth,excel,resources}.ts` + `excel.test.ts`. 공통 — `components/admin/{StatCard,DataTable,StatusBadge,UploadDropzone}.tsx`. 페이지 — `/admin` (대시보드: 오늘 주문/결제/신규 7일/제작중 + 최근 5건), `/admin/book-sizes` (리스트/신규/[id] 편집 + 사용중 삭제 차단), `/admin/resources/[type]` (font/clipart/background 통합 — 업로드 드롭존 + active 토글 + meta 표시), `/admin/orders` (필터+페이지네이션 50건씩) + `/admin/orders/[id]` (상세 + 상태 전이 다이얼로그 + 송장 입력 + PDF 재생성), `/admin/orders/export` (Excel 미리보기+다운로드), `/admin/users` (역할 변경 — 자기강등 차단). API — `/api/admin/{book-sizes,resources,orders,users}/...` + `/api/admin/orders/[id]/transition` (assertTransition 사용) + `/api/admin/orders/[id]/rebuild-pdf` (runProjectPdfBuild 호출) + `/api/admin/orders/export` (exceljs 빌드 + Content-Disposition). `withAdmin` 래퍼로 모든 admin API 가 `requireAdmin` 통과(미들웨어 + 라우트 이중 보호). `app/admin/layout.tsx` 도 `requireAdmin` 호출. `/api/auth/sign-out` 추가 (사이드바 form action). Order 타입에 tracking 4컬럼 추가.
+- 2026-04-25: **M4 표지 에디터 완료**. `lib/layout/{cover,cover-templates}.ts` (5종 템플릿) + 2개 테스트. 컴포넌트 `CoverSpineGuide/CoverTemplateDialog`. 표지 라우트 `/cover/[projectId]` + API `/api/cover` (GET/PATCH, isPageDoc + layoutMode=="cover" 검증). PageDoc에 `backgroundImage` 필드 확장 + serialize 양방향 + FabricStage `loadDoc` 통합. 책등 두께 자동 계산(pageCount × spine_formula).
+- 2026-04-25: **M8 QA & 폴리싱 완료**. 정적 분석 — 28개 API 라우트, 9개 마이그레이션, 50+ 페이지/컴포넌트. 보안 PASS(`service_role`/`TOSS_SECRET_KEY` 클라 노출 0, EXIF GPS 차단, RLS 7테이블 모두 enable, PageDoc/amount 이중 검증, auth callback open-redirect 방어), a11y PASS+권고1(html lang ko / focus-visible / prefers-reduced-motion / 토큰화). 패치 1건: `FileGridItem.tsx` remove 버튼 터치 타겟 `size-8`(32px) → `size-11`(44px) + focus-visible ring. 배포 차단 이슈 없음. 산출물 `QA_REPORT.md` 신설(배포 전 사용자 액션 + 회귀 체크리스트 포함). P1 잔여(인메모리 SSE→Redis, Vercel 60s 제한, 카카오 OAuth provider, 첫 admin SQL), P2 폴리싱(인라인 alert→Toast 16건, CMYK/ICC, 우편번호 SDK)는 배포 후 진행.
+
+## M0 산출물 (요약)
+**백엔드**: package.json / tsconfig / next.config / .env.example / ESLint / Vitest / .gitignore / 3개 SQL 마이그레이션(스키마+RLS+시드) / lib/db/{server,browser,admin,types} / lib/auth/session / middleware / auth 콜백 / health API / response 헬퍼
+**프론트**: tailwind.config / postcss / globals.css (Pretendard + Playfair) / lib/utils / app/layout / loading / not-found / (user) layout + 랜딩 + HeroMotion / (auth) layout + login + LoginForm / UI primitives (button/input/card) / Header + HeaderClient + Footer + MobileBottomSheet
+
+## 빌드/테스트 검증 (2026-04-25)
+
+✅ `pnpm install` (15.5초) — 모든 의존성 정상 설치 (canvas 네이티브 빌드 실패는 jsdom 선택적 의존성으로 무시 가능, 우리는 `@napi-rs/canvas` 사용)
+✅ `pnpm typecheck` — 타입 에러 0건
+✅ `pnpm lint` — 에러 0건 (경고 2건: FabricStage useCallback deps, snap.ts type-only import — 무해)
+✅ `pnpm test` — 12 파일 / 106 통과 / 1 skip (PDF 통합 테스트는 `PDF_NATIVE_TEST=1` 환경에서만 실행)
+✅ `pnpm build` — Production 빌드 성공. 모든 라우트 생성 완료. First Load JS shared 87.3kB.
+
+### 검증 중 적용된 수정사항
+- `next.config.ts` → `next.config.mjs` (Next 14는 .ts 미지원)
+- `@supabase/ssr@0.5.2` + `@supabase/supabase-js@2.45.6` 핀 (v2.105 타입 호환성 이슈 회피)
+- `noUncheckedIndexedAccess` 관련 undefined 단언 (build.ts, render-page.ts, cover.test.ts, build.test.ts, admin/resources.ts, admin/resources/[type]/page.tsx)
+- Fabric v6 이벤트 핸들러 타입 우회 (snap.ts, FabricStage.tsx)
+- Buffer<ArrayBufferLike> ↔ BodyInit/Buffer 캐스팅 (orders/export, excel.test.ts)
+- excel.ts에서 `server-only` 제거 (테스트 환경 호환, exceljs는 노드 의존이지만 server-only 마커는 불필요)
+- validate.ts: HEIC 확장자 감지 로직이 빈 MIME 케이스에서 먼저 동작하도록 수정
+- lint 에러: `prefer-const`, `no-this-alias` 규칙 위반 수정
+
+## 후속 이월 이슈
+- [L] `middleware.ts`의 비-admin 경로 `getUser()` 호출 최적화 (필요 시 M6에서)
+- 카카오 OAuth provider 등록 후 LoginForm 주석 해제 (사용자 인프라 작업)
+- [M] M5 진행률 SSE: 인메모리 `lib/pdf/jobs.ts` 레지스트리 → multi-instance(Vercel) 환경에서는 SSE 가 다른 인스턴스로 라우팅될 수 있음. 운영 시 Redis/Upstash 로 교체 필요.
+- [L] M5 PDF: borderRadius + photo shadow 동시 적용 시 그림자가 클립으로 잘리는 한계 (render-page.ts 주석). 별도 단계로 그림자 패스 분리하면 해결 가능.
+- [L] M5 PDF: CMYK 변환 / ICC 프로파일은 sRGB 출력으로 시작. 인쇄소 요구 시 ghostscript 후처리 또는 sharp 의 ICC pipeline 추가.
+
+## 오토파일럿 실행 명령
+
+```
+Agent(subagent_type="orchestrator",
+      prompt="PLAN.md와 PROGRESS.md를 읽고, 다음 미완료 마일스톤을 식별해 담당 에이전트에 위임하세요. 완료 시 PROGRESS.md 업데이트.")
+```
