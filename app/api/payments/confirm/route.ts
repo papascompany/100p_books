@@ -6,6 +6,7 @@ import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
+import { enqueueEmail } from "@/lib/email/queue";
 import { assertTransition } from "@/lib/orders/state";
 import { confirmTossPayment, TossError } from "@/lib/payments/toss";
 import { enqueueAndRunPdfJob } from "@/lib/pdf/job-runner";
@@ -195,6 +196,66 @@ export async function POST(req: Request) {
         "[payments/confirm] PDF build failed for order",
         order.id,
         buildResult.error,
+      );
+    }
+
+    // 6) order.paid 이메일 enqueue — 실패해도 confirm 응답은 그대로 성공.
+    try {
+      const [{ data: profile }, { data: project }, { count: pageCount }] =
+        await Promise.all([
+          admin
+            .from("profiles")
+            .select("email, display_name")
+            .eq("id", order.user_id)
+            .maybeSingle(),
+          admin
+            .from("projects")
+            .select("title, book_size_id")
+            .eq("id", order.project_id)
+            .maybeSingle(),
+          admin
+            .from("pages")
+            .select("id", { count: "exact", head: true })
+            .eq("project_id", order.project_id),
+        ]);
+
+      const { data: bookSize } = project?.book_size_id
+        ? await admin
+            .from("book_sizes")
+            .select("name")
+            .eq("id", project.book_size_id)
+            .maybeSingle()
+        : { data: null };
+
+      const recipientEmail = profile?.email ?? user.email ?? "";
+      const addr = (order.address ?? {}) as { name?: string };
+      const customerName =
+        addr?.name ??
+        profile?.display_name ??
+        (recipientEmail ? recipientEmail.split("@")[0]! : "고객");
+
+      if (recipientEmail) {
+        await enqueueEmail({
+          template: "order.paid",
+          to: { email: recipientEmail, name: customerName },
+          context: {
+            kind: "order",
+            orderId: order.id,
+            tossOrderId: tossOrderId,
+            customerName,
+            bookSizeName: bookSize?.name ?? "포토북",
+            pageCount: pageCount ?? 0,
+            qty: order.qty,
+            amount: order.amount,
+          },
+          relatedType: "order",
+          relatedId: order.id,
+        });
+      }
+    } catch (e) {
+      console.warn(
+        "[payments/confirm] enqueue order.paid email failed:",
+        e instanceof Error ? e.message : String(e),
       );
     }
 

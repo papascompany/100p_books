@@ -7,6 +7,8 @@ import { withAdmin } from "@/lib/admin/auth";
 import { logAdminAction } from "@/lib/admin/audit";
 import { createAdminSupabase } from "@/lib/db/admin";
 import type { OrderStatus } from "@/lib/db/types";
+import { enqueueEmail } from "@/lib/email/queue";
+import { TEMPLATE_BY_ORDER_STATUS } from "@/lib/email/templates";
 import {
   ALL_ORDER_STATUSES,
   assertTransition,
@@ -113,6 +115,85 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
     },
     request: req,
   });
+
+  // 알림 이메일 enqueue — 실패해도 전이 응답은 성공 유지.
+  try {
+    const template = TEMPLATE_BY_ORDER_STATUS[target];
+    if (template) {
+      // 주문/사용자/프로젝트/사이즈 정보 일괄 조회
+      const { data: orderRow } = await admin
+        .from("orders")
+        .select("id, user_id, qty, amount, address, project_id, toss_order_id")
+        .eq("id", ctx.params.id)
+        .maybeSingle();
+
+      if (orderRow) {
+        const [{ data: profile }, { data: project }, { count: pageCount }] =
+          await Promise.all([
+            admin
+              .from("profiles")
+              .select("email, display_name")
+              .eq("id", orderRow.user_id)
+              .maybeSingle(),
+            admin
+              .from("projects")
+              .select("title, book_size_id")
+              .eq("id", orderRow.project_id)
+              .maybeSingle(),
+            admin
+              .from("pages")
+              .select("id", { count: "exact", head: true })
+              .eq("project_id", orderRow.project_id),
+          ]);
+
+        const { data: bookSize } = project?.book_size_id
+          ? await admin
+              .from("book_sizes")
+              .select("name")
+              .eq("id", project.book_size_id)
+              .maybeSingle()
+          : { data: null };
+
+        const recipientEmail = profile?.email ?? "";
+        const addr = (orderRow.address ?? {}) as { name?: string };
+        const customerName =
+          addr?.name ??
+          profile?.display_name ??
+          (recipientEmail ? recipientEmail.split("@")[0]! : "고객");
+
+        if (recipientEmail) {
+          await enqueueEmail({
+            template,
+            to: { email: recipientEmail, name: customerName },
+            context: {
+              kind: "order",
+              orderId: orderRow.id,
+              tossOrderId: orderRow.toss_order_id ?? undefined,
+              customerName,
+              bookSizeName: bookSize?.name ?? "포토북",
+              pageCount: pageCount ?? 0,
+              qty: orderRow.qty,
+              amount: orderRow.amount,
+              ...(target === "shipped"
+                ? {
+                    trackingNo,
+                    trackingCarrier,
+                    shippedAt: now,
+                  }
+                : {}),
+            },
+            relatedType: "order",
+            relatedId: orderRow.id,
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(
+      "[admin/transition] enqueue email failed:",
+      e instanceof Error ? e.message : String(e),
+    );
+  }
 
   return ok({ item: updated });
 });

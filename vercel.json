@@ -19,8 +19,14 @@
     "app/api/admin/orders/[id]/rebuild-pdf/route.ts": {
       "maxDuration": 300,
       "memory": 1769
+    },
+    "app/api/cron/process-emails/route.ts": {
+      "maxDuration": 60
     }
   },
+  "crons": [
+    { "path": "/api/cron/process-emails", "schedule": "*/5 * * * *" }
+  ],
   "headers": [
     {
       "source": "/api/pdf/(.*)",

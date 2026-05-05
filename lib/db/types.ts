@@ -109,6 +109,34 @@ export interface OrderAddress {
   memo?: string;
 }
 
+export type EmailJobStatus =
+  | "pending"
+  | "sending"
+  | "sent"
+  | "failed"
+  | "cancelled";
+
+export interface EmailJob {
+  id: string;
+  template: string;
+  to_email: string;
+  to_name: string | null;
+  subject: string;
+  body_text: string;
+  body_html: string | null;
+  context: Record<string, unknown>;
+  status: EmailJobStatus;
+  attempt: number;
+  max_attempts: number;
+  last_error: string | null;
+  related_type: string | null;
+  related_id: string | null;
+  scheduled_at: string;
+  sent_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Order {
   id: string;
   project_id: string;
@@ -144,6 +172,12 @@ export interface Database {
       pages: { Row: Page; Insert: Omit<Page, "id" | "created_at"> & Partial<Pick<Page, "id">>; Update: Partial<Page> };
       resources: { Row: Resource; Insert: Omit<Resource, "id" | "created_at"> & Partial<Pick<Resource, "id">>; Update: Partial<Resource> };
       orders: { Row: Order; Insert: Omit<Order, "id" | "created_at" | "updated_at"> & Partial<Pick<Order, "id">>; Update: Partial<Order> };
+      email_jobs: {
+        Row: EmailJob;
+        Insert: Omit<EmailJob, "id" | "created_at" | "updated_at"> &
+          Partial<Pick<EmailJob, "id" | "created_at" | "updated_at">>;
+        Update: Partial<EmailJob>;
+      };
     };
     Views: Record<string, never>;
     Functions: {

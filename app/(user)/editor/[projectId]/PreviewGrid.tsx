@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreVertical, Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, MoreVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import {
   useCallback,
@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import PagePreview from "./PagePreview";
+import PagePreviewDialog from "@/components/editor/PagePreviewDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -222,8 +223,11 @@ export default function PreviewGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draggingId, overIndex, orderedPages]);
 
-  // ---------- 삭제 ----------
+  // ---------- 삭제 / 미리보기 ----------
   const [deleteCandidate, setDeleteCandidate] = useState<PageSummary | null>(
+    null,
+  );
+  const [previewCandidate, setPreviewCandidate] = useState<PageSummary | null>(
     null,
   );
 
@@ -383,6 +387,12 @@ export default function PreviewGrid({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
+                        onSelect={() => setPreviewCandidate(p)}
+                        disabled={busy || !p.fabricJson}
+                      >
+                        <Eye className="mr-2 size-4" /> 미리보기
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
                         onSelect={() => void onInsert?.(p.pageNo)}
                         disabled={busy || !onInsert}
                       >
@@ -459,6 +469,18 @@ export default function PreviewGrid({
           page={deleteCandidate}
           onCancel={() => setDeleteCandidate(null)}
           onConfirm={() => void confirmDelete()}
+        />
+      ) : null}
+
+      {/* 페이지 미리보기 다이얼로그 */}
+      {previewCandidate ? (
+        <PagePreviewDialog
+          pageId={previewCandidate.id}
+          pageNo={previewCandidate.pageNo}
+          open={Boolean(previewCandidate)}
+          onOpenChange={(o) => {
+            if (!o) setPreviewCandidate(null);
+          }}
         />
       ) : null}
     </>

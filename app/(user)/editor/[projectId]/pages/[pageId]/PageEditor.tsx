@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Keyboard, Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Keyboard, Save } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -13,6 +13,7 @@ import FabricStage, {
 import KeyboardShortcutsHelp, {
   useShortcutsAutoShow,
 } from "@/components/editor/KeyboardShortcutsHelp";
+import PagePreviewDialog from "@/components/editor/PagePreviewDialog";
 import PhotoPickerDialog from "@/components/editor/PhotoPickerDialog";
 import ResourcePalette from "@/components/editor/ResourcePalette";
 import SelectionPanel from "@/components/editor/SelectionPanel";
@@ -92,6 +93,7 @@ export default function PageEditor({
   const [collageOpen, setCollageOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [currentDoc, setCurrentDoc] = useState<PageDoc | null>(initialDoc);
 
   const { shouldShow: shouldAutoShowShortcuts, mark: markShortcutsSeen } =
@@ -280,9 +282,19 @@ export default function PageEditor({
         }
       }
 
-      // 복사/붙여넣기/복제
+      // 복사/붙여넣기/복제 + 미리보기 (Cmd/Ctrl+Shift+P)
       if (meta) {
         const k = e.key.toLowerCase();
+        if (e.shiftKey && k === "p") {
+          e.preventDefault();
+          // 자동 저장 직후 호출되어야 신선한 결과 — 일단 즉시 저장 후 열기.
+          if (dirty) {
+            void save().then(() => setPreviewOpen(true));
+          } else {
+            setPreviewOpen(true);
+          }
+          return;
+        }
         if (k === "c") {
           e.preventDefault();
           copySelection();
@@ -314,6 +326,8 @@ export default function PageEditor({
     prevPageId,
     projectId,
     router,
+    dirty,
+    save,
   ]);
 
   return (
@@ -388,6 +402,23 @@ export default function PageEditor({
               <ChevronRight className="size-5 opacity-30" />
             </Button>
           )}
+
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="페이지 미리보기 (Cmd/Ctrl+Shift+P)"
+            onClick={() => {
+              if (dirty) {
+                void save().then(() => setPreviewOpen(true));
+              } else {
+                setPreviewOpen(true);
+              }
+            }}
+            className="gap-1.5"
+          >
+            <Eye className="size-4" aria-hidden />
+            <span className="hidden sm:inline">미리보기</span>
+          </Button>
 
           <Button
             variant="ghost"
@@ -622,6 +653,14 @@ export default function PageEditor({
           setShortcutsOpen(open);
           if (!open) markShortcutsSeen();
         }}
+      />
+
+      {/* 단일 페이지 미리보기 */}
+      <PagePreviewDialog
+        pageId={pageId}
+        pageNo={pageNo}
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
       />
 
       {/* 사진 선택 / 교체 */}

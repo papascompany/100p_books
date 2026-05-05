@@ -82,6 +82,7 @@ export default function KeyboardShortcutsHelp({
       items: [
         { keys: [["J"], ["PageDown"]], label: "다음 페이지" },
         { keys: [["K"], ["PageUp"]], label: "이전 페이지" },
+        { keys: [[mod, "Shift", "P"]], label: "페이지 미리보기" },
         { keys: [["?"]], label: "이 안내 열기" },
       ],
     },

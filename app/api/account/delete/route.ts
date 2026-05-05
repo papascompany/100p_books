@@ -6,6 +6,7 @@ import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
+import { enqueueEmail } from "@/lib/email/queue";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -101,6 +102,38 @@ export async function POST(req: Request) {
 
     // 4) 익명화 + auth 사용자 삭제 (service_role)
     const admin = createAdminSupabase();
+
+    // 4-pre) 탈퇴 메일 enqueue — anonymize 전에 실제 이메일/이름 캐치.
+    //   anonymize 후 profiles.email 은 null, display_name 도 익명화됨.
+    try {
+      const realEmail = (user.email ?? profile?.email ?? "").trim();
+      if (realEmail) {
+        const { data: realProfile } = await admin
+          .from("profiles")
+          .select("display_name")
+          .eq("id", user.id)
+          .maybeSingle();
+        const displayName =
+          realProfile?.display_name ?? realEmail.split("@")[0]! ?? "고객";
+        await enqueueEmail({
+          template: "user.account_deleted",
+          to: { email: realEmail, name: displayName },
+          context: {
+            kind: "user",
+            email: realEmail,
+            displayName,
+          },
+          relatedType: "user",
+          relatedId: user.id,
+        });
+      }
+    } catch (e) {
+      console.warn(
+        "[account/delete] enqueue user.account_deleted failed:",
+        e instanceof Error ? e.message : String(e),
+      );
+    }
+
     const { error: rpcErr } = await admin.rpc("anonymize_account", {
       p_user_id: user.id,
       p_reason: reason ?? null,
