@@ -10,7 +10,8 @@ import * as React from "react";
  * Column.cell 은 row → ReactNode 매핑. cell 미지정 시 row[col.key] 표시.
  */
 export interface Column<T> {
-  key: keyof T & string;
+  /** React key + 데이터 접근자. cell 미지정 시 row[key] 가 표시되므로 T 의 필드명. */
+  key: string;
   header: React.ReactNode;
   className?: string;
   cell?: (row: T) => React.ReactNode;
@@ -75,7 +76,9 @@ export default function DataTable<T>({
                   className="odd:bg-background even:bg-muted/20 hover:bg-accent/40"
                 >
                   {columns.map((c) => {
-                    const v = c.cell ? c.cell(row) : (row[c.key] as React.ReactNode);
+                    const v = c.cell
+                      ? c.cell(row)
+                      : ((row as Record<string, unknown>)[c.key] as React.ReactNode);
                     return (
                       <td
                         key={c.key}

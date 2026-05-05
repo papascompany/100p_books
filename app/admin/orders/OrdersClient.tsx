@@ -148,7 +148,7 @@ export default function OrdersClient() {
       cell: (r) => <StatusBadge status={r.status} />,
     },
     {
-      key: "id",
+      key: "actions",
       header: "",
       className: "text-right",
       cell: (r) => (
