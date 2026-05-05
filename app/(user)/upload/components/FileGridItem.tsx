@@ -25,11 +25,32 @@ const STATUS_LABEL: Record<UploadItem["status"], string> = {
 export default function FileGridItem({ item, onRemove, onRetry }: FileGridItemProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
+  // 파일 객체 자체가 바뀌었을 때만 새 blob URL 발급. 동일 파일 reference 면 유지.
+  // (Zustand 가 item 객체를 immutable 하게 갱신할 때 file 은 같은 reference 가 보존되어야 함)
   useEffect(() => {
-    const url = URL.createObjectURL(item.effectiveFile ?? item.file);
+    const file = item.effectiveFile ?? item.file;
+    if (!file) return;
+    let url: string;
+    try {
+      url = URL.createObjectURL(file);
+    } catch {
+      // 파일이 닫혔거나 무효화된 경우 (네비게이션 후 등) — 무시
+      return;
+    }
     setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
+    return () => {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {
+        /* noop */
+      }
+    };
   }, [item.file, item.effectiveFile]);
+
+  // 이미지 로드 실패 시 (예: blob URL 무효화) 깔끔하게 폴백
+  function handleImgError() {
+    setPreviewUrl(null);
+  }
 
   const isWorking =
     item.status === "converting" ||
@@ -48,12 +69,20 @@ export default function FileGridItem({ item, onRemove, onRetry }: FileGridItemPr
           <img
             src={previewUrl}
             alt={item.file.name}
+            onError={handleImgError}
             className={cn(
               "h-full w-full object-cover transition-opacity",
               item.status === "error" || item.status === "cancelled" ? "opacity-50" : "opacity-100",
             )}
           />
-        ) : null}
+        ) : (
+          <div
+            aria-hidden
+            className="flex h-full w-full items-center justify-center text-xs text-muted-foreground"
+          >
+            완료
+          </div>
+        )}
 
         {/* Progress overlay */}
         {isWorking ? (
