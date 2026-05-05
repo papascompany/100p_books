@@ -73,6 +73,7 @@ export async function GET(_req: Request, { params }: Params) {
         .from("photos")
         .select("id, thumb_key")
         .eq("project_id", row.project_id)
+        .is("deleted_at", null)
         .in("id", Array.from(photoIdSet));
       if (photosErr) return fail("PHOTOS_QUERY_FAILED", photosErr.message, 500);
 
@@ -178,6 +179,38 @@ export async function PATCH(req: Request, { params }: Params) {
         "PageDoc.pageNo 가 DB pages.page_no 와 일치하지 않습니다.",
         400,
       );
+    }
+
+    // photoId 일관성 — PageDoc 가 참조하는 photo 가 모두 같은 프로젝트 + 휴지통 아닌지 확인.
+    const referencedPhotoIds = new Set<string>();
+    for (const obj of doc.objects) {
+      if (obj.type === "photo" && obj.photoId) {
+        referencedPhotoIds.add(obj.photoId);
+      }
+    }
+    if (doc.backgroundImage?.photoId) {
+      referencedPhotoIds.add(doc.backgroundImage.photoId);
+    }
+    if (referencedPhotoIds.size > 0) {
+      const { data: validPhotos, error: phErr } = await supabase
+        .from("photos")
+        .select("id")
+        .eq("project_id", row.project_id)
+        .is("deleted_at", null)
+        .in("id", Array.from(referencedPhotoIds));
+      if (phErr) return fail("PHOTOS_QUERY_FAILED", phErr.message, 500);
+      const validSet = new Set((validPhotos ?? []).map((p) => p.id));
+      const missing = Array.from(referencedPhotoIds).filter(
+        (id) => !validSet.has(id),
+      );
+      if (missing.length > 0) {
+        return fail(
+          "INVALID_PHOTO_REF",
+          `PageDoc 가 참조하는 사진이 프로젝트에 없거나 휴지통입니다: ${missing.join(", ")}`,
+          400,
+          { missing },
+        );
+      }
     }
 
     const { data: updated, error: upErr } = await supabase

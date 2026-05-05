@@ -10,11 +10,13 @@ import FabricStage, {
   PREVIEW_DPI,
   type FabricStageHandle,
 } from "@/components/editor/FabricStage";
+import PhotoPickerDialog from "@/components/editor/PhotoPickerDialog";
 import ResourcePalette from "@/components/editor/ResourcePalette";
 import SelectionPanel from "@/components/editor/SelectionPanel";
 import Toolbar, { type ToolbarTool } from "@/components/editor/Toolbar";
 import MobileBottomSheet from "@/components/layout/MobileBottomSheet";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/use-toast";
 import type { BookSize } from "@/lib/db/types";
 import type { TaggedFabricObject } from "@/lib/fabric/serialize";
 import { calcCoverDimensions } from "@/lib/layout/cover";
@@ -78,6 +80,7 @@ export default function CoverEditor({
   const [toolSheet, setToolSheet] = useState<ToolbarTool | null>(null);
   const [photoSheetOpen, setPhotoSheetOpen] = useState(false);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
   const [currentDoc, setCurrentDoc] = useState<PageDoc>(initialDoc);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [photoUrls, _setPhotoUrls] =
@@ -441,6 +444,7 @@ export default function CoverEditor({
             selection={selection}
             dpi={PREVIEW_DPI}
             onChange={() => setDirty(true)}
+            onReplacePhoto={() => setPhotoPickerOpen(true)}
           />
         </aside>
       </div>
@@ -478,6 +482,7 @@ export default function CoverEditor({
             selection={selection}
             dpi={PREVIEW_DPI}
             onChange={() => setDirty(true)}
+            onReplacePhoto={() => setPhotoPickerOpen(true)}
           />
         ) : toolSheet === "clipart" || toolSheet === "background" ? (
           <ResourcePalette
@@ -566,6 +571,21 @@ export default function CoverEditor({
         onApply={onApplyTemplate}
       />
 
+      {/* 사진 선택 / 교체 */}
+      <PhotoPickerDialog
+        open={photoPickerOpen}
+        onOpenChange={setPhotoPickerOpen}
+        currentProjectId={projectId}
+        title="사진 교체"
+        description="현재 선택된 사진을 다른 사진으로 교체합니다."
+        onPick={async (photoId, url) => {
+          const handle = stageRef.current;
+          if (!handle) return;
+          await handle.replacePhoto(photoId, url);
+          setDirty(true);
+          toast({ description: "사진 교체 완료", variant: "success" });
+        }}
+      />
     </div>
   );
 }

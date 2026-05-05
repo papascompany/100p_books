@@ -1,6 +1,7 @@
 "use client";
 
 import * as fabric from "fabric";
+import { ImageIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,11 @@ export interface SelectionPanelProps {
    * 미지정 시 빈 안내 문구만 표시.
    */
   background?: CanvasBackgroundOption;
+  /**
+   * 선택 객체가 photo 일 때 노출되는 "사진 교체" 버튼 클릭 핸들러.
+   * 미지정 시 버튼은 표시되지 않음.
+   */
+  onReplacePhoto?: () => void;
 }
 
 /** SelectionPanel 외부에서 setBackground 시 사용할 헬퍼 (입력 매핑 단순화). */
@@ -51,6 +57,7 @@ export default function SelectionPanel({
   dpi,
   onChange,
   background,
+  onReplacePhoto,
 }: SelectionPanelProps) {
   if (!selection) {
     return (
@@ -77,6 +84,7 @@ export default function SelectionPanel({
       <PhotoEditor
         target={selection as fabric.FabricImage & TaggedFabricObject}
         onChange={onChange}
+        onReplacePhoto={onReplacePhoto}
       />
     );
   }
@@ -285,9 +293,11 @@ function TextEditor({
 function PhotoEditor({
   target,
   onChange,
+  onReplacePhoto,
 }: {
   target: fabric.FabricImage & TaggedFabricObject;
   onChange?: () => void;
+  onReplacePhoto?: () => void;
 }) {
   const [, force] = useState(0);
   const update = () => {
@@ -300,6 +310,18 @@ function PhotoEditor({
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold">사진</h3>
+
+      {onReplacePhoto ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="w-full"
+          onClick={onReplacePhoto}
+        >
+          <ImageIcon className="size-4" aria-hidden /> 사진 교체
+        </Button>
+      ) : null}
 
       <div className="flex gap-2">
         <Button

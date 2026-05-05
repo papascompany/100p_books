@@ -1,12 +1,13 @@
 "use client";
 
-import { ArrowRight, Trash2 } from "lucide-react";
+import { ArrowRight, CheckSquare, Square, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import Dropzone from "./components/Dropzone";
 import FileGridItem from "./components/FileGridItem";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
 import type { BookSize } from "@/lib/db/types";
 import { MAX_PHOTOS_PER_PROJECT } from "@/lib/image/constants";
 import { UploadQueue, useUploadStore } from "@/lib/image/upload-queue";
@@ -28,12 +29,19 @@ export default function UploadClient({
   const overall = useUploadStore((s) => s.overall);
   const started = useUploadStore((s) => s.started);
   const busy = useUploadStore((s) => s.busy);
+  const selectedIds = useUploadStore((s) => s.selectedIds);
   const addFiles = useUploadStore((s) => s.addFiles);
   const removeItem = useUploadStore((s) => s.remove);
+  const removeMany = useUploadStore((s) => s.removeMany);
   const retryItem = useUploadStore((s) => s.retry);
   const cancelAll = useUploadStore((s) => s.cancelAll);
+  const toggleSelected = useUploadStore((s) => s.toggleSelected);
+  const selectAll = useUploadStore((s) => s.selectAll);
+  const clearSelection = useUploadStore((s) => s.clearSelection);
 
+  const { toast } = useToast();
   const queueRef = useRef<UploadQueue | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
   const [bookSizeId, setBookSizeId] = useState(initialBookSizeId);
   const [bookSizeSaving, setBookSizeSaving] = useState(false);
   const [bookSizeError, setBookSizeError] = useState<string | null>(null);
@@ -79,6 +87,52 @@ export default function UploadClient({
     items
       .filter((i) => i.status === "error" || i.status === "cancelled")
       .forEach((i) => retryItem(i.id));
+  }
+
+  async function handleDeleteSelected() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
+    // 업로드 완료(=서버에 photoId 가 있는) 항목은 soft delete API 호출.
+    const completedWithIds = items.filter(
+      (i) => ids.includes(i.id) && i.status === "done" && i.photoId,
+    );
+    const photoIds = completedWithIds
+      .map((i) => i.photoId!)
+      .filter(Boolean);
+
+    if (photoIds.length > 0) {
+      try {
+        const res = await fetch("/api/photos/trash", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ photoIds }),
+        });
+        const json = (await res.json()) as {
+          ok: boolean;
+          error?: { message?: string };
+        };
+        if (!res.ok || !json.ok) {
+          throw new Error(json.error?.message ?? "휴지통 이동 실패");
+        }
+      } catch (e) {
+        toast({
+          title: "삭제 실패",
+          description: e instanceof Error ? e.message : "알 수 없는 오류",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // 큐에서 제거
+    removeMany(ids);
+    setSelectionMode(false);
+    toast({
+      title: "삭제됨",
+      description: `${ids.length}장이 제거됐어요.`,
+      variant: "success",
+    });
   }
 
   async function handleBookSizeChange(nextId: string) {
@@ -198,18 +252,67 @@ export default function UploadClient({
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant={selectionMode ? "default" : "outline"}
               size="sm"
-              onClick={() => cancelAll()}
-              disabled={!busy && counts.working === 0 && items.every((i) => i.status === "done")}
+              onClick={() => {
+                if (selectionMode) {
+                  setSelectionMode(false);
+                  clearSelection();
+                } else {
+                  setSelectionMode(true);
+                }
+              }}
             >
-              <Trash2 className="size-4" aria-hidden /> 모두 제거
+              {selectionMode ? (
+                <>
+                  <CheckSquare className="size-4" aria-hidden /> 선택 모드 끄기
+                </>
+              ) : (
+                <>
+                  <Square className="size-4" aria-hidden /> 선택 모드
+                </>
+              )}
             </Button>
-            {counts.error > 0 ? (
-              <Button type="button" variant="outline" size="sm" onClick={handleRetryAllFailed}>
-                실패한 항목만 재시도 ({counts.error})
-              </Button>
-            ) : null}
+
+            {selectionMode ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => selectAll()}
+                  disabled={items.length === 0}
+                >
+                  전체 선택 ({items.length})
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => void handleDeleteSelected()}
+                  disabled={selectedIds.size === 0}
+                >
+                  <Trash2 className="size-4" aria-hidden /> 선택 삭제 ({selectedIds.size})
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => cancelAll()}
+                  disabled={!busy && counts.working === 0 && items.every((i) => i.status === "done")}
+                >
+                  <Trash2 className="size-4" aria-hidden /> 모두 제거
+                </Button>
+                {counts.error > 0 ? (
+                  <Button type="button" variant="outline" size="sm" onClick={handleRetryAllFailed}>
+                    실패한 항목만 재시도 ({counts.error})
+                  </Button>
+                ) : null}
+              </>
+            )}
           </div>
 
           <Button
@@ -245,6 +348,9 @@ export default function UploadClient({
               item={item}
               onRemove={removeItem}
               onRetry={retryItem}
+              selectionMode={selectionMode}
+              selected={selectedIds.has(item.id)}
+              onToggleSelect={toggleSelected}
             />
           ))}
         </div>

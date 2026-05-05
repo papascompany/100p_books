@@ -50,11 +50,21 @@ interface UploadStoreState {
   started: boolean;
   /** 진행 중 작업이 하나라도 있는지 */
   busy: boolean;
+  /** 다중 선택된 아이템 id 집합 */
+  selectedIds: Set<string>;
 
   addFiles: (files: File[]) => void;
   remove: (id: string) => void;
+  removeMany: (ids: string[]) => void;
   retry: (id: string) => void;
   cancelAll: () => void;
+
+  // 다중 선택 헬퍼
+  toggleSelected: (id: string) => void;
+  setSelected: (ids: string[]) => void;
+  selectAll: () => void;
+  clearSelection: () => void;
+
   /** 내부 — UploadQueue 가 호출 */
   _patch: (id: string, patch: Partial<UploadItem>) => void;
   _setBusy: (b: boolean) => void;
@@ -81,6 +91,7 @@ export const useUploadStore = create<UploadStoreState>()((set, get) => ({
   overall: 0,
   started: false,
   busy: false,
+  selectedIds: new Set<string>(),
 
   addFiles: (files) => {
     const existing = get().items;
@@ -110,7 +121,21 @@ export const useUploadStore = create<UploadStoreState>()((set, get) => ({
     next.forEach((it, idx) => {
       it.orderIdx = idx;
     });
-    set({ items: next, overall: recomputeOverall(next) });
+    const sel = new Set(get().selectedIds);
+    sel.delete(id);
+    set({ items: next, overall: recomputeOverall(next), selectedIds: sel });
+  },
+
+  removeMany: (ids) => {
+    if (ids.length === 0) return;
+    const removeSet = new Set(ids);
+    const next = get().items.filter((i) => !removeSet.has(i.id));
+    next.forEach((it, idx) => {
+      it.orderIdx = idx;
+    });
+    const sel = new Set(get().selectedIds);
+    for (const id of ids) sel.delete(id);
+    set({ items: next, overall: recomputeOverall(next), selectedIds: sel });
   },
 
   retry: (id) => {
@@ -131,6 +156,25 @@ export const useUploadStore = create<UploadStoreState>()((set, get) => ({
         : { ...i, status: "cancelled" as UploadStatus, error: "취소됨" },
     );
     set({ items: next, overall: recomputeOverall(next) });
+  },
+
+  toggleSelected: (id) => {
+    const sel = new Set(get().selectedIds);
+    if (sel.has(id)) sel.delete(id);
+    else sel.add(id);
+    set({ selectedIds: sel });
+  },
+
+  setSelected: (ids) => {
+    set({ selectedIds: new Set(ids) });
+  },
+
+  selectAll: () => {
+    set({ selectedIds: new Set(get().items.map((i) => i.id)) });
+  },
+
+  clearSelection: () => {
+    set({ selectedIds: new Set() });
   },
 
   _patch: (id, patch) => {

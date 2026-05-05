@@ -88,13 +88,14 @@ export async function POST(req: Request) {
     if (sizeErr) return fail("BOOK_SIZE_QUERY_FAILED", sizeErr.message, 500);
     if (!size) return fail("NOT_FOUND", "책 사이즈를 찾을 수 없습니다.", 404);
 
-    // 2) 사진 로드
+    // 2) 사진 로드 (active 만)
     const { data: photosRaw, error: photoErr } = await supabase
       .from("photos")
       .select(
-        "id, project_id, storage_key, thumb_key, filename, mime, size_bytes, width, height, exif_taken_at, exif_camera, order_idx, created_at",
+        "id, project_id, storage_key, thumb_key, filename, mime, size_bytes, width, height, exif_taken_at, exif_camera, order_idx, created_at, deleted_at",
       )
       .eq("project_id", projectId)
+      .is("deleted_at", null)
       .order("order_idx", { ascending: true });
 
     if (photoErr) return fail("PHOTOS_QUERY_FAILED", photoErr.message, 500);

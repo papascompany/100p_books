@@ -70,11 +70,12 @@ export async function POST(req: Request) {
       return fail("FORBIDDEN", "해당 프로젝트에 대한 권한이 없습니다.", 403);
     }
 
-    // 현재 사진 수 + 요청 배치가 100장 넘지 않는지
+    // 현재 사진 수 + 요청 배치가 100장 넘지 않는지 (active 만 카운트)
     const { count: existingCount, error: countErr } = await supabase
       .from("photos")
       .select("id", { count: "exact", head: true })
-      .eq("project_id", projectId);
+      .eq("project_id", projectId)
+      .is("deleted_at", null);
 
     if (countErr) return fail("PHOTO_COUNT_FAILED", countErr.message, 500);
 

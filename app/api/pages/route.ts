@@ -89,6 +89,7 @@ export async function GET(req: Request) {
         .from("photos")
         .select("id, thumb_key, storage_key")
         .eq("project_id", projectId)
+        .is("deleted_at", null)
         .in("id", Array.from(photoIdSet));
       if (photosErr) return fail("PHOTOS_QUERY_FAILED", photosErr.message, 500);
 

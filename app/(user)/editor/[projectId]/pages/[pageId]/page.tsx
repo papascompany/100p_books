@@ -92,6 +92,7 @@ export default async function EditorSinglePage({ params }: PageProps) {
         .from("photos")
         .select("id, thumb_key")
         .eq("project_id", project.id)
+        .is("deleted_at", null)
         .in("id", Array.from(photoIdSet));
       const idByKey = new Map<string, string>();
       const paths: string[] = [];

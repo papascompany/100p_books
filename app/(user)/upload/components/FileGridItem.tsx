@@ -10,6 +10,12 @@ interface FileGridItemProps {
   item: UploadItem;
   onRemove: (id: string) => void;
   onRetry: (id: string) => void;
+  /** 다중 선택 모드 활성 여부. */
+  selectionMode?: boolean;
+  /** 다중 선택 상태. */
+  selected?: boolean;
+  /** 다중 선택 토글 콜백. */
+  onToggleSelect?: (id: string) => void;
 }
 
 const STATUS_LABEL: Record<UploadItem["status"], string> = {
@@ -22,7 +28,14 @@ const STATUS_LABEL: Record<UploadItem["status"], string> = {
   cancelled: "취소됨",
 };
 
-export default function FileGridItem({ item, onRemove, onRetry }: FileGridItemProps) {
+export default function FileGridItem({
+  item,
+  onRemove,
+  onRetry,
+  selectionMode,
+  selected,
+  onToggleSelect,
+}: FileGridItemProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   // 파일 객체 자체가 바뀌었을 때만 새 blob URL 발급. 동일 파일 reference 면 유지.
@@ -61,7 +74,38 @@ export default function FileGridItem({ item, onRemove, onRetry }: FileGridItemPr
   const pct = Math.round(item.progress * 100);
 
   return (
-    <div className="group relative overflow-hidden rounded-xl border bg-card shadow-soft">
+    <div
+      className={cn(
+        "group relative overflow-hidden rounded-xl border bg-card shadow-soft transition-colors",
+        selectionMode && selected
+          ? "border-rose-500 ring-2 ring-rose-400"
+          : null,
+      )}
+    >
+      {/* 다중 선택 모드 — 카드 전체가 토글 트리거 */}
+      {selectionMode ? (
+        <button
+          type="button"
+          onClick={() => onToggleSelect?.(item.id)}
+          aria-pressed={selected}
+          aria-label={`${item.file.name} 선택`}
+          className="absolute inset-0 z-10 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        />
+      ) : null}
+
+      {selectionMode ? (
+        <span
+          className={cn(
+            "pointer-events-none absolute right-2 top-2 z-20 inline-flex size-7 items-center justify-center rounded-full border text-xs font-semibold shadow",
+            selected
+              ? "bg-rose-500 text-white border-rose-500"
+              : "bg-white/85 text-foreground border-white/85 backdrop-blur",
+          )}
+        >
+          {selected ? "✓" : ""}
+        </span>
+      ) : null}
+
       {/* Thumbnail */}
       <div className="relative aspect-square w-full bg-muted">
         {previewUrl ? (
@@ -116,15 +160,17 @@ export default function FileGridItem({ item, onRemove, onRetry }: FileGridItemPr
           </span>
         </div>
 
-        {/* Remove button */}
-        <button
-          type="button"
-          onClick={() => onRemove(item.id)}
-          className="absolute right-2 top-2 inline-flex size-11 items-center justify-center rounded-full bg-black/55 text-white opacity-0 transition-opacity hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus:opacity-100 group-hover:opacity-100"
-          aria-label={`${item.file.name} 제거`}
-        >
-          <X className="size-4" aria-hidden />
-        </button>
+        {/* Remove button (선택 모드 아닐 때만) */}
+        {!selectionMode ? (
+          <button
+            type="button"
+            onClick={() => onRemove(item.id)}
+            className="absolute right-2 top-2 inline-flex size-11 items-center justify-center rounded-full bg-black/55 text-white opacity-0 transition-opacity hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus:opacity-100 group-hover:opacity-100"
+            aria-label={`${item.file.name} 제거`}
+          >
+            <X className="size-4" aria-hidden />
+          </button>
+        ) : null}
       </div>
 
       {/* Caption */}

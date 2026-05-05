@@ -1,4 +1,10 @@
-import { ChevronRight, Package, UserRound } from "lucide-react";
+import {
+  ChevronRight,
+  Image as ImageIcon,
+  Package,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -28,10 +34,33 @@ export default async function MyPage() {
   }
 
   const supabase = createServerSupabase();
-  const { count: orderCount } = await supabase
-    .from("orders")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id);
+  const [{ count: orderCount }, { data: projectIdsRow }] = await Promise.all([
+    supabase
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id),
+    supabase.from("projects").select("id").eq("user_id", user.id),
+  ]);
+
+  const projectIds = (projectIdsRow ?? []).map((p) => p.id);
+  let activePhotoCount = 0;
+  let trashCount = 0;
+  if (projectIds.length > 0) {
+    const [{ count: ac }, { count: tc }] = await Promise.all([
+      supabase
+        .from("photos")
+        .select("id", { count: "exact", head: true })
+        .in("project_id", projectIds)
+        .is("deleted_at", null),
+      supabase
+        .from("photos")
+        .select("id", { count: "exact", head: true })
+        .in("project_id", projectIds)
+        .not("deleted_at", "is", null),
+    ]);
+    activePhotoCount = ac ?? 0;
+    trashCount = tc ?? 0;
+  }
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-10">
@@ -59,6 +88,48 @@ export default async function MyPage() {
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
               결제 영수증, 배송 상태, PDF 다운로드를 확인하세요.
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/mypage/photos" className="group">
+          <Card className="h-full transition-colors hover:border-foreground/30 hover:bg-accent/30">
+            <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ImageIcon className="size-5" />
+                  사진 라이브러리
+                </CardTitle>
+                <CardDescription className="mt-1.5">
+                  {activePhotoCount}장의 사진이 있어요.
+                </CardDescription>
+              </div>
+              <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              모든 프로젝트의 사진을 한 곳에서 관리하고 다른 프로젝트로
+              옮길 수 있어요.
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/mypage/trash" className="group">
+          <Card className="h-full transition-colors hover:border-foreground/30 hover:bg-accent/30">
+            <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Trash2 className="size-5" />
+                  휴지통
+                </CardTitle>
+                <CardDescription className="mt-1.5">
+                  {trashCount}장이 휴지통에 있어요.
+                </CardDescription>
+              </div>
+              <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              삭제한 사진은 30일 후 영구 삭제돼요. 그 전에 복원하거나
+              직접 영구 삭제할 수 있어요.
             </CardContent>
           </Card>
         </Link>

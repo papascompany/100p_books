@@ -106,6 +106,7 @@ export async function GET(req: Request) {
       .from("photos")
       .select("id, thumb_key")
       .eq("project_id", projectId)
+      .is("deleted_at", null)
       .order("order_idx", { ascending: true })
       .limit(48);
     for (const p of morePhotos ?? []) {
@@ -118,6 +119,7 @@ export async function GET(req: Request) {
         .from("photos")
         .select("id, thumb_key")
         .eq("project_id", projectId)
+        .is("deleted_at", null)
         .in("id", Array.from(photoIdSet));
       if (photosErr) return fail("PHOTOS_QUERY_FAILED", photosErr.message, 500);
 
@@ -216,6 +218,38 @@ export async function PATCH(req: Request) {
         "PageDoc.bookSizeId 가 프로젝트의 책 사이즈와 일치하지 않습니다.",
         400,
       );
+    }
+
+    // photoId 일관성 — cover_json 이 참조하는 photo 가 모두 active 인지 확인.
+    const referencedPhotoIds = new Set<string>();
+    for (const obj of fabricJson.objects) {
+      if (obj.type === "photo" && obj.photoId) {
+        referencedPhotoIds.add(obj.photoId);
+      }
+    }
+    if (fabricJson.backgroundImage?.photoId) {
+      referencedPhotoIds.add(fabricJson.backgroundImage.photoId);
+    }
+    if (referencedPhotoIds.size > 0) {
+      const { data: validPhotos, error: phErr } = await supabase
+        .from("photos")
+        .select("id")
+        .eq("project_id", projectId)
+        .is("deleted_at", null)
+        .in("id", Array.from(referencedPhotoIds));
+      if (phErr) return fail("PHOTOS_QUERY_FAILED", phErr.message, 500);
+      const validSet = new Set((validPhotos ?? []).map((p) => p.id));
+      const missing = Array.from(referencedPhotoIds).filter(
+        (id) => !validSet.has(id),
+      );
+      if (missing.length > 0) {
+        return fail(
+          "INVALID_PHOTO_REF",
+          `cover_json 이 참조하는 사진이 프로젝트에 없거나 휴지통입니다: ${missing.join(", ")}`,
+          400,
+          { missing },
+        );
+      }
     }
 
     const { data: updated, error: upErr } = await supabase

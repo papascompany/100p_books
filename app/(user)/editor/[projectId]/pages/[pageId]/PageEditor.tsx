@@ -13,6 +13,7 @@ import FabricStage, {
 import KeyboardShortcutsHelp, {
   useShortcutsAutoShow,
 } from "@/components/editor/KeyboardShortcutsHelp";
+import PhotoPickerDialog from "@/components/editor/PhotoPickerDialog";
 import ResourcePalette from "@/components/editor/ResourcePalette";
 import SelectionPanel from "@/components/editor/SelectionPanel";
 import Toolbar, { type ToolbarTool } from "@/components/editor/Toolbar";
@@ -90,6 +91,7 @@ export default function PageEditor({
   const [toolSheet, setToolSheet] = useState<ToolbarTool | null>(null);
   const [collageOpen, setCollageOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
   const [currentDoc, setCurrentDoc] = useState<PageDoc | null>(initialDoc);
 
   const { shouldShow: shouldAutoShowShortcuts, mark: markShortcutsSeen } =
@@ -521,6 +523,7 @@ export default function PageEditor({
             selection={selection}
             dpi={PREVIEW_DPI}
             onChange={() => setDirty(true)}
+            onReplacePhoto={() => setPhotoPickerOpen(true)}
           />
         </aside>
       </div>
@@ -550,6 +553,7 @@ export default function PageEditor({
             selection={selection}
             dpi={PREVIEW_DPI}
             onChange={() => setDirty(true)}
+            onReplacePhoto={() => setPhotoPickerOpen(true)}
           />
         ) : toolSheet === "clipart" || toolSheet === "background" ? (
           <ResourcePalette
@@ -617,6 +621,22 @@ export default function PageEditor({
         onOpenChange={(open) => {
           setShortcutsOpen(open);
           if (!open) markShortcutsSeen();
+        }}
+      />
+
+      {/* 사진 선택 / 교체 */}
+      <PhotoPickerDialog
+        open={photoPickerOpen}
+        onOpenChange={setPhotoPickerOpen}
+        currentProjectId={projectId}
+        title="사진 교체"
+        description="현재 선택된 사진을 다른 사진으로 교체합니다."
+        onPick={async (photoId, url) => {
+          const handle = stageRef.current;
+          if (!handle) return;
+          await handle.replacePhoto(photoId, url);
+          setDirty(true);
+          toast({ description: "사진 교체 완료", variant: "success" });
         }}
       />
     </div>

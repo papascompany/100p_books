@@ -18,6 +18,7 @@ function mkPhoto(p: Partial<Photo> & { id: string }): Photo {
     exif_camera: p.exif_camera ?? null,
     order_idx: p.order_idx ?? 0,
     created_at: p.created_at ?? "2026-01-01T00:00:00Z",
+    deleted_at: p.deleted_at ?? null,
   };
 }
 

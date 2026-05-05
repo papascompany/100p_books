@@ -101,8 +101,9 @@ export function createPhotoResolver(opts: PhotoResolverOpts): {
       // photos 메타 조회
       const { data: row, error } = await admin
         .from("photos")
-        .select("id, project_id, storage_key")
+        .select("id, project_id, storage_key, deleted_at")
         .eq("id", photoId)
+        .is("deleted_at", null)
         .maybeSingle();
       if (error || !row) {
         throw new Error(`[pdf/photos] photo not found: ${photoId}`);

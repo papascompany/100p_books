@@ -44,7 +44,8 @@ export async function GET(_req: Request, { params }: RouteCtx) {
     const { count, error: countErr } = await supabase
       .from("photos")
       .select("id", { count: "exact", head: true })
-      .eq("project_id", project.id);
+      .eq("project_id", project.id)
+      .is("deleted_at", null);
 
     if (countErr) return fail("PHOTO_COUNT_FAILED", countErr.message, 500);
 

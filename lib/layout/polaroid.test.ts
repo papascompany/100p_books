@@ -34,6 +34,7 @@ const photo: Photo = {
   exif_camera: null,
   order_idx: 0,
   created_at: "2026-01-01T00:00:00Z",
+  deleted_at: null,
 };
 
 describe("buildPolaroidPage", () => {

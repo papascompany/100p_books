@@ -71,6 +71,12 @@ export interface FabricStageHandle {
   ) => Promise<void>;
   /** 현재 선택 객체 즉시 복제 (+5mm offset). */
   duplicateSelected: () => Promise<void>;
+  /**
+   * 현재 선택 객체가 PhotoObject 일 때 photoId/src 를 교체.
+   * 위치/크기/회전/cropMode/borderRadius 는 유지.
+   * 선택이 없거나 photo 가 아니면 no-op.
+   */
+  replacePhoto: (photoId: string, url: string) => Promise<void>;
   setBackground: (value: SetBackgroundInput) => void;
   undo: () => void;
   redo: () => void;
@@ -553,6 +559,56 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       [bleedMm, dpi, widthMm, heightMm],
     );
 
+    const replacePhoto = useCallback(
+      async (photoId: string, url: string) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const sel = canvas.getActiveObject() as TaggedFabricObject | null;
+        if (!sel || sel.oType !== "photo") return;
+
+        const img = sel as fabric.FabricImage & TaggedFabricObject;
+
+        // 위치/스케일/회전/origin 보존, source 만 교체.
+        try {
+          await img.setSrc(url, { crossOrigin: "anonymous" });
+        } catch {
+          // setSrc 실패 시 fromURL 로 새 객체 만들고 위치 복사.
+          const next = await fabric.FabricImage.fromURL(url, {
+            crossOrigin: "anonymous",
+          });
+          const props = {
+            left: img.left,
+            top: img.top,
+            originX: img.originX,
+            originY: img.originY,
+            scaleX: img.scaleX,
+            scaleY: img.scaleY,
+            angle: img.angle,
+            opacity: img.opacity,
+          };
+          next.set(props);
+          const tagged = next as TaggedFabricObject;
+          tagged.objectId = sel.objectId;
+          tagged.oType = "photo";
+          tagged.photoId = photoId;
+          tagged.cropMode = sel.cropMode ?? "cover";
+          tagged.borderRadiusMm = sel.borderRadiusMm;
+          tagged.originalWidthMm = sel.originalWidthMm;
+          tagged.originalHeightMm = sel.originalHeightMm;
+          canvas.remove(sel);
+          canvas.add(next);
+          canvas.setActiveObject(next);
+          canvas.requestRenderAll();
+          return;
+        }
+
+        img.photoId = photoId;
+        img.canvas?.fire("object:modified", { target: img });
+        canvas.requestRenderAll();
+      },
+      [],
+    );
+
     const duplicateSelected = useCallback(async () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -749,6 +805,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         addClipart,
         pasteLayoutObject,
         duplicateSelected,
+        replacePhoto,
         setBackground,
         undo,
         redo,
@@ -770,6 +827,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         addClipart,
         pasteLayoutObject,
         duplicateSelected,
+        replacePhoto,
         setBackground,
         undo,
         redo,

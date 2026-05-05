@@ -46,7 +46,8 @@ export default async function EditorPage({ params }: PageProps) {
       supabase
         .from("photos")
         .select("id", { count: "exact", head: true })
-        .eq("project_id", project.id),
+        .eq("project_id", project.id)
+        .is("deleted_at", null),
       supabase
         .from("pages")
         .select("id", { count: "exact", head: true })

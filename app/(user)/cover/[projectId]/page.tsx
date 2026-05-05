@@ -97,6 +97,7 @@ export default async function CoverPage({ params }: PageProps) {
     .from("photos")
     .select("id, thumb_key, filename, order_idx")
     .eq("project_id", project.id)
+    .is("deleted_at", null)
     .order("order_idx", { ascending: true })
     .limit(48);
   for (const p of projectPhotos ?? []) photoIdSet.add(p.id);
@@ -107,6 +108,7 @@ export default async function CoverPage({ params }: PageProps) {
       .from("photos")
       .select("id, thumb_key")
       .eq("project_id", project.id)
+      .is("deleted_at", null)
       .in("id", Array.from(photoIdSet));
     const idByKey = new Map<string, string>();
     const paths: string[] = [];

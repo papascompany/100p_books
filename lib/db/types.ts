@@ -76,6 +76,8 @@ export interface Photo {
   exif_camera: string | null;
   order_idx: number;
   created_at: string;
+  /** 휴지통 이동 시각. NULL 이면 active. */
+  deleted_at: string | null;
 }
 
 export interface Page {
