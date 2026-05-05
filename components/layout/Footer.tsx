@@ -16,11 +16,14 @@ export default function Footer() {
           <Link href="/terms" className="hover:text-foreground">
             이용약관
           </Link>
-          <Link href="/privacy" className="hover:text-foreground">
+          <Link
+            href="/privacy"
+            className="font-medium text-foreground/85 hover:text-foreground"
+          >
             개인정보처리방침
           </Link>
-          <Link href="/contact" className="hover:text-foreground">
-            고객센터
+          <Link href="/refund" className="hover:text-foreground">
+            교환·환불
           </Link>
         </nav>
       </div>

@@ -16,8 +16,29 @@ export async function getSession() {
 }
 
 /**
+ * 인증 에러를 throw 하는 헬퍼.
+ */
+function authError(
+  message: string,
+  status: number,
+  code: string,
+): never {
+  const err = new Error(message) as Error & {
+    status?: number;
+    code?: string;
+  };
+  err.status = status;
+  err.code = code;
+  throw err;
+}
+
+/**
  * 로그인한 유저를 반환. 없으면 throw.
- * Route Handler / Server Action 에서 쓰면 상위 try/catch 가 401 응답으로 처리.
+ *
+ * 추가 가드:
+ *   - profiles.deleted_at IS NOT NULL → 410 GONE (탈퇴 익명화된 계정)
+ *
+ * Route Handler / Server Action 에서 쓰면 상위 try/catch 가 표준 fail 응답으로 처리.
  */
 export async function requireUser(): Promise<User> {
   const supabase = createServerSupabase();
@@ -27,12 +48,25 @@ export async function requireUser(): Promise<User> {
   } = await supabase.auth.getUser();
 
   if (error || !user) {
-    const err = new Error("로그인이 필요합니다.") as Error & { status?: number };
-    err.status = 401;
-    throw err;
+    authError("로그인이 필요합니다.", 401, "UNAUTHORIZED");
   }
 
-  return user;
+  // 탈퇴 가드 — 익명화된 계정으로 잔존 세션이 들어오면 차단
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("deleted_at")
+    .eq("id", user!.id)
+    .maybeSingle();
+
+  if (profile?.deleted_at) {
+    authError(
+      "탈퇴된 계정입니다. 다시 로그인하거나 신규 가입해 주세요.",
+      410,
+      "ACCOUNT_DELETED",
+    );
+  }
+
+  return user!;
 }
 
 /**
@@ -49,11 +83,7 @@ export async function requireAdmin(): Promise<User> {
     .single();
 
   if (error || !profile || profile.role !== "admin") {
-    const err = new Error("관리자 권한이 필요합니다.") as Error & {
-      status?: number;
-    };
-    err.status = 403;
-    throw err;
+    authError("관리자 권한이 필요합니다.", 403, "FORBIDDEN");
   }
 
   return user;

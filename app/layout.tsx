@@ -5,7 +5,12 @@ import Toaster from "@/components/ui/toaster";
 
 import "./globals.css";
 
+const APP_URL = (
+  process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+).replace(/\/+$/, "");
+
 export const metadata: Metadata = {
+  metadataBase: new URL(APP_URL),
   title: {
     default: "100p Books — 나만의 포토북",
     template: "%s · 100p Books",
@@ -13,14 +18,49 @@ export const metadata: Metadata = {
   description:
     "최대 100장의 사진으로 만드는 폴라로이드 감성 포토북. 업로드부터 인쇄 주문까지 한 번에.",
   applicationName: "100p Books",
+  authors: [{ name: "100p Books" }],
+  keywords: [
+    "포토북",
+    "사진책",
+    "포토프린트",
+    "폴라로이드",
+    "100p Books",
+    "100p_books",
+    "주문 인쇄",
+  ],
   icons: {
     icon: "/favicon.ico",
   },
+  alternates: {
+    canonical: "/",
+  },
   openGraph: {
     type: "website",
+    siteName: "100p Books",
     title: "100p Books — 나만의 포토북",
     description: "100장의 순간, 한 권의 책.",
+    url: APP_URL,
     locale: "ko_KR",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "100p Books — 나만의 포토북",
+    description: "100장의 순간, 한 권의 책.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  formatDetection: {
+    telephone: false,
+    email: false,
+    address: false,
   },
 };
 

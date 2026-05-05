@@ -235,8 +235,99 @@ pnpm build        # production 빌드
 | M6 | 토스 결제 + 주문 + PDF 빌드 잡 | ✅ |
 | M7 | 관리자 콘솔 + 송장 Excel | ✅ |
 | M8 | 정적 QA · 폴리싱 | ✅ |
+| M9 | UX 보강 (Toast / 다크모드 / 우편번호 SDK) | ✅ |
+| M10 | 법규 준수 + Vercel 배포 준비 | ✅ |
 
 상세: [PLAN.md](PLAN.md) / [PROGRESS.md](PROGRESS.md)
+
+---
+
+## 🚢 Vercel 운영 배포 가이드
+
+### 1. Vercel 프로젝트 연결
+```bash
+vercel login
+vercel link        # 또는 GitHub 연동으로 자동 import
+```
+
+### 2. 환경변수 등록
+[`.env.production.example`](.env.production.example) 의 키를 Vercel 대시보드에 입력하거나 CLI로 일괄 등록:
+```bash
+vercel env add NEXT_PUBLIC_SUPABASE_URL production
+vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
+vercel env add SUPABASE_SERVICE_ROLE_KEY production
+vercel env add TOSS_SECRET_KEY production
+vercel env add NEXT_PUBLIC_TOSS_CLIENT_KEY production
+vercel env add TOSS_WEBHOOK_SECRET production
+vercel env add NEXT_PUBLIC_APP_URL production
+```
+
+### 3. Supabase 운영 프로젝트
+1. https://supabase.com/dashboard/projects 에서 프로젝트 생성 (Region: Northeast Asia · Seoul)
+2. `supabase link --project-ref <prod-ref>`
+3. `supabase db push` — `0001~0010` 마이그레이션 일괄 적용
+4. Auth → Providers → Kakao 활성화 후 client id/secret 입력 (선택)
+5. SQL Editor 에서 첫 admin 승격:
+   ```sql
+   update public.profiles set role = 'admin' where email = '<your-email>';
+   ```
+
+### 4. TossPayments 운영 키
+1. https://app.tosspayments.com/ 가입 후 사업자 심사 통과
+2. 라이브 키(`live_sk_...`, `live_ck_...`) 발급
+3. 웹훅 등록: `https://<도메인>/api/payments/webhook`
+   - `X-Webhook-Secret` 헤더에 `TOSS_WEBHOOK_SECRET` 과 동일 값 등록
+
+### 5. 카카오 OAuth (선택)
+1. https://developers.kakao.com/ 에서 앱 생성
+2. Redirect URI: `https://<프로젝트-ref>.supabase.co/auth/v1/callback`
+3. Supabase Auth Providers → Kakao 에 client id/secret 입력
+4. `app/(auth)/login/LoginForm.tsx` 의 카카오 버튼 주석 해제
+
+### 6. 배포
+- GitHub 연동: `main` 푸시 시 자동 배포
+- 수동: `vercel --prod`
+- 함수 런타임: `vercel.json` 의 `functions` 섹션이 PDF 빌드 / 결제 confirm 라우트에 `maxDuration=300`, `memory=1769MB` 적용 (Pro plan 필요)
+  > Vercel Knowledge Updates(2026-02-27) 기준 `vercel.ts`(@vercel/config) 도 권장됩니다. 이 저장소는 호환성을 위해 `vercel.json` 으로 시작합니다.
+
+### 7. 도메인 연결 / 헬스체크
+- Vercel Domains 에서 사용자 도메인을 추가하고 `NEXT_PUBLIC_APP_URL` 갱신
+- 헬스체크: `GET /api/health` — `{ ok, db, env }` 반환. 실패 시 503
+
+### 8. 배포 후 모니터링
+- Vercel Analytics / BotID
+- PDF 워커 메모리 — Vercel Functions Insights → Active CPU
+- 후속: Sentry, Plausible/GA4, Datadog 등 검토
+
+---
+
+## 🔒 법적 페이지 / 회원 탈퇴
+
+| 경로 | 설명 |
+|---|---|
+| `/terms` | 서비스 이용약관 (전자상거래법 청약철회 예외 명시) |
+| `/privacy` | 개인정보 처리방침 (수집·위탁·보유기간·권리 행사) |
+| `/refund` | 교환·환불 정책 (제작 시작 전 100% 환불, 이후 불량/사고만 교환) |
+| `/mypage/account` | 계정 관리 + 회원 탈퇴 (이메일 재입력 + 익명화 RPC) |
+
+회원 탈퇴 시 `profiles` 는 hard delete 하지 않고 `anonymize_account()` RPC 로 익명화하며, `auth.users` 는 service_role admin client 로 삭제합니다 (전자상거래법 5년 보존 의무 준수).
+
+---
+
+## 🧰 오토파일럿으로 추가 개발하기
+
+```bash
+# 1) 기능 단위 위임 — orchestrator 가 PROGRESS.md 의 다음 마일스톤을 식별
+Agent(subagent_type="orchestrator",
+      prompt="PROGRESS.md 의 미완료 마일스톤을 담당 에이전트에 위임하세요.")
+
+# 2) 도메인 한정 작업 — 직접 위임
+Agent(subagent_type="frontend-ui",  prompt="...")
+Agent(subagent_type="backend-api",  prompt="...")
+Agent(subagent_type="pdf-generator", prompt="...")
+```
+
+`.claude/agents/*.md` 의 범위 명세를 준수해야 안전합니다.
 
 ---
 

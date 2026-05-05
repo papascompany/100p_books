@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Mail } from "lucide-react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
@@ -36,6 +37,7 @@ export default function LoginForm() {
   const errorParam = searchParams.get("error");
 
   const [email, setEmail] = React.useState("");
+  const [agreed, setAgreed] = React.useState(false);
   const [status, setStatus] = React.useState<Status>(
     errorParam ? { kind: "error", message: errorParam } : { kind: "idle" },
   );
@@ -50,6 +52,13 @@ export default function LoginForm() {
     const trimmed = email.trim();
     if (!trimmed) {
       setStatus({ kind: "error", message: "이메일을 입력해주세요." });
+      return;
+    }
+    if (!agreed) {
+      setStatus({
+        kind: "error",
+        message: "이용약관과 개인정보 처리방침에 동의해주세요.",
+      });
       return;
     }
 
@@ -145,6 +154,36 @@ export default function LoginForm() {
               />
             </div>
 
+            <label className="flex items-start gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                className="mt-0.5 size-4 cursor-pointer rounded border-input"
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+                disabled={isSubmitting}
+                aria-describedby="agree-desc"
+                required
+              />
+              <span id="agree-desc">
+                <Link
+                  href="/terms"
+                  target="_blank"
+                  className="font-medium text-foreground underline-offset-2 hover:underline"
+                >
+                  이용약관
+                </Link>{" "}
+                및{" "}
+                <Link
+                  href="/privacy"
+                  target="_blank"
+                  className="font-medium text-foreground underline-offset-2 hover:underline"
+                >
+                  개인정보 처리방침
+                </Link>
+                에 동의합니다. (필수)
+              </span>
+            </label>
+
             {status.kind === "error" ? (
               <p
                 role="alert"
@@ -159,7 +198,7 @@ export default function LoginForm() {
               size="lg"
               variant="gradient"
               className={cn("mt-1 w-full", isSubmitting && "opacity-90")}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !agreed}
             >
               {isSubmitting ? (
                 <>
@@ -203,7 +242,9 @@ export default function LoginForm() {
       </CardContent>
 
       <CardFooter className="justify-center text-xs text-muted-foreground">
-        로그인함으로써 서비스 이용약관과 개인정보처리방침에 동의합니다.
+        <Link href="/refund" className="hover:text-foreground">
+          교환·환불 정책 보기
+        </Link>
       </CardFooter>
     </Card>
   );

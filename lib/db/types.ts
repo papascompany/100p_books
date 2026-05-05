@@ -27,6 +27,14 @@ export interface Profile {
   role: UserRole;
   display_name: string | null;
   created_at: string;
+  /** 회원 탈퇴 시각. NOT NULL 이면 익명화된 탈퇴 계정. */
+  deleted_at: string | null;
+  /** 탈퇴 사유 (선택) */
+  deletion_reason: string | null;
+  /** 이용약관 동의 시각 */
+  terms_agreed_at: string | null;
+  /** 개인정보 처리방침 동의 시각 */
+  privacy_agreed_at: string | null;
 }
 
 export interface BookSize {
@@ -138,6 +146,14 @@ export interface Database {
     Views: Record<string, never>;
     Functions: {
       is_admin: { Args: Record<string, never>; Returns: boolean };
+      anonymize_account: {
+        Args: { p_user_id: string; p_reason?: string | null };
+        Returns: null;
+      };
+      record_agreements: {
+        Args: { p_user_id: string };
+        Returns: null;
+      };
     };
     Enums: Record<string, never>;
   };
