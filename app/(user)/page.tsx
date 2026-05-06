@@ -64,8 +64,7 @@ export default function LandingPage() {
     <div className="overflow-x-hidden">
 
       {/* ══ 1. 캠페인 히어로 ════════════════════════════════════════════════ */}
-      <section className="relative min-h-[90vh] flex items-center overflow-hidden">
-        {/* 배경 사진 */}
+      <section className="relative min-h-[75vh] flex items-center overflow-hidden">
         <Image
           src="https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=1920&q=80"
           alt="포토북 배경"
@@ -74,51 +73,42 @@ export default function LandingPage() {
           priority
           sizes="100vw"
         />
-        {/* 다크 오버레이 — 왼쪽 진하게, 오른쪽 투명 */}
         <div
           className="absolute inset-0"
           style={{
-            background: "linear-gradient(105deg, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.65) 45%, rgba(0,0,0,0.2) 100%)",
+            background: "linear-gradient(105deg, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.65) 45%, rgba(0,0,0,0.15) 100%)",
           }}
         />
 
-        {/* 콘텐츠 */}
-        <div className="container relative z-10 py-20 md:py-32">
+        <div className="container relative z-10 py-12 md:py-20">
           <div className="max-w-xl">
-            <p className="text-xs font-medium uppercase tracking-[0.25em] text-white/60 mb-5">
+            <p className="text-xs font-medium uppercase tracking-[0.25em] text-white/50 mb-3">
               100 Photos · 1 Book
             </p>
-
-            {/* 메인 헤드라인 — Pretendard 볼드 */}
-            <h1 className="text-5xl font-bold leading-[1.1] tracking-tight text-white sm:text-6xl md:text-7xl text-shadow-lg">
+            <h1 className="text-4xl font-bold leading-[1.1] tracking-tight text-white sm:text-5xl md:text-6xl text-shadow-lg">
               소중한 순간을
               <br />
               <span className="text-amber-300">책으로 만드세요</span>
             </h1>
-
-            <p className="mt-6 text-base leading-relaxed text-white/75 max-w-[38ch] sm:text-lg">
+            <p className="mt-4 text-sm leading-relaxed text-white/70 max-w-[38ch] sm:text-base">
               사진 100장을 업로드하면 AI가 자동으로 폴라로이드 감성
               포토북을 완성합니다. 편집부터 인쇄 주문까지 모두 모바일에서.
             </p>
-
-            {/* 신뢰 지표 */}
-            <div className="mt-5 flex items-center gap-4 text-sm text-white/60">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="size-4 text-amber-300" />
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-white/55">
+              <span className="flex items-center gap-1">
+                <CheckCircle2 className="size-3.5 text-amber-300" />
                 무료 시작
               </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="size-4 text-amber-300" />
+              <span className="flex items-center gap-1">
+                <CheckCircle2 className="size-3.5 text-amber-300" />
                 300dpi 인쇄
               </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="size-4 text-amber-300" />
+              <span className="flex items-center gap-1">
+                <CheckCircle2 className="size-3.5 text-amber-300" />
                 3~5일 배송
               </span>
             </div>
-
-            {/* CTA 버튼 */}
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-6 flex flex-wrap gap-3">
               <Button
                 asChild
                 size="lg"
@@ -132,7 +122,7 @@ export default function LandingPage() {
               <Button
                 asChild
                 size="lg"
-                className="bg-transparent text-white border border-white/40 hover:bg-white/10 hover:border-white/60"
+                className="bg-transparent text-white border border-white/35 hover:bg-white/10 hover:border-white/55"
               >
                 <Link href="/gallery">후기 갤러리</Link>
               </Button>
@@ -140,49 +130,35 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* 우측 플로팅 "폴라로이드 미리보기" 카드들 */}
+        {/* 우측 플로팅 폴라로이드 카드 */}
         <div
           aria-hidden
-          className="absolute right-8 top-1/2 -translate-y-1/2 hidden lg:flex flex-col gap-4 z-10"
+          className="absolute right-10 top-1/2 -translate-y-1/2 hidden lg:flex flex-col gap-3 z-10"
         >
-          {/* 폴라로이드 카드 1 */}
-          <div
-            className="w-44 bg-white p-3 pb-8 shadow-2xl"
-            style={{ transform: "rotate(-4deg)" }}
-          >
-            <div className="relative h-36 w-full overflow-hidden bg-[#f5f5f5]">
+          <div className="w-36 bg-white p-2.5 pb-7 shadow-2xl" style={{ transform: "rotate(-4deg)" }}>
+            <div className="relative h-28 w-full overflow-hidden bg-[#f5f5f5]">
               <Image
                 src="https://images.unsplash.com/photo-1512438248247-f0f2a5a8b7f0?w=400&q=75"
                 alt="포토북 예시"
                 fill
                 className="object-cover"
-                sizes="176px"
+                sizes="144px"
               />
             </div>
-            <p className="mt-2 text-center text-[11px] font-medium text-[#707072]">우리의 여행 ✈️</p>
+            <p className="mt-1.5 text-center text-[10px] font-medium text-[#707072]">우리의 여행 ✈️</p>
           </div>
-          {/* 폴라로이드 카드 2 */}
-          <div
-            className="w-44 bg-white p-3 pb-8 shadow-2xl"
-            style={{ transform: "rotate(3deg) translateX(12px)" }}
-          >
-            <div className="relative h-36 w-full overflow-hidden bg-[#f5f5f5]">
+          <div className="w-36 bg-white p-2.5 pb-7 shadow-2xl" style={{ transform: "rotate(3deg) translateX(10px)" }}>
+            <div className="relative h-28 w-full overflow-hidden bg-[#f5f5f5]">
               <Image
                 src="https://images.unsplash.com/photo-1511895426328-dc8714191011?w=400&q=75"
                 alt="포토북 예시 2"
                 fill
                 className="object-cover"
-                sizes="176px"
+                sizes="144px"
               />
             </div>
-            <p className="mt-2 text-center text-[11px] font-medium text-[#707072]">가족의 순간 💕</p>
+            <p className="mt-1.5 text-center text-[10px] font-medium text-[#707072]">가족의 순간 💕</p>
           </div>
-        </div>
-
-        {/* 하단 스크롤 힌트 */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2">
-          <span className="text-xs text-white/40 tracking-widest uppercase">Scroll</span>
-          <div className="w-px h-8 bg-gradient-to-b from-white/40 to-transparent" />
         </div>
       </section>
 
@@ -192,16 +168,15 @@ export default function LandingPage() {
           <div className="grid grid-cols-2 divide-x divide-[#dedede] md:grid-cols-4">
             {[
               { num: "5,000+", label: "제작된 포토북" },
-              { num: "4.9", label: "평균 별점", suffix: "★" },
+              { num: "4.9★", label: "평균 별점" },
               { num: "300dpi", label: "인쇄 해상도" },
               { num: "3~5일", label: "평균 배송일" },
-            ].map(({ num, label, suffix }) => (
-              <div key={label} className="py-6 px-4 text-center md:py-8">
-                <p className="font-display-num text-3xl font-bold text-[#111111] md:text-4xl">
+            ].map(({ num, label }) => (
+              <div key={label} className="py-4 px-4 text-center md:py-5">
+                <p className="font-display-num text-2xl font-bold text-[#111111] md:text-3xl">
                   {num}
-                  {suffix && <span className="text-amber-400 ml-1">{suffix}</span>}
                 </p>
-                <p className="mt-1 text-sm text-[#707072]">{label}</p>
+                <p className="mt-0.5 text-xs text-[#707072]">{label}</p>
               </div>
             ))}
           </div>
@@ -209,35 +184,31 @@ export default function LandingPage() {
       </section>
 
       {/* ══ 3. 특징 3-컬럼 ══════════════════════════════════════════════════ */}
-      <section className="py-20 md:py-28 bg-white">
+      <section className="py-10 md:py-14 bg-white">
         <div className="container">
-          <div className="mx-auto max-w-2xl text-center mb-14">
-            <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
-              완벽한 포토북을 위한
-              <br />
-              <span className="text-[#111111]">세 가지 핵심</span>
+          <div className="mx-auto max-w-xl text-center mb-8">
+            <h2 className="text-2xl font-bold tracking-tight md:text-3xl">
+              완벽한 포토북을 위한 세 가지 핵심
             </h2>
-            <p className="mt-4 text-base text-[#707072]">
+            <p className="mt-2 text-sm text-[#707072]">
               복잡한 디자인 작업 없이도 전문가 수준의 포토북을 만들 수 있습니다.
             </p>
           </div>
 
-          <div className="grid gap-8 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-3 md:gap-5">
             {FEATURES.map(({ icon: Icon, title, desc }, i) => (
-              <div key={title} className="group relative">
-                {/* 배경 카드 */}
-                <div className="border border-[#dedede] bg-white p-8 h-full transition-shadow hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
-                  <div className="flex items-center gap-3 mb-5">
-                    <div className="flex size-12 items-center justify-center rounded-full bg-[#f5f5f5]">
-                      <Icon className="size-5 text-[#111111]" />
-                    </div>
-                    <span className="font-display-num text-4xl text-[#dedede] font-bold">
-                      0{i + 1}
-                    </span>
+              <div
+                key={title}
+                className="border border-[#dedede] bg-white p-5 transition-shadow hover:shadow-[0_4px_20px_rgba(0,0,0,0.07)]"
+              >
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div className="flex size-9 items-center justify-center rounded-full bg-[#f5f5f5]">
+                    <Icon className="size-4 text-[#111111]" />
                   </div>
-                  <h3 className="text-lg font-bold mb-2">{title}</h3>
-                  <p className="text-sm text-[#707072] leading-relaxed">{desc}</p>
+                  <span className="font-display-num text-3xl text-[#e0e0e0] leading-none">0{i + 1}</span>
                 </div>
+                <h3 className="text-base font-bold mb-1.5">{title}</h3>
+                <p className="text-sm text-[#707072] leading-relaxed">{desc}</p>
               </div>
             ))}
           </div>
@@ -245,39 +216,33 @@ export default function LandingPage() {
       </section>
 
       {/* ══ 4. 북 사이즈 쇼케이스 ══════════════════════════════════════════ */}
-      <section className="py-20 md:py-28 bg-[#f5f5f5]">
+      <section className="py-10 md:py-14 bg-[#f5f5f5]">
         <div className="container">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-12">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-7">
             <div>
-              <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
-                나에게 딱 맞는 사이즈
-              </h2>
-              <p className="mt-3 text-base text-[#707072]">
-                세 가지 판형 중 원하는 스타일을 선택하세요.
-              </p>
+              <h2 className="text-2xl font-bold tracking-tight md:text-3xl">나에게 딱 맞는 사이즈</h2>
+              <p className="mt-1 text-sm text-[#707072]">세 가지 판형 중 원하는 스타일을 선택하세요.</p>
             </div>
             <Button asChild variant="secondary" size="sm">
-              <Link href="/upload">사이즈 선택하러 가기</Link>
+              <Link href="/upload">선택하러 가기</Link>
             </Button>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-3">
             {BOOK_SIZES.map(({ name, size, desc, icon }) => (
               <div
                 key={name}
-                className="bg-white border border-[#dedede] p-8 flex flex-col gap-4 group hover:border-[#111111] transition-colors cursor-pointer"
+                className="bg-white border border-[#dedede] p-5 flex flex-col gap-3 group hover:border-[#111111] transition-colors cursor-pointer"
               >
-                <span className="text-5xl">{icon}</span>
+                <span className="text-3xl">{icon}</span>
                 <div>
-                  <p className="text-xl font-bold">{name}</p>
-                  <p className="text-sm font-medium text-[#707072] mt-0.5">{size}</p>
+                  <p className="text-base font-bold">{name}</p>
+                  <p className="text-xs font-medium text-[#707072] mt-0.5">{size}</p>
                 </div>
                 <p className="text-sm text-[#707072] leading-relaxed">{desc}</p>
-                <div className="mt-auto pt-2">
-                  <span className="inline-flex items-center text-sm font-medium text-[#111111] gap-1 group-hover:gap-2 transition-all">
-                    선택하기 <ArrowRight className="size-4" />
-                  </span>
-                </div>
+                <span className="inline-flex items-center text-sm font-medium text-[#111111] gap-1 group-hover:gap-2 transition-all mt-auto">
+                  선택하기 <ArrowRight className="size-3.5" />
+                </span>
               </div>
             ))}
           </div>
@@ -285,79 +250,65 @@ export default function LandingPage() {
       </section>
 
       {/* ══ 5. 사용 방법 3스텝 ══════════════════════════════════════════════ */}
-      <section className="py-20 md:py-28 bg-white">
+      <section className="py-10 md:py-14 bg-white">
         <div className="container">
-          <div className="mx-auto max-w-2xl text-center mb-14">
-            <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
-              3분 만에 완성되는 포토북
-            </h2>
-            <p className="mt-4 text-base text-[#707072]">
-              복잡한 과정 없이 세 단계만 거치면 됩니다.
-            </p>
+          <div className="mx-auto max-w-xl text-center mb-8">
+            <h2 className="text-2xl font-bold tracking-tight md:text-3xl">3분 만에 완성되는 포토북</h2>
+            <p className="mt-2 text-sm text-[#707072]">복잡한 과정 없이 세 단계만 거치면 됩니다.</p>
           </div>
 
           <div className="relative">
-            {/* 연결선 (데스크탑) */}
-            <div className="hidden md:block absolute top-14 left-[16.67%] right-[16.67%] h-px bg-[#dedede]" />
-
-            <div className="grid gap-8 md:grid-cols-3">
+            {/* 연결선 데스크탑 */}
+            <div className="hidden md:block absolute top-9 left-[22%] right-[22%] h-px bg-[#dedede]" />
+            <div className="grid gap-6 md:grid-cols-3">
               {STEPS.map(({ num, title, desc, color }) => (
-                <div key={num} className="relative flex flex-col items-center text-center gap-4">
-                  {/* 스텝 번호 원 */}
-                  <div className={`relative z-10 flex size-28 items-center justify-center ${color} border border-[#dedede]`}>
-                    <span className="font-display-num text-5xl font-bold text-[#111111]">{num}</span>
+                <div key={num} className="flex flex-col items-center text-center gap-3">
+                  <div className={`relative z-10 flex size-[72px] items-center justify-center ${color} border border-[#dedede]`}>
+                    <span className="font-display-num text-4xl font-bold text-[#111111]">{num}</span>
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold mb-2">{title}</h3>
-                    <p className="text-sm text-[#707072] leading-relaxed max-w-[26ch] mx-auto">{desc}</p>
+                    <h3 className="text-base font-bold mb-1">{title}</h3>
+                    <p className="text-sm text-[#707072] leading-relaxed max-w-[24ch] mx-auto">{desc}</p>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="mt-14 text-center">
+          <div className="mt-8 text-center">
             <Button asChild size="lg" className="font-semibold">
-              <Link href="/upload">
-                지금 시작하기
-                <ArrowRight className="size-4" />
-              </Link>
+              <Link href="/upload">지금 시작하기 <ArrowRight className="size-4" /></Link>
             </Button>
           </div>
         </div>
       </section>
 
       {/* ══ 6. 갤러리 미리보기 ══════════════════════════════════════════════ */}
-      <section className="py-20 md:py-28 bg-[#f5f5f5]">
+      <section className="py-10 md:py-14 bg-[#f5f5f5]">
         <div className="container">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6">
             <div>
-              <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
-                실제 포토북 후기
-              </h2>
-              <p className="mt-3 text-base text-[#707072]">
-                100p Books로 만든 실제 고객들의 포토북입니다.
-              </p>
+              <h2 className="text-2xl font-bold tracking-tight md:text-3xl">실제 포토북 후기</h2>
+              <p className="mt-1 text-sm text-[#707072]">100p Books로 만든 실제 고객들의 포토북입니다.</p>
             </div>
             <Button asChild variant="secondary" size="sm">
-              <Link href="/gallery">전체 후기 보기</Link>
+              <Link href="/gallery">전체 보기</Link>
             </Button>
           </div>
 
-          {/* 사진 그리드 — 4컬럼 마소나리 느낌 */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[
-              { src: "https://images.unsplash.com/photo-1523438885200-e635ba2c371e?w=600&q=75", span: "row-span-2" },
+              { src: "https://images.unsplash.com/photo-1523438885200-e635ba2c371e?w=600&q=75", rowSpan: true },
               { src: "https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d?w=600&q=75" },
               { src: "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&q=75" },
-              { src: "https://images.unsplash.com/photo-1542038784456-1ea8e935640e?w=600&q=75", span: "row-span-2" },
+              { src: "https://images.unsplash.com/photo-1542038784456-1ea8e935640e?w=600&q=75", rowSpan: true },
               { src: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=600&q=75" },
               { src: "https://images.unsplash.com/photo-1504208434309-cb69f4fe52b0?w=600&q=75" },
-            ].map(({ src, span = "" }, i) => (
+            ].map(({ src, rowSpan }, i) => (
               <div
                 key={i}
-                className={`relative overflow-hidden bg-[#dedede] ${span}`}
-                style={{ aspectRatio: span ? "3/4" : "1/1" }}
+                className={`relative overflow-hidden bg-[#dedede]${rowSpan ? " row-span-2" : ""}`}
+                style={{ aspectRatio: rowSpan ? "3/4" : "1/1" }}
               >
                 <Image
                   src={src}
@@ -373,28 +324,25 @@ export default function LandingPage() {
       </section>
 
       {/* ══ 7. 고객 리뷰 ════════════════════════════════════════════════════ */}
-      <section className="py-20 md:py-28 bg-white">
+      <section className="py-10 md:py-14 bg-white">
         <div className="container">
-          <div className="mx-auto max-w-2xl text-center mb-12">
-            <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
-              고객들의 생생한 후기
-            </h2>
+          <div className="mx-auto max-w-xl text-center mb-8">
+            <h2 className="text-2xl font-bold tracking-tight md:text-3xl">고객들의 생생한 후기</h2>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-3">
             {REVIEWS.map(({ name, rating, text }) => (
-              <div key={name} className="border border-[#dedede] bg-white p-6">
-                {/* 별점 */}
-                <div className="flex gap-0.5 mb-4">
+              <div key={name} className="border border-[#dedede] bg-white p-5">
+                <div className="flex gap-0.5 mb-3">
                   {Array.from({ length: rating }).map((_, i) => (
-                    <Star key={i} className="size-4 fill-amber-400 text-amber-400" />
+                    <Star key={i} className="size-3.5 fill-amber-400 text-amber-400" />
                   ))}
                 </div>
-                <p className="text-sm leading-relaxed text-[#39393b] mb-5">
+                <p className="text-sm leading-relaxed text-[#39393b] mb-4">
                   &ldquo;{text}&rdquo;
                 </p>
-                <div className="flex items-center gap-3">
-                  <div className="flex size-8 items-center justify-center rounded-full bg-[#f5f5f5] text-xs font-bold text-[#111111]">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-7 items-center justify-center rounded-full bg-[#f5f5f5] text-xs font-bold text-[#111111]">
                     {name[0]}
                   </div>
                   <span className="text-sm font-medium">{name}</span>
@@ -406,8 +354,7 @@ export default function LandingPage() {
       </section>
 
       {/* ══ 8. 최종 CTA ═════════════════════════════════════════════════════ */}
-      <section className="relative overflow-hidden bg-[#111111] py-20 md:py-28">
-        {/* 배경 사진 반투명 */}
+      <section className="relative overflow-hidden bg-[#111111] py-12 md:py-16">
         <Image
           src="https://images.unsplash.com/photo-1512438248247-f0f2a5a8b7f0?w=1200&q=60"
           alt="CTA 배경"
@@ -416,43 +363,43 @@ export default function LandingPage() {
           sizes="100vw"
         />
         <div className="container relative z-10 text-center">
-          <h2 className="text-4xl font-bold text-white md:text-5xl lg:text-6xl leading-tight">
-            이번 여행,
-            <br />
+          <h2 className="text-3xl font-bold text-white md:text-4xl lg:text-5xl leading-tight">
+            이번 여행,{" "}
             <span className="text-amber-300">책으로 남겨보세요.</span>
           </h2>
-          <p className="mt-5 text-base text-white/60 max-w-[36ch] mx-auto">
-            지금 사진을 올리면 3분 안에 첫 페이지가 완성됩니다.
-            무료로 시작할 수 있어요.
+          <p className="mt-3 text-sm text-white/55 max-w-[34ch] mx-auto">
+            지금 사진을 올리면 3분 안에 첫 페이지가 완성됩니다. 무료로 시작할 수 있어요.
           </p>
-          <div className="mt-10 flex flex-wrap justify-center gap-3">
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Button
               asChild
               size="lg"
               className="bg-white text-[#111111] hover:bg-[#f5f5f5] border-0 font-semibold"
             >
               <Link href="/upload">
-                무료로 만들기
-                <ArrowRight className="size-4" />
+                무료로 만들기 <ArrowRight className="size-4" />
               </Link>
             </Button>
-            <Button asChild variant="secondary" size="lg" className="bg-white/10 text-white border border-white/20 hover:bg-white/20">
+            <Button
+              asChild
+              size="lg"
+              className="bg-transparent text-white border border-white/25 hover:bg-white/10 hover:border-white/45"
+            >
               <Link href="/gallery">후기 갤러리 →</Link>
             </Button>
           </div>
 
-          {/* 하단 아이콘 그리드 */}
-          <div className="mt-16 grid grid-cols-3 gap-6 max-w-sm mx-auto">
+          <div className="mt-10 flex justify-center gap-10">
             {[
               { icon: BookOpen, label: "무료 시작" },
               { icon: Package, label: "빠른 배송" },
               { icon: Star, label: "5점 만점" },
             ].map(({ icon: Icon, label }) => (
-              <div key={label} className="flex flex-col items-center gap-2">
-                <div className="flex size-12 items-center justify-center rounded-full bg-white/10">
-                  <Icon className="size-5 text-white/70" />
+              <div key={label} className="flex flex-col items-center gap-1.5">
+                <div className="flex size-10 items-center justify-center rounded-full bg-white/10">
+                  <Icon className="size-4 text-white/60" />
                 </div>
-                <span className="text-xs text-white/50">{label}</span>
+                <span className="text-xs text-white/45">{label}</span>
               </div>
             ))}
           </div>
