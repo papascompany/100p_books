@@ -3,10 +3,10 @@ import Link from "next/link";
 export default function Footer() {
   const year = new Date().getFullYear();
   return (
-    <footer className="border-t border-border/60 bg-background/60">
-      <div className="container flex flex-col items-start justify-between gap-4 py-8 text-sm text-muted-foreground md:flex-row md:items-center">
-        <p className="font-display text-base text-foreground">
-          100p Books
+    <footer className="border-t border-[#cacacb] bg-white">
+      <div className="container flex flex-col items-start justify-between gap-4 py-8 text-sm text-[#707072] md:flex-row md:items-center">
+        <p className="font-campaign text-xl text-[#111111]">
+          100P BOOKS
           <span className="ml-2 text-xs text-muted-foreground">
             © {year} 나만의 포토북
           </span>

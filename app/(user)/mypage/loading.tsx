@@ -1,19 +1,15 @@
 export default function MypageLoading() {
   return (
-    <div className="container max-w-2xl py-8 animate-pulse">
-      <div className="mb-6 flex items-center gap-4">
-        <div className="size-14 rounded-full bg-muted" />
-        <div className="space-y-2">
-          <div className="h-5 w-32 rounded bg-muted" />
-          <div className="h-4 w-48 rounded bg-muted" />
-        </div>
+    <div className="container mx-auto max-w-3xl px-4 py-10 animate-pulse">
+      <div className="mb-8 space-y-2">
+        <div className="h-8 w-36 bg-[#e5e5e5]" />
+        <div className="h-4 w-52 bg-[#e5e5e5]" />
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="rounded-xl border bg-card p-5 space-y-2">
-            <div className="size-8 rounded-lg bg-muted" />
-            <div className="h-4 w-3/4 rounded bg-muted" />
-            <div className="h-3 w-full rounded bg-muted" />
+      <div className="grid gap-4 sm:grid-cols-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="border border-[#e5e5e5] bg-[#f5f5f5] p-6 space-y-3">
+            <div className="h-5 w-2/3 bg-[#e5e5e5]" />
+            <div className="h-4 w-full bg-[#e5e5e5]" />
           </div>
         ))}
       </div>

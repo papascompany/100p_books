@@ -115,9 +115,9 @@ export default function LoginForm() {
   }
 
   return (
-    <Card className="w-full max-w-md shadow-soft-lg">
+    <Card className="w-full max-w-md">
       <CardHeader className="text-center">
-        <CardTitle className="font-display text-3xl font-semibold tracking-tight">
+        <CardTitle className="text-3xl font-semibold tracking-tight">
           다시 만나 반가워요
         </CardTitle>
         <CardDescription className="mt-2 text-[15px]">
@@ -132,10 +132,10 @@ export default function LoginForm() {
           <div
             role="status"
             aria-live="polite"
-            className="rounded-lg border bg-accent/50 p-5 text-center"
+            className="border border-[#cacacb] bg-[#f5f5f5] p-5 text-center"
           >
-            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-background shadow-soft">
-              <Mail className="size-6 text-rose-500" aria-hidden />
+            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-white border border-[#cacacb]">
+              <Mail className="size-6 text-[#111111]" aria-hidden />
             </div>
             <p className="mt-3 text-base font-medium">이메일을 확인해주세요</p>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -229,7 +229,7 @@ export default function LoginForm() {
             {status.kind === "error" ? (
               <p
                 role="alert"
-                className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                className="border border-[#d30005]/30 bg-[#d30005]/5 px-3 py-2 text-sm text-[#d30005]"
               >
                 {status.message}
               </p>

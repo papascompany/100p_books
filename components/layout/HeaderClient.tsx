@@ -5,14 +5,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import * as React from "react";
 
-import ThemeToggle from "@/components/theme/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type NavItem = { href: string; label: string };
 
 const NAV: NavItem[] = [
-  { href: "/", label: "홈" },
   { href: "/gallery", label: "갤러리" },
   { href: "/attendance", label: "출석체크" },
   { href: "/projects", label: "내 포토북" },
@@ -23,103 +21,106 @@ export default function HeaderClient({ isAuthed }: { isAuthed: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = React.useState(false);
 
-  // 라우트 변경 시 모바일 메뉴 자동 닫힘
   React.useEffect(() => {
     setOpen(false);
   }, [pathname]);
 
   return (
     <>
-      {/* 데스크탑 네비 */}
+      {/* Desktop nav */}
       <nav
         aria-label="주요 네비게이션"
         className="hidden items-center gap-1 md:flex"
       >
-        {NAV.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              "rounded-md px-3 py-2 text-sm font-medium transition-colors",
-              pathname === item.href
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {item.label}
-          </Link>
-        ))}
+        {NAV.map((item) => {
+          const active = pathname === item.href || pathname.startsWith(item.href + "/");
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "relative px-3 py-2 text-sm font-medium transition-colors",
+                "after:absolute after:bottom-0 after:left-3 after:right-3 after:h-0.5 after:bg-[#111111] after:transition-opacity",
+                active
+                  ? "text-[#111111] after:opacity-100"
+                  : "text-[#707072] hover:text-[#111111] after:opacity-0",
+              )}
+            >
+              {item.label}
+            </Link>
+          );
+        })}
       </nav>
 
+      {/* Desktop right cluster */}
       <div className="hidden items-center gap-2 md:flex">
-        <ThemeToggle />
         {isAuthed ? (
-          <Button asChild variant="ghost" size="icon" aria-label="내 프로필">
-            <Link href="/mypage">
-              <UserRound />
-            </Link>
-          </Button>
+          <Link
+            href="/mypage"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f5f5f5] text-[#111111] transition-colors hover:bg-[#e5e5e5]"
+            aria-label="내 프로필"
+          >
+            <UserRound className="size-4" />
+          </Link>
         ) : (
-          <Button asChild variant="outline" size="sm">
+          <Button asChild size="sm">
             <Link href="/login">로그인</Link>
           </Button>
         )}
       </div>
 
-      {/* 모바일 햄버거 */}
+      {/* Mobile hamburger */}
       <div className="flex items-center gap-2 md:hidden">
-        <ThemeToggle />
-        <Button
-          variant="ghost"
-          size="icon"
+        <button
+          type="button"
           aria-label={open ? "메뉴 닫기" : "메뉴 열기"}
           aria-expanded={open}
           aria-controls="mobile-nav"
           onClick={() => setOpen((v) => !v)}
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f5f5f5] text-[#111111] transition-colors hover:bg-[#e5e5e5]"
         >
-          {open ? <X /> : <Menu />}
-        </Button>
+          {open ? <X className="size-5" /> : <Menu className="size-5" />}
+        </button>
       </div>
 
-      {/* 모바일 드로어 */}
+      {/* Mobile drawer */}
       {open ? (
         <div
           id="mobile-nav"
-          className={cn(
-            "absolute inset-x-0 top-16 z-50 border-b border-border/60",
-            "bg-background/95 backdrop-blur md:hidden",
-            "animate-fade-in",
-          )}
+          className="absolute inset-x-0 top-14 z-50 border-b border-[#cacacb] bg-white animate-fade-in md:hidden"
         >
           <nav
             aria-label="모바일 네비게이션"
-            className="container flex flex-col py-3"
+            className="container flex flex-col py-2"
           >
-            {NAV.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "rounded-md px-3 py-3 text-base font-medium",
-                  pathname === item.href
-                    ? "bg-accent text-accent-foreground"
-                    : "text-foreground hover:bg-accent/60",
-                )}
-              >
-                {item.label}
-              </Link>
-            ))}
-            <div className="mt-2 border-t border-border/60 pt-3">
+            {NAV.map((item) => {
+              const active = pathname === item.href || pathname.startsWith(item.href + "/");
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "px-3 py-4 text-base font-medium border-b border-[#e5e5e5] last:border-0",
+                    active
+                      ? "text-[#111111]"
+                      : "text-[#707072] hover:text-[#111111]",
+                  )}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+            <div className="py-4">
               {isAuthed ? (
                 <Link
                   href="/mypage"
-                  className="flex items-center gap-2 rounded-md px-3 py-3 text-base font-medium hover:bg-accent/60"
+                  className="flex items-center gap-2 px-3 py-3 text-base font-medium text-[#111111]"
                 >
                   <UserRound className="size-4" />
                   내 프로필
                 </Link>
               ) : (
-                <Button asChild className="w-full" size="lg">
+                <Button asChild className="w-full">
                   <Link href="/login">로그인</Link>
                 </Button>
               )}

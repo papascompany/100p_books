@@ -1,7 +1,5 @@
-/* 폰트: Pretendard(본문) — Variable 웹폰트 CSS import */
-@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.css");
-/* 폰트: Playfair Display(장식) — Google Fonts */
-@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&display=swap");
+/* Fonts: Bebas Neue (campaign display) + Inter (UI) */
+@import url("https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -9,66 +7,67 @@
 
 @layer base {
   :root {
-    /* 뉴트럴 따뜻한 톤 (인스타 감성) */
-    --background: 30 25% 99%;
-    --foreground: 20 14% 12%;
+    /* Nike palette — exact hex values mapped to HSL for shadcn compatibility */
+    --background: 0 0% 100%;          /* #ffffff canvas */
+    --foreground: 0 0% 7%;            /* #111111 ink */
 
-    --card: 0 0% 100%;
-    --card-foreground: 20 14% 12%;
+    --card: 0 0% 100%;                /* #ffffff */
+    --card-foreground: 0 0% 7%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 20 14% 12%;
+    --popover-foreground: 0 0% 7%;
 
-    --primary: 20 14% 15%;
-    --primary-foreground: 30 25% 99%;
+    --primary: 0 0% 7%;               /* #111111 ink */
+    --primary-foreground: 0 0% 100%;  /* #ffffff */
 
-    --secondary: 30 20% 96%;
-    --secondary-foreground: 20 14% 18%;
+    --secondary: 0 0% 96%;            /* #f5f5f5 soft-cloud */
+    --secondary-foreground: 0 0% 7%;  /* #111111 */
 
-    --muted: 30 15% 95%;
-    --muted-foreground: 20 8% 45%;
+    --muted: 0 0% 96%;                /* #f5f5f5 soft-cloud */
+    --muted-foreground: 0 0% 44%;     /* #707072 mute */
 
-    --accent: 15 80% 95%;
-    --accent-foreground: 15 60% 30%;
+    --accent: 0 0% 96%;               /* #f5f5f5 soft-cloud */
+    --accent-foreground: 0 0% 7%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 1 97% 41%;         /* #d30005 sale */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 30 12% 90%;
-    --input: 30 12% 90%;
-    --ring: 15 70% 55%;
+    --border: 0 0% 79%;               /* #cacacb hairline */
+    --input: 0 0% 79%;
+    --ring: 0 0% 7%;                  /* ink focus ring */
 
-    --radius: 0.75rem;
+    --radius: 0rem;                   /* Nike: zero radius for containers */
   }
 
+  /* No dark mode — Nike system is light-only, we keep a minimal dark */
   .dark {
-    --background: 20 14% 8%;
-    --foreground: 30 20% 96%;
+    --background: 0 0% 7%;
+    --foreground: 0 0% 96%;
 
-    --card: 20 14% 11%;
-    --card-foreground: 30 20% 96%;
+    --card: 0 0% 11%;
+    --card-foreground: 0 0% 96%;
 
-    --popover: 20 14% 11%;
-    --popover-foreground: 30 20% 96%;
+    --popover: 0 0% 11%;
+    --popover-foreground: 0 0% 96%;
 
-    --primary: 30 20% 96%;
-    --primary-foreground: 20 14% 12%;
+    --primary: 0 0% 96%;
+    --primary-foreground: 0 0% 7%;
 
-    --secondary: 20 8% 18%;
-    --secondary-foreground: 30 20% 96%;
+    --secondary: 0 0% 16%;
+    --secondary-foreground: 0 0% 96%;
 
-    --muted: 20 8% 18%;
-    --muted-foreground: 20 8% 65%;
+    --muted: 0 0% 16%;
+    --muted-foreground: 0 0% 60%;
 
-    --accent: 20 14% 20%;
-    --accent-foreground: 30 20% 96%;
+    --accent: 0 0% 16%;
+    --accent-foreground: 0 0% 96%;
 
-    --destructive: 0 62% 50%;
+    --destructive: 1 97% 41%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 20 8% 22%;
-    --input: 20 8% 22%;
-    --ring: 15 70% 55%;
+    --border: 0 0% 22%;
+    --input: 0 0% 22%;
+    --ring: 0 0% 96%;
   }
 }
 
@@ -84,12 +83,9 @@
 
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "ss01", "ss02", "cv01", "cv11";
+    font-feature-settings: "kern", "liga";
   }
 
-  /* 기본 포커스 링 유지 (shadcn `focus-visible:ring-*`가 있는 요소는 자체 스타일 우선) */
-
-  /* 모션 감소 환경 지원 */
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -103,25 +99,21 @@
 }
 
 @layer utilities {
-  .font-display {
-    font-family: var(--font-display, "Playfair Display"), serif;
+  /* Campaign display font — Bebas Neue, Nike-style */
+  .font-campaign {
+    font-family: "Bebas Neue", "Anton", "Impact", "Arial Black", sans-serif;
+    line-height: 0.9;
+    letter-spacing: -0.005em;
+    text-transform: uppercase;
   }
 
-  /* 인스타 감성 따뜻한 그라디언트 */
-  .bg-hero-gradient {
-    background-image: linear-gradient(
-      135deg,
-      hsl(12 90% 96%) 0%,
-      hsl(35 90% 95%) 45%,
-      hsl(30 25% 99%) 100%
-    );
+  /* Hairline divider */
+  .border-hairline {
+    border-color: #cacacb;
   }
-  .dark .bg-hero-gradient {
-    background-image: linear-gradient(
-      135deg,
-      hsl(20 20% 12%) 0%,
-      hsl(15 18% 14%) 45%,
-      hsl(20 14% 8%) 100%
-    );
+
+  /* Soft-cloud surface */
+  .bg-soft-cloud {
+    background-color: #f5f5f5;
   }
 }

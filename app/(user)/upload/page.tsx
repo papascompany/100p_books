@@ -93,10 +93,10 @@ export default async function UploadPage({ searchParams }: PageProps) {
   return (
     <div className="container py-8 md:py-12">
       <header className="mx-auto max-w-3xl text-center">
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-rose-500/90">
-          step 1 of 4
+        <p className="text-xs font-medium uppercase tracking-[0.2em] text-[#9e9ea0]">
+          STEP 1 OF 4
         </p>
-        <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
           사진을 모아주세요.
         </h1>
         <p className="mt-3 text-base text-muted-foreground">

@@ -2,11 +2,11 @@ import type { Config } from "tailwindcss";
 import animate from "tailwindcss-animate";
 
 /**
- * 100p_books 디자인 시스템.
+ * 100p_books — Nike Design System
  *
- * - 컬러: shadcn 방식의 CSS 변수(HSL)로 라이트/다크 모두 지원
- * - 타이포: Pretendard(본문) + Playfair Display(장식)
- * - 모서리: 카드 12px / 버튼 8px
+ * Colors: ink #111111 / canvas #ffffff / soft-cloud #f5f5f5
+ * Type: Bebas Neue (campaign) + Inter (UI)
+ * Radius: none (cards) / lg=30px pill (CTAs) / full=9999px (icon btns)
  */
 const config: Config = {
   darkMode: ["class"],
@@ -62,39 +62,65 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        /* Nike palette direct tokens */
+        ink: "#111111",
+        canvas: "#ffffff",
+        "soft-cloud": "#f5f5f5",
+        charcoal: "#39393b",
+        ash: "#4b4b4d",
+        mute: "#707072",
+        stone: "#9e9ea0",
+        hairline: "#cacacb",
+        "hairline-soft": "#e5e5e5",
+        sale: "#d30005",
+        success: "#007d48",
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        /* Nike scale */
+        none: "0px",
+        sm: "18px",
+        md: "24px",
+        lg: "30px",            /* pill CTAs */
+        full: "9999px",        /* icon buttons, swatch dots */
+        /* keep shadcn aliases mapping to Nike lg */
+        DEFAULT: "0px",
       },
       fontFamily: {
         sans: [
-          "Pretendard Variable",
-          "Pretendard",
+          "Inter",
           "ui-sans-serif",
           "system-ui",
           "-apple-system",
-          "BlinkMacSystemFont",
-          "Segoe UI",
-          "Roboto",
           "Helvetica Neue",
           "Arial",
           "sans-serif",
         ],
+        campaign: [
+          "Bebas Neue",
+          "Anton",
+          "Impact",
+          "Arial Black",
+          "sans-serif",
+        ],
+        /* keep display alias for any legacy usage */
         display: [
-          "Playfair Display",
-          "ui-serif",
-          "Georgia",
-          "Cambria",
-          "Times New Roman",
-          "serif",
+          "Inter",
+          "ui-sans-serif",
+          "system-ui",
+          "sans-serif",
         ],
       },
+      fontSize: {
+        /* Nike display scale */
+        "campaign-lg": ["96px", { lineHeight: "0.9", letterSpacing: "-0.005em" }],
+        "campaign-md": ["64px", { lineHeight: "0.9", letterSpacing: "-0.005em" }],
+        "campaign-sm": ["48px", { lineHeight: "0.9", letterSpacing: "-0.005em" }],
+      },
       boxShadow: {
-        soft: "0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)",
-        "soft-lg":
-          "0 10px 30px -12px rgba(0,0,0,0.08), 0 4px 10px -4px rgba(0,0,0,0.04)",
+        /* Nike: no elevation shadows — only hairline dividers */
+        soft: "none",
+        "soft-lg": "none",
+        "inset-hairline": "inset 0 -1px 0 #e5e5e5",
       },
       keyframes: {
         "accordion-down": {
@@ -113,7 +139,11 @@ const config: Config = {
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "fade-in": "fade-in 0.25s ease-out both",
+        "fade-in": "fade-in 0.2s ease-out both",
+      },
+      spacing: {
+        /* Nike spacing scale */
+        "section": "48px",
       },
     },
   },

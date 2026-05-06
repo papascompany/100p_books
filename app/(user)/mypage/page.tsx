@@ -70,7 +70,7 @@ export default async function MyPage() {
     <div className="container mx-auto max-w-3xl px-4 py-10">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight md:text-4xl">
+          <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
             마이페이지
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -82,7 +82,7 @@ export default async function MyPage() {
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         <Link href="/mypage/orders" className="group">
-          <Card className="h-full transition-colors hover:border-foreground/30 hover:bg-accent/30">
+          <Card className="h-full transition-colors hover:border-[#111111]">
             <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
               <div>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -102,7 +102,7 @@ export default async function MyPage() {
         </Link>
 
         <Link href="/mypage/photos" className="group">
-          <Card className="h-full transition-colors hover:border-foreground/30 hover:bg-accent/30">
+          <Card className="h-full transition-colors hover:border-[#111111]">
             <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
               <div>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -123,7 +123,7 @@ export default async function MyPage() {
         </Link>
 
         <Link href="/mypage/trash" className="group">
-          <Card className="h-full transition-colors hover:border-foreground/30 hover:bg-accent/30">
+          <Card className="h-full transition-colors hover:border-[#111111]">
             <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
               <div>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -144,7 +144,7 @@ export default async function MyPage() {
         </Link>
 
         <Link href="/mypage/account" className="group">
-          <Card className="h-full transition-colors hover:border-foreground/30 hover:bg-accent/30">
+          <Card className="h-full transition-colors hover:border-[#111111]">
             <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
               <div>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -165,7 +165,7 @@ export default async function MyPage() {
         </Link>
 
         <Link href="/gallery" className="group">
-          <Card className="h-full transition-colors hover:border-foreground/30 hover:bg-accent/30">
+          <Card className="h-full transition-colors hover:border-[#111111]">
             <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
               <div>
                 <CardTitle className="flex items-center gap-2 text-base">

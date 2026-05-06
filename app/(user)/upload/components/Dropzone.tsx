@@ -87,24 +87,24 @@ export default function Dropzone({ onFiles, disabled = false, hint }: DropzonePr
         onDragLeave={() => setIsOver(false)}
         onDrop={handleDrop}
         className={cn(
-          "relative flex min-h-[280px] cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed p-10 text-center transition-colors",
+          "relative flex min-h-[280px] cursor-pointer flex-col items-center justify-center gap-4 border-2 border-dashed p-10 text-center transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
           isOver
-            ? "border-rose-400 bg-rose-50/60"
-            : "border-muted-foreground/25 bg-gradient-to-br from-rose-50/50 via-white to-amber-50/50 hover:border-rose-300 hover:bg-rose-50/40",
+            ? "border-[#111111] bg-[#f5f5f5]"
+            : "border-[#cacacb] bg-[#f5f5f5] hover:border-[#111111]",
           disabled && "cursor-not-allowed opacity-60",
         )}
       >
-        <div className="flex size-14 items-center justify-center rounded-2xl bg-white shadow-soft">
+        <div className="flex size-14 items-center justify-center rounded-full bg-white border border-[#cacacb]">
           {isOver ? (
-            <Upload className="size-6 text-rose-500" aria-hidden />
+            <Upload className="size-6 text-[#111111]" aria-hidden />
           ) : (
-            <ImagePlus className="size-6 text-rose-500" aria-hidden />
+            <ImagePlus className="size-6 text-[#111111]" aria-hidden />
           )}
         </div>
 
         <div>
-          <p className="font-display text-xl font-semibold tracking-tight text-foreground">
+          <p className="text-xl font-semibold tracking-tight text-[#111111]">
             {isOver
               ? "이대로 놓아주세요"
               : isMobile
