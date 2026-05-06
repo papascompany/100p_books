@@ -13,7 +13,8 @@ export const metadata: Metadata = {
   },
 };
 
-export const dynamic = "force-dynamic";
+// ISR: 60초마다 재생성 (force-dynamic 대비 첫 방문자도 캐시 히트)
+export const revalidate = 60;
 
 interface ReviewItem {
   id: string;
@@ -38,7 +39,7 @@ async function getInitialReviews(): Promise<ReviewListResponse> {
     const base = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
     const url = `${base}/api/reviews?sort=recent&limit=12`;
 
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetch(url, { next: { revalidate: 60 } });
     if (!res.ok) return { items: [], nextCursor: null };
 
     const json = (await res.json()) as {

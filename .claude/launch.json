@@ -4,8 +4,8 @@
     {
       "name": "100p_books-dev",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev"],
-      "port": 3000
+      "runtimeArgs": ["dev", "--port", "3001"],
+      "port": 3001
     }
   ]
 }

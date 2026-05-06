@@ -1,19 +1,22 @@
 import "server-only";
 
+import { cache } from "react";
+
 import type { User } from "@supabase/supabase-js";
 
 import { createServerSupabase } from "@/lib/db/server";
 
 /**
  * 현재 요청의 Supabase 세션을 반환 (없으면 null).
+ * React cache()로 같은 요청 내 중복 호출을 1회로 줄임.
  */
-export async function getSession() {
+export const getSession = cache(async () => {
   const supabase = createServerSupabase();
   const {
     data: { session },
   } = await supabase.auth.getSession();
   return session;
-}
+});
 
 /**
  * 인증 에러를 throw 하는 헬퍼.
@@ -34,13 +37,14 @@ function authError(
 
 /**
  * 로그인한 유저를 반환. 없으면 throw.
+ * React cache()로 같은 요청 내 중복 Supabase getUser 호출을 1회로 줄임.
  *
  * 추가 가드:
  *   - profiles.deleted_at IS NOT NULL → 410 GONE (탈퇴 익명화된 계정)
  *
  * Route Handler / Server Action 에서 쓰면 상위 try/catch 가 표준 fail 응답으로 처리.
  */
-export async function requireUser(): Promise<User> {
+export const requireUser = cache(async (): Promise<User> => {
   const supabase = createServerSupabase();
   const {
     data: { user },
@@ -67,7 +71,7 @@ export async function requireUser(): Promise<User> {
   }
 
   return user!;
-}
+});
 
 /**
  * admin 역할 유저를 반환. 아니면 throw (403).

@@ -1,23 +1,34 @@
+import { cookies } from "next/headers";
 import Link from "next/link";
 
-import { getSession } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
 
 import HeaderClient from "./HeaderClient";
 
 /**
  * 상단 글로벌 헤더.
- * 서버 컴포넌트에서 세션 유무만 판단해 HeaderClient 에 넘긴다.
+ * 인증 여부는 Supabase SSR 쿠키를 직접 읽어 판단 — 네트워크 호출 0회.
+ * (미들웨어가 모든 요청에서 쿠키를 최신 상태로 갱신함)
  */
-export default async function Header() {
-  let isAuthed = false;
+function readIsAuthedFromCookie(): boolean {
   try {
-    const session = await getSession();
-    isAuthed = Boolean(session?.user);
+    const cookieStore = cookies();
+    const projectRef =
+      process.env.NEXT_PUBLIC_SUPABASE_URL?.match(/\/\/([^.]+)/)?.[1] ?? "";
+    if (!projectRef) return false;
+    // @supabase/ssr 은 토큰을 청크로 나눌 수 있음: -auth-token, -auth-token.0 …
+    const base = `sb-${projectRef}-auth-token`;
+    return (
+      Boolean(cookieStore.get(base)?.value) ||
+      Boolean(cookieStore.get(`${base}.0`)?.value)
+    );
   } catch {
-    // env 미설정 / 세션 조회 실패 시 비로그인으로 간주
-    isAuthed = false;
+    return false;
   }
+}
+
+export default function Header() {
+  const isAuthed = readIsAuthedFromCookie();
 
   return (
     <header
