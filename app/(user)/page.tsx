@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import StepsSection from "@/components/home/StepsSection";
 
 // ─── 데이터 ────────────────────────────────────────────────────────────────
 
@@ -24,26 +25,6 @@ const FEATURES = [
   },
 ] as const;
 
-const STEPS = [
-  {
-    num: "01",
-    title: "사진 업로드",
-    desc: "최대 100장. HEIC, JPG, PNG 모두 지원하며 EXIF 기준으로 자동 정렬됩니다.",
-    color: "bg-amber-50",
-  },
-  {
-    num: "02",
-    title: "자동 배치 & 편집",
-    desc: "AI가 페이지를 채우고, 원하는 레이아웃으로 자유롭게 수정하세요.",
-    color: "bg-sky-50",
-  },
-  {
-    num: "03",
-    title: "인쇄 주문",
-    desc: "결제 후 3~5일 안에 고품질 포토북이 도착합니다.",
-    color: "bg-rose-50",
-  },
-] as const;
 
 const BOOK_SIZES = [
   { name: "미니", size: "96×128mm", desc: "손에 쏙 들어오는 작은 책", icon: "📖" },
@@ -250,38 +231,7 @@ export default function LandingPage() {
       </section>
 
       {/* ══ 5. 사용 방법 3스텝 ══════════════════════════════════════════════ */}
-      <section className="py-10 md:py-14 bg-white">
-        <div className="container">
-          <div className="mx-auto max-w-xl text-center mb-8">
-            <h2 className="text-2xl font-bold tracking-tight md:text-3xl">3분 만에 완성되는 포토북</h2>
-            <p className="mt-2 text-sm text-[#707072]">복잡한 과정 없이 세 단계만 거치면 됩니다.</p>
-          </div>
-
-          <div className="relative">
-            {/* 연결선 데스크탑 */}
-            <div className="hidden md:block absolute top-9 left-[22%] right-[22%] h-px bg-[#dedede]" />
-            <div className="grid gap-6 md:grid-cols-3">
-              {STEPS.map(({ num, title, desc, color }) => (
-                <div key={num} className="flex flex-col items-center text-center gap-3">
-                  <div className={`relative z-10 flex size-[72px] items-center justify-center ${color} border border-[#dedede]`}>
-                    <span className="font-display-num text-4xl font-bold text-[#111111]">{num}</span>
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold mb-1">{title}</h3>
-                    <p className="text-sm text-[#707072] leading-relaxed max-w-[24ch] mx-auto">{desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-8 text-center">
-            <Button asChild size="lg" className="font-semibold">
-              <Link href="/upload">지금 시작하기 <ArrowRight className="size-4" /></Link>
-            </Button>
-          </div>
-        </div>
-      </section>
+      <StepsSection />
 
       {/* ══ 6. 갤러리 미리보기 ══════════════════════════════════════════════ */}
       <section className="py-10 md:py-14 bg-[#f5f5f5]">
