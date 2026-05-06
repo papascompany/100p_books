@@ -119,7 +119,7 @@ export default function LandingPage() {
           <div className="w-36 bg-white p-2.5 pb-7 shadow-2xl" style={{ transform: "rotate(-4deg)" }}>
             <div className="relative h-28 w-full overflow-hidden bg-[#f5f5f5]">
               <Image
-                src="https://images.unsplash.com/photo-1512438248247-f0f2a5a8b7f0?w=400&q=75"
+                src="https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=400&q=75"
                 alt="포토북 예시"
                 fill
                 className="object-cover"
@@ -131,7 +131,7 @@ export default function LandingPage() {
           <div className="w-36 bg-white p-2.5 pb-7 shadow-2xl" style={{ transform: "rotate(3deg) translateX(10px)" }}>
             <div className="relative h-28 w-full overflow-hidden bg-[#f5f5f5]">
               <Image
-                src="https://images.unsplash.com/photo-1511895426328-dc8714191011?w=400&q=75"
+                src="https://images.unsplash.com/photo-1523438885200-e635ba2c371e?w=400&q=75"
                 alt="포토북 예시 2"
                 fill
                 className="object-cover"
@@ -306,7 +306,7 @@ export default function LandingPage() {
       {/* ══ 8. 최종 CTA ═════════════════════════════════════════════════════ */}
       <section className="relative overflow-hidden bg-[#111111] py-12 md:py-16">
         <Image
-          src="https://images.unsplash.com/photo-1512438248247-f0f2a5a8b7f0?w=1200&q=60"
+          src="https://images.unsplash.com/photo-1504208434309-cb69f4fe52b0?w=1200&q=60"
           alt="CTA 배경"
           fill
           className="object-cover opacity-20"
