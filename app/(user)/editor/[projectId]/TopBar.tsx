@@ -1,8 +1,10 @@
 "use client";
 
+import { Share2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+import ShareDialog from "@/components/editor/ShareDialog";
 import { Button } from "@/components/ui/button";
 
 export interface TopBarProps {
@@ -26,6 +28,7 @@ export default function TopBar({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const lastSavedRef = useRef(initialTitle);
+  const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
     lastSavedRef.current = initialTitle;
@@ -100,6 +103,16 @@ export default function TopBar({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setShareOpen(true)}
+          aria-label="포토북 공유 링크 관리"
+        >
+          <Share2 className="size-4" aria-hidden />
+          공유
+        </Button>
         <Button asChild variant="outline" size="sm">
           <Link href={`/cover/${projectId}`} aria-label="표지 편집으로 이동">
             표지 편집
@@ -122,6 +135,12 @@ export default function TopBar({
           </Button>
         )}
       </div>
+
+      <ShareDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        projectId={projectId}
+      />
     </header>
   );
 }

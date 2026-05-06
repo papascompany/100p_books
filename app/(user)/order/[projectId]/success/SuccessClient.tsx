@@ -4,6 +4,7 @@ import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+import { GiftDialog } from "@/components/orders/GiftDialog";
 import { Button } from "@/components/ui/button";
 
 export interface SuccessClientProps {
@@ -123,10 +124,11 @@ export default function SuccessClient(props: SuccessClientProps) {
           재처리합니다.
         </p>
       ) : null}
-      <div className="mt-5 flex justify-center gap-2">
+      <div className="mt-5 flex flex-wrap justify-center gap-2">
         <Button asChild variant="outline">
           <Link href="/">홈</Link>
         </Button>
+        <GiftDialog orderId={props.orderId} />
         <Button asChild variant="gradient">
           <Link href={`/mypage/orders/${props.orderId}`}>주문 상세</Link>
         </Button>

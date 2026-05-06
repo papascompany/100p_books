@@ -10,6 +10,7 @@ import { enqueueEmail } from "@/lib/email/queue";
 import { assertTransition } from "@/lib/orders/state";
 import { confirmTossPayment, TossError } from "@/lib/payments/toss";
 import { enqueueAndRunPdfJob } from "@/lib/pdf/job-runner";
+import { REFERRAL_REWARD } from "@/lib/referrals/code";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
     const { data: order, error: orderErr } = await supabase
       .from("orders")
       .select(
-        "id, project_id, user_id, qty, amount, address, status, toss_payment_key, toss_order_id, cover_pdf_key, interior_pdf_key, paid_at, created_at, updated_at",
+        "id, project_id, user_id, qty, amount, address, status, toss_payment_key, toss_order_id, cover_pdf_key, interior_pdf_key, paid_at, discount_code_id, discount_amount, points_used, created_at, updated_at",
       )
       .eq("id", orderId)
       .maybeSingle();
@@ -148,7 +149,28 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4) orders UPDATE — pending → paid (상태 머신 점검)
+    // 4) 포인트 차감 (atomic) — order.points_used > 0 인 경우에만.
+    //    Toss 결제는 이미 성공했으므로 차감 실패 시에도 결제는 살린다 (관리자 보정).
+    if (order.points_used && order.points_used > 0) {
+      const { data: newBalance, error: dedErr } = await admin.rpc(
+        "deduct_user_points",
+        { p_user_id: order.user_id, p_amount: order.points_used },
+      );
+      if (dedErr) {
+        console.warn(
+          "[payments/confirm] deduct_user_points 호출 실패:",
+          dedErr.message,
+        );
+      } else if (typeof newBalance === "number" && newBalance < 0) {
+        // 잔액 부족이지만 결제는 이미 성공 — 0 으로 표시(충전 0원) + 경고
+        console.warn(
+          "[payments/confirm] 포인트 잔액 부족이나 결제는 진행됨",
+          { orderId: order.id, requested: order.points_used },
+        );
+      }
+    }
+
+    // 5) orders UPDATE — pending → paid (상태 머신 점검)
     assertTransition("pending", "paid");
     const { error: upErr } = await admin
       .from("orders")
@@ -167,6 +189,86 @@ export async function POST(req: Request) {
       .from("projects")
       .update({ status: "ordered" })
       .eq("id", order.project_id);
+
+    // 5-1) 친구 추천 보상 (M16-4) — 이번 결제가 본 사용자의 첫 결제(paid+)인 경우에만.
+    //   현재 주문(order.id) 외에 status != 'pending' 이고 paid_at IS NOT NULL 인 다른 주문이 없으면 첫 결제.
+    //   referrals 에 referee_id = user 인 pending 행이 있으면 award_referral_reward RPC 로 atomic 처리.
+    //   실패해도 결제는 살림.
+    try {
+      const { count: priorPaidCount, error: cntErr } = await admin
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", order.user_id)
+        .neq("status", "pending")
+        .neq("id", order.id)
+        .not("paid_at", "is", null);
+
+      if (cntErr) {
+        console.warn(
+          "[payments/confirm] 첫 결제 카운트 실패:",
+          cntErr.message,
+        );
+      } else if ((priorPaidCount ?? 0) === 0) {
+        // 첫 결제 — referrals.pending 이 있으면 보상 지급.
+        const { data: referrerId, error: rwdErr } = await admin.rpc(
+          "award_referral_reward",
+          { p_referee_id: order.user_id, p_reward: REFERRAL_REWARD },
+        );
+        if (rwdErr) {
+          console.warn(
+            "[payments/confirm] award_referral_reward 실패:",
+            rwdErr.message,
+          );
+        } else if (referrerId) {
+          console.info(
+            `[payments/confirm] 추천 보상 +${REFERRAL_REWARD}P 지급`,
+            { referrerId, refereeId: order.user_id, orderId: order.id },
+          );
+        }
+      }
+    } catch (e) {
+      console.warn(
+        "[payments/confirm] 추천 보상 처리 예외:",
+        e instanceof Error ? e.message : String(e),
+      );
+    }
+
+    // 4-1) 할인 코드 사용 마킹 — 결제 성공 후에만 기록.
+    //   - discount_uses INSERT (UNIQUE(code_id, user_id) 로 중복 방지 — 멱등 호출 안전)
+    //   - discount_codes.used_count += 1
+    //   실패해도 결제는 살림 (관리자 보정 가능). console.warn 로 추적.
+    if (order.discount_code_id) {
+      const { error: useErr } = await admin.from("discount_uses").insert({
+        code_id: order.discount_code_id,
+        user_id: order.user_id,
+        order_id: order.id,
+      });
+      if (useErr && (useErr as { code?: string }).code !== "23505") {
+        console.warn(
+          "[payments/confirm] discount_uses insert failed:",
+          useErr.message,
+        );
+      } else if (!useErr) {
+        // 신규 사용 기록 — used_count 증가
+        const { data: dc, error: rdErr } = await admin
+          .from("discount_codes")
+          .select("used_count")
+          .eq("id", order.discount_code_id)
+          .maybeSingle();
+        if (!rdErr && dc) {
+          const { error: incErr } = await admin
+            .from("discount_codes")
+            .update({ used_count: (dc.used_count ?? 0) + 1 })
+            .eq("id", order.discount_code_id);
+          if (incErr) {
+            console.warn(
+              "[payments/confirm] discount used_count update failed:",
+              incErr.message,
+            );
+          }
+        }
+      }
+    }
 
     // 5) PDF 빌드 잡 — 영속 큐(pdf_build_jobs) 에 등록 후 즉시 실행.
     //    실패해도 결제는 살려둠. 잡 행이 남아있어 관리자가 재시도 가능.

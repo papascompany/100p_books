@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 
 import { ThemeProvider, THEME_INIT_SCRIPT } from "@/components/theme/ThemeProvider";
 import Toaster from "@/components/ui/toaster";
+import RegisterSW from "@/components/pwa/RegisterSW";
+import InstallPrompt from "@/components/pwa/InstallPrompt";
 
 import "./globals.css";
 
@@ -28,8 +30,15 @@ export const metadata: Metadata = {
     "100p_books",
     "주문 인쇄",
   ],
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "100p Books",
+  },
   icons: {
     icon: "/favicon.ico",
+    apple: "/icons/icon-192.png",
   },
   alternates: {
     canonical: "/",
@@ -91,7 +100,9 @@ export default function RootLayout({
         <ThemeProvider>
           <div className="flex min-h-screen flex-col">{children}</div>
           <Toaster />
+          <InstallPrompt />
         </ThemeProvider>
+        <RegisterSW />
       </body>
     </html>
   );

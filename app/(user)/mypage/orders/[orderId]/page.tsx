@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import OrderPdfButtons from "./OrderPdfButtons";
+import { GiftDialog } from "@/components/orders/GiftDialog";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
@@ -184,6 +185,9 @@ export default async function OrderDetailPage({ params }: PageProps) {
         <Button asChild variant="outline">
           <Link href={`/editor/${order.project_id}`}>프로젝트 보기</Link>
         </Button>
+        {canDownloadPdfs(order.status) && (
+          <GiftDialog orderId={order.id} />
+        )}
       </div>
     </div>
   );

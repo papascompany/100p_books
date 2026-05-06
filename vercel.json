@@ -22,12 +22,30 @@
     },
     "app/api/cron/process-emails/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/cron/attendance-reset/route.ts": {
+      "maxDuration": 60
     }
   },
   "crons": [
-    { "path": "/api/cron/process-emails", "schedule": "0 9 * * *" }
+    { "path": "/api/cron/process-emails", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/attendance-reset", "schedule": "0 15 * * *" }
   ],
   "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
+        { "key": "Service-Worker-Allowed", "value": "/" }
+      ]
+    },
+    {
+      "source": "/manifest.json",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=86400" },
+        { "key": "Content-Type", "value": "application/manifest+json" }
+      ]
+    },
     {
       "source": "/api/pdf/(.*)",
       "headers": [

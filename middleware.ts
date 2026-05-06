@@ -3,6 +3,11 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import type { Database } from "@/lib/db/types";
 
+/** 친구 추천(M16-4) — ?ref=CODE 를 30일 쿠키에 저장. */
+const REFERRAL_COOKIE = "referral_code";
+const REFERRAL_COOKIE_MAX_AGE_SEC = 60 * 60 * 24 * 30;
+const REFERRAL_CODE_REGEX = /^[A-Z0-9]{4,16}$/;
+
 /**
  * 세션 쿠키를 새로고침하고 /admin/** · /api/admin/** 는 role=admin 을 강제한다.
  */
@@ -24,6 +29,13 @@ export async function middleware(req: NextRequest) {
   const res = NextResponse.next({
     request: { headers: req.headers },
   });
+
+  // 친구 추천 코드 캡처
+  //   ?ref=CODE → referral_code 쿠키 (30일).
+  //   - 이미 동일 쿠키가 있으면 갱신만, 다른 코드면 덮어쓰기.
+  //   - 인증 여부는 아래에서 알 수 있으므로 일단 캡처는 모든 요청에 적용.
+  //     (로그인된 사용자에 대한 무시는 아래 user 확인 후 처리.)
+  const refParam = req.nextUrl.searchParams.get("ref");
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -53,6 +65,26 @@ export async function middleware(req: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // 친구 추천 코드 — 비로그인 사용자에 한해 쿠키 set.
+  // 로그인된 사용자에게는 저장하지 않음 (이미 가입 처리가 끝났으므로).
+  if (refParam && !user) {
+    const code = refParam.trim().toUpperCase();
+    if (REFERRAL_CODE_REGEX.test(code)) {
+      const existing = req.cookies.get(REFERRAL_COOKIE)?.value;
+      if (existing !== code) {
+        res.cookies.set({
+          name: REFERRAL_COOKIE,
+          value: code,
+          path: "/",
+          maxAge: REFERRAL_COOKIE_MAX_AGE_SEC,
+          sameSite: "lax",
+          httpOnly: false,
+          secure: process.env.NODE_ENV === "production",
+        });
+      }
+    }
+  }
 
   const { pathname } = req.nextUrl;
   const isAdminPage = pathname.startsWith("/admin");

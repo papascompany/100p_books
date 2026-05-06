@@ -3,6 +3,8 @@
 import { ImagePlus, Upload } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
+import UploadSourceSheet from "@/components/upload/UploadSourceSheet";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 
 interface DropzoneProps {
@@ -15,16 +17,27 @@ interface DropzoneProps {
 
 /**
  * 드래그&드롭 + 클릭/키보드로 파일 피커.
- * 모바일에서는 갤러리 또는 카메라 선택 가능 (capture 미지정 → 둘 다).
+ *
+ * - 데스크탑: 드래그&드롭 드롭존 + 클릭 → 갤러리 input
+ * - 모바일(≤768px): 클릭 → UploadSourceSheet 오픈
+ *   - "사진 선택" → 갤러리 (multiple)
+ *   - "카메라로 찍기" → `capture="environment"` 카메라 직접 실행
  */
 export default function Dropzone({ onFiles, disabled = false, hint }: DropzoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isOver, setIsOver] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const isMobile = useMediaQuery("(max-width: 768px)");
 
   const open = useCallback(() => {
     if (disabled) return;
-    inputRef.current?.click();
-  }, [disabled]);
+    if (isMobile) {
+      setSheetOpen(true);
+    } else {
+      inputRef.current?.click();
+    }
+  }, [disabled, isMobile]);
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -50,62 +63,88 @@ export default function Dropzone({ onFiles, disabled = false, hint }: DropzonePr
   );
 
   return (
-    <div
-      role="button"
-      tabIndex={disabled ? -1 : 0}
-      aria-disabled={disabled}
-      aria-label="사진을 끌어다 놓거나 클릭하여 선택"
-      onClick={open}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          open();
+    <>
+      <div
+        role="button"
+        tabIndex={disabled ? -1 : 0}
+        aria-disabled={disabled}
+        aria-label={
+          isMobile
+            ? "탭하여 갤러리 또는 카메라로 사진 추가"
+            : "사진을 끌어다 놓거나 클릭하여 선택"
         }
-      }}
-      onDragOver={(e) => {
-        e.preventDefault();
-        if (!disabled) setIsOver(true);
-      }}
-      onDragLeave={() => setIsOver(false)}
-      onDrop={handleDrop}
-      className={cn(
-        "relative flex min-h-[280px] cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed p-10 text-center transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-        isOver
-          ? "border-rose-400 bg-rose-50/60"
-          : "border-muted-foreground/25 bg-gradient-to-br from-rose-50/50 via-white to-amber-50/50 hover:border-rose-300 hover:bg-rose-50/40",
-        disabled && "cursor-not-allowed opacity-60",
-      )}
-    >
-      <div className="flex size-14 items-center justify-center rounded-2xl bg-white shadow-soft">
-        {isOver ? (
-          <Upload className="size-6 text-rose-500" aria-hidden />
-        ) : (
-          <ImagePlus className="size-6 text-rose-500" aria-hidden />
+        onClick={open}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            open();
+          }
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (!disabled && !isMobile) setIsOver(true);
+        }}
+        onDragLeave={() => setIsOver(false)}
+        onDrop={handleDrop}
+        className={cn(
+          "relative flex min-h-[280px] cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed p-10 text-center transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+          isOver
+            ? "border-rose-400 bg-rose-50/60"
+            : "border-muted-foreground/25 bg-gradient-to-br from-rose-50/50 via-white to-amber-50/50 hover:border-rose-300 hover:bg-rose-50/40",
+          disabled && "cursor-not-allowed opacity-60",
         )}
-      </div>
+      >
+        <div className="flex size-14 items-center justify-center rounded-2xl bg-white shadow-soft">
+          {isOver ? (
+            <Upload className="size-6 text-rose-500" aria-hidden />
+          ) : (
+            <ImagePlus className="size-6 text-rose-500" aria-hidden />
+          )}
+        </div>
 
-      <div>
-        <p className="font-display text-xl font-semibold tracking-tight text-foreground">
-          {isOver ? "이대로 놓아주세요" : "사진을 끌어다 놓거나 클릭"}
-        </p>
-        <p className="mt-1.5 text-sm text-muted-foreground">
-          JPEG · PNG · WebP · HEIC · 최대 20MB · 100장
-        </p>
-        {hint ? (
-          <p className="mt-1 text-xs text-muted-foreground/80">{hint}</p>
+        <div>
+          <p className="font-display text-xl font-semibold tracking-tight text-foreground">
+            {isOver
+              ? "이대로 놓아주세요"
+              : isMobile
+                ? "탭하여 사진 추가"
+                : "사진을 끌어다 놓거나 클릭"}
+          </p>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            JPEG · PNG · WebP · HEIC · 최대 20MB · 100장
+          </p>
+          {isMobile ? (
+            <p className="mt-1 text-xs text-muted-foreground/80">
+              갤러리 선택 또는 카메라 촬영 가능
+            </p>
+          ) : null}
+          {hint ? (
+            <p className="mt-1 text-xs text-muted-foreground/80">{hint}</p>
+          ) : null}
+        </div>
+
+        {/* 데스크탑 전용 숨겨진 input */}
+        {!isMobile ? (
+          <input
+            ref={inputRef}
+            type="file"
+            multiple
+            accept="image/*,.heic,.heif"
+            onChange={handleChange}
+            disabled={disabled}
+            className="hidden"
+          />
         ) : null}
       </div>
 
-      <input
-        ref={inputRef}
-        type="file"
-        multiple
-        accept="image/*,.heic,.heif"
-        onChange={handleChange}
+      {/* 모바일 소스 선택 시트 */}
+      <UploadSourceSheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        onFiles={onFiles}
         disabled={disabled}
-        className="hidden"
       />
-    </div>
+    </>
   );
 }

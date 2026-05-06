@@ -13,6 +13,7 @@ import FabricStage, {
 import KeyboardShortcutsHelp, {
   useShortcutsAutoShow,
 } from "@/components/editor/KeyboardShortcutsHelp";
+import MobileToolbar, { type MobileTab } from "@/components/editor/MobileToolbar";
 import PagePreviewDialog from "@/components/editor/PagePreviewDialog";
 import PhotoPickerDialog from "@/components/editor/PhotoPickerDialog";
 import ResourcePalette from "@/components/editor/ResourcePalette";
@@ -56,7 +57,12 @@ const AUTOSAVE_DEBOUNCE_MS = 5000;
  *
  * 레이아웃:
  *   - 데스크탑: 좌측 ResourcePalette / 중앙 FabricStage / 우측 SelectionPanel
- *   - 모바일:   상단 미니 헤더 / 가운데 FabricStage / 하단 Toolbar 바텀시트
+ *   - 모바일:   상단 미니 헤더 / 가운데 FabricStage (풀 높이) / 하단 MobileToolbar
+ *
+ * 모바일 탭:
+ *   - 도구(Tools): 기존 Toolbar 콘텐츠 (텍스트/사진/클립아트/배경/레이어 + Undo/Redo/Delete)
+ *   - 레이어(Layers): 선택 객체 속성 편집 (SelectionPanel)
+ *   - 추가(Add): 사진 추가, 텍스트 추가, 클립아트, 배경 변경
  *
  * 저장:
  *   - 수동: "저장" 버튼.
@@ -66,6 +72,11 @@ const AUTOSAVE_DEBOUNCE_MS = 5000;
  * M12 추가:
  *   - 단축키 (복사/붙여넣기/복제, 페이지 점프, 단축키 안내)
  *   - 페이지 번호 드롭다운 점프
+ *
+ * M17-9 추가:
+ *   - MobileToolbar (fixed bottom-0, iOS safe-area)
+ *   - SelectionPanel 객체 선택 시 모바일 자동 Bottom Sheet 오픈
+ *   - 캔버스 높이 --toolbar-h CSS 변수 기반 동적 계산
  */
 export default function PageEditor({
   projectId,
@@ -95,6 +106,28 @@ export default function PageEditor({
   const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [currentDoc, setCurrentDoc] = useState<PageDoc | null>(initialDoc);
+
+  // M17-9: 모바일 탭 바 상태
+  // null = 모든 시트 닫힘, 값 = 해당 시트 오픈
+  const [mobileTab, setMobileTab] = useState<MobileTab | null>(null);
+
+  // M17-9: 객체가 선택될 때 모바일에서 자동으로 레이어 시트 오픈.
+  // 시트가 이미 열려있는 경우에도 갱신 (재렌더만 발생하므로 닫지 않음).
+  const prevSelectionRef = useRef<TaggedFabricObject | null>(null);
+  useEffect(() => {
+    const hasSel = selection !== null;
+    const hadSel = prevSelectionRef.current !== null;
+    prevSelectionRef.current = selection;
+
+    // 새로운 객체 선택(없음→있음, 또는 다른 객체로 변경)일 때 시트 오픈.
+    // 이미 레이어 시트가 열려있다면 그대로 유지.
+    // 데스크탑(md+)에서는 동작 안 함 — JS로 판단하되 Tailwind 브레이크포인트와 동기화.
+    if (hasSel && typeof window !== "undefined" && window.innerWidth < 768) {
+      if (!hadSel || selection !== prevSelectionRef.current) {
+        setMobileTab("layers");
+      }
+    }
+  }, [selection]);
 
   const { shouldShow: shouldAutoShowShortcuts, mark: markShortcutsSeen } =
     useShortcutsAutoShow();
@@ -182,6 +215,11 @@ export default function PageEditor({
 
   const onToolPick = useCallback((tool: ToolbarTool) => {
     setToolSheet(tool);
+  }, []);
+
+  // M17-9: 모바일 탭 핸들러 — 같은 탭 재클릭 시 토글(닫기)
+  const handleMobileTabPress = useCallback((tab: MobileTab) => {
+    setMobileTab((prev) => (prev === tab ? null : tab));
   }, []);
 
   // ====================== 단축키 핸들러 ======================
@@ -330,8 +368,43 @@ export default function PageEditor({
     save,
   ]);
 
+  // ====================== 공통 팔레트 핸들러 ======================
+  const handlePickFont = useCallback(
+    (family: string, _url: string) => {
+      const sel = stageRef.current?.getSelection();
+      if (sel && sel.oType === "text") {
+        const tb = sel as unknown as {
+          set: (a: { fontFamily: string }) => void;
+          canvas?: { fire: (n: string, o: object) => void };
+        };
+        tb.set({ fontFamily: family });
+        tb.canvas?.fire("object:modified", { target: sel });
+        setDirty(true);
+      } else {
+        stageRef.current?.addText({ fontFamily: family });
+      }
+    },
+    [],
+  );
+
+  const handlePickClipart = useCallback((url: string, resourceId: string) => {
+    void stageRef.current?.addClipart(url, resourceId);
+  }, []);
+
+  const handlePickBackground = useCallback((url: string, _resourceId: string) => {
+    stageRef.current?.setBackground({ type: "resource", url });
+    setDirty(true);
+  }, []);
+
   return (
-    <div className="flex min-h-[calc(100dvh-4rem)] flex-col">
+    /*
+     * CSS 변수 --toolbar-h: MobileToolbar 높이.
+     * 모바일 캔버스 높이 계산: calc(100dvh - 헤더높이 - --toolbar-h)
+     */
+    <div
+      className="flex min-h-[calc(100dvh-4rem)] flex-col"
+      style={{ "--toolbar-h": "64px" } as React.CSSProperties}
+    >
       {/* 상단 — 페이지 번호 + 네비 + 저장 */}
       <header className="sticky top-0 z-30 flex flex-wrap items-center gap-2 border-b bg-background/95 px-3 py-2 backdrop-blur md:px-6">
         <Button asChild variant="ghost" size="sm">
@@ -425,6 +498,7 @@ export default function PageEditor({
             size="icon"
             aria-label="키보드 단축키 (?)"
             onClick={() => setShortcutsOpen(true)}
+            className="hidden md:inline-flex"
           >
             <Keyboard className="size-5" />
           </Button>
@@ -465,13 +539,17 @@ export default function PageEditor({
         ) : null}
       </header>
 
-      <div className="flex flex-1 flex-col gap-3 p-3 md:flex-row md:gap-4 md:p-6">
-        {/* 좌측 (데스크탑) — Toolbar + Palette */}
+      {/*
+       * 본문 영역.
+       * 모바일: 단일 컬럼. 캔버스가 남은 화면 전체를 차지.
+       *   padding-bottom: var(--toolbar-h) → MobileToolbar 아래 가림 방지.
+       * 데스크탑: 3단 flex-row.
+       */}
+      <div className="flex flex-1 flex-col gap-3 p-3 pb-[var(--toolbar-h)] md:flex-row md:gap-4 md:p-6 md:pb-6">
+        {/* 좌측 (데스크탑만) — Toolbar + Palette */}
         <aside
           aria-label="도구 / 리소스"
-          className={cn(
-            "hidden md:flex md:w-72 md:shrink-0 md:flex-col md:gap-3",
-          )}
+          className="hidden md:flex md:w-72 md:shrink-0 md:flex-col md:gap-3"
         >
           <Toolbar
             onPick={onToolPick}
@@ -492,34 +570,21 @@ export default function PageEditor({
                     ? "clipart"
                     : "font"
               }
-              onPickFont={(family) => {
-                const sel = stageRef.current?.getSelection();
-                if (sel && sel.oType === "text") {
-                  // selection 이 텍스트면 family 변경
-                  const tb = sel as unknown as {
-                    set: (a: { fontFamily: string }) => void;
-                    canvas?: { fire: (n: string, o: object) => void };
-                  };
-                  tb.set({ fontFamily: family });
-                  tb.canvas?.fire("object:modified", { target: sel });
-                  setDirty(true);
-                } else {
-                  stageRef.current?.addText({ fontFamily: family });
-                }
-              }}
-              onPickClipart={(url, resourceId) => {
-                void stageRef.current?.addClipart(url, resourceId);
-              }}
-              onPickBackground={(url) => {
-                stageRef.current?.setBackground({ type: "resource", url });
-                setDirty(true);
-              }}
+              onPickFont={handlePickFont}
+              onPickClipart={handlePickClipart}
+              onPickBackground={handlePickBackground}
             />
           </div>
         </aside>
 
         {/* 중앙 — Stage */}
-        <main className="flex min-h-0 flex-1 flex-col items-center justify-start gap-3">
+        <main
+          className={cn(
+            "flex min-h-0 flex-1 flex-col items-center justify-start gap-3",
+            // 모바일: 터치 전용, 사이드바 없음
+            "touch-action-none",
+          )}
+        >
           <FabricStage
             ref={stageRef}
             widthMm={bookSize.width_mm}
@@ -545,7 +610,7 @@ export default function PageEditor({
           </div>
         </main>
 
-        {/* 우측 (데스크탑) — SelectionPanel */}
+        {/* 우측 (데스크탑만) — SelectionPanel */}
         <aside
           aria-label="속성"
           className="hidden md:block md:w-72 md:shrink-0"
@@ -559,25 +624,201 @@ export default function PageEditor({
         </aside>
       </div>
 
-      {/* 하단 (모바일) — Toolbar */}
-      <div className="sticky bottom-0 z-20 border-t bg-background/95 p-3 backdrop-blur md:hidden">
-        <Toolbar
-          mobile
-          onPick={onToolPick}
-          onUndo={() => stageRef.current?.undo()}
-          onRedo={() => stageRef.current?.redo()}
-          onDelete={() => stageRef.current?.remove()}
-          canUndo={canUndo}
-          canRedo={canRedo}
-          hasSelection={Boolean(selection)}
-        />
-      </div>
+      {/* ====================== 모바일 전용 영역 ====================== */}
 
-      {/* 모바일 바텀시트 — 도구 선택 시 */}
+      {/* 하단 탭 바 (모바일) */}
+      <MobileToolbar
+        activeTab={mobileTab}
+        onTabPress={handleMobileTabPress}
+        className="md:hidden"
+      />
+
+      {/* 도구 탭 시트 — 기존 Toolbar 콘텐츠 (2열 그리드) */}
+      <MobileBottomSheet
+        open={mobileTab === "tools"}
+        onOpenChange={(o) => !o && setMobileTab(null)}
+        title="도구"
+        className="md:hidden"
+      >
+        <div className="space-y-4 pb-2">
+          <Toolbar
+            mobile
+            onPick={(tool) => {
+              setMobileTab(null);
+              // 리소스 팔레트가 필요한 도구는 toolSheet 로 위임.
+              setToolSheet(tool);
+            }}
+            onUndo={() => {
+              stageRef.current?.undo();
+            }}
+            onRedo={() => {
+              stageRef.current?.redo();
+            }}
+            onDelete={() => {
+              stageRef.current?.remove();
+              setMobileTab(null);
+            }}
+            canUndo={canUndo}
+            canRedo={canRedo}
+            hasSelection={Boolean(selection)}
+          />
+        </div>
+      </MobileBottomSheet>
+
+      {/* 레이어 탭 시트 — SelectionPanel (속성 편집) */}
+      <MobileBottomSheet
+        open={mobileTab === "layers"}
+        onOpenChange={(o) => !o && setMobileTab(null)}
+        title="레이어 / 속성"
+        className="md:hidden"
+      >
+        <div className="pb-2">
+          {/* 레이어 순서 제어 */}
+          {selection ? (
+            <div className="mb-4 flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => stageRef.current?.bringForward()}
+              >
+                앞으로
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => stageRef.current?.sendBackward()}
+              >
+                뒤로
+              </Button>
+            </div>
+          ) : null}
+          {/* 선택 객체 속성 편집 */}
+          <SelectionPanel
+            selection={selection}
+            dpi={PREVIEW_DPI}
+            onChange={() => setDirty(true)}
+            onReplacePhoto={() => {
+              setPhotoPickerOpen(true);
+              setMobileTab(null);
+            }}
+          />
+        </div>
+      </MobileBottomSheet>
+
+      {/* 추가 탭 시트 — 사진/텍스트/클립아트/배경 */}
+      <MobileBottomSheet
+        open={mobileTab === "add"}
+        onOpenChange={(o) => !o && setMobileTab(null)}
+        title="추가"
+        className="md:hidden"
+      >
+        <div className="space-y-3 pb-2">
+          <div className="grid grid-cols-2 gap-3">
+            {/* 사진 추가 */}
+            <button
+              type="button"
+              className={cn(
+                "flex min-h-[64px] flex-col items-center justify-center gap-1.5",
+                "rounded-xl border border-border bg-background p-3",
+                "text-sm font-medium transition-colors",
+                "hover:border-rose-300 hover:bg-rose-50/40",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                "active:scale-[0.97]",
+              )}
+              onClick={() => {
+                setMobileTab(null);
+                setPhotoPickerOpen(true);
+              }}
+              aria-label="사진 추가"
+            >
+              <span className="text-xl" aria-hidden>🖼</span>
+              <span>사진 추가</span>
+            </button>
+
+            {/* 텍스트 추가 */}
+            <button
+              type="button"
+              className={cn(
+                "flex min-h-[64px] flex-col items-center justify-center gap-1.5",
+                "rounded-xl border border-border bg-background p-3",
+                "text-sm font-medium transition-colors",
+                "hover:border-sky-300 hover:bg-sky-50/40",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                "active:scale-[0.97]",
+              )}
+              onClick={() => {
+                stageRef.current?.addText({});
+                setDirty(true);
+                setMobileTab(null);
+              }}
+              aria-label="텍스트 추가"
+            >
+              <span className="text-xl" aria-hidden>T</span>
+              <span>텍스트</span>
+            </button>
+
+            {/* 클립아트 추가 */}
+            <button
+              type="button"
+              className={cn(
+                "flex min-h-[64px] flex-col items-center justify-center gap-1.5",
+                "rounded-xl border border-border bg-background p-3",
+                "text-sm font-medium transition-colors",
+                "hover:border-violet-300 hover:bg-violet-50/40",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                "active:scale-[0.97]",
+              )}
+              onClick={() => {
+                setMobileTab(null);
+                setToolSheet("clipart");
+              }}
+              aria-label="클립아트 추가"
+            >
+              <span className="text-xl" aria-hidden>✨</span>
+              <span>클립아트</span>
+            </button>
+
+            {/* 배경 변경 */}
+            <button
+              type="button"
+              className={cn(
+                "flex min-h-[64px] flex-col items-center justify-center gap-1.5",
+                "rounded-xl border border-border bg-background p-3",
+                "text-sm font-medium transition-colors",
+                "hover:border-amber-300 hover:bg-amber-50/40",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                "active:scale-[0.97]",
+              )}
+              onClick={() => {
+                setMobileTab(null);
+                setToolSheet("background");
+              }}
+              aria-label="배경 변경"
+            >
+              <span className="text-xl" aria-hidden>🎨</span>
+              <span>배경 변경</span>
+            </button>
+          </div>
+        </div>
+      </MobileBottomSheet>
+
+      {/* 기존 도구 선택 → 리소스 팔레트 시트 (모바일 + 데스크탑 공통 path) */}
       <MobileBottomSheet
         open={toolSheet !== null}
         onOpenChange={(o) => !o && setToolSheet(null)}
-        title={toolSheet === "text" ? "텍스트" : toolSheet === "image" ? "사진" : toolSheet === "clipart" ? "클립아트" : toolSheet === "background" ? "배경" : "레이어"}
+        title={
+          toolSheet === "text"
+            ? "텍스트"
+            : toolSheet === "image"
+              ? "사진"
+              : toolSheet === "clipart"
+                ? "클립아트"
+                : toolSheet === "background"
+                  ? "배경"
+                  : "레이어"
+        }
       >
         {toolSheet === "text" ? (
           <SelectionPanel
@@ -594,7 +835,7 @@ export default function PageEditor({
               void stageRef.current?.addClipart(url, resourceId);
               setToolSheet(null);
             }}
-            onPickBackground={(url) => {
+            onPickBackground={(url, _resourceId) => {
               stageRef.current?.setBackground({ type: "resource", url });
               setDirty(true);
               setToolSheet(null);

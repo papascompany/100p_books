@@ -2,12 +2,16 @@ import {
   ChevronRight,
   Image as ImageIcon,
   Package,
+  Star,
   Trash2,
   UserRound,
 } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import AttendanceWidget from "@/components/mypage/AttendanceWidget";
+import PointsBadge from "@/components/mypage/PointsBadge";
+import ReferralCard from "@/components/mypage/ReferralCard";
 import {
   Card,
   CardContent,
@@ -64,12 +68,17 @@ export default async function MyPage() {
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-10">
-      <h1 className="font-display text-3xl font-semibold tracking-tight md:text-4xl">
-        마이페이지
-      </h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        {user.email ? `${user.email}로 로그인되어 있어요.` : "로그인되어 있어요."}
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl font-semibold tracking-tight md:text-4xl">
+            마이페이지
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {user.email ? `${user.email}로 로그인되어 있어요.` : "로그인되어 있어요."}
+          </p>
+        </div>
+        <PointsBadge />
+      </div>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         <Link href="/mypage/orders" className="group">
@@ -154,6 +163,36 @@ export default async function MyPage() {
             </CardContent>
           </Card>
         </Link>
+
+        <Link href="/gallery" className="group">
+          <Card className="h-full transition-colors hover:border-foreground/30 hover:bg-accent/30">
+            <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Star className="size-5" />
+                  후기 갤러리
+                </CardTitle>
+                <CardDescription className="mt-1.5">
+                  다른 고객들의 포토북 후기를 확인해 보세요.
+                </CardDescription>
+              </div>
+              <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              별점, 사진, 텍스트 후기를 보고 나만의 포토북 제작에 영감을 받으세요.
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
+
+      {/* 출석체크 섹션 */}
+      <div className="mt-8">
+        <AttendanceWidget />
+      </div>
+
+      {/* 추천 링크 섹션 */}
+      <div className="mt-6">
+        <ReferralCard />
       </div>
     </div>
   );

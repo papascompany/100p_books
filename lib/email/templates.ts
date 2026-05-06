@@ -17,7 +17,9 @@ export type EmailTemplate =
   | "order.cancelled"
   | "order.refunded"
   | "user.welcome"
-  | "user.account_deleted";
+  | "user.account_deleted"
+  | "gift.received"
+  | "gift.claimed";
 
 export interface EmailContent {
   subject: string;
@@ -47,7 +49,23 @@ export interface UserContext {
   displayName: string;
 }
 
-export type TemplateContext = OrderContext | UserContext;
+export interface GiftContext {
+  kind: "gift";
+  /** 선물 수령 URL 의 토큰 부분 (uuid) */
+  giftToken: string;
+  /** 발신자 표시명 (없으면 이메일) */
+  senderName: string;
+  /** 수신자 표시명 — 미리 모르므로 이메일 prefix fallback 권장 */
+  recipientName: string;
+  bookSizeName: string;
+  pageCount: number;
+  /** 발신자가 수신자에게 남긴 짧은 메시지 (선택) */
+  message?: string;
+  /** 클레임된 프로젝트 제목 — gift.claimed 발신자 알림에 사용 */
+  projectTitle?: string;
+}
+
+export type TemplateContext = OrderContext | UserContext | GiftContext;
 
 /** 천 단위 콤마 + "원" */
 function formatKRW(n: number | undefined): string {
@@ -400,6 +418,80 @@ function tplUserAccountDeleted(c: UserContext): EmailContent {
   return { subject, text, html };
 }
 
+function tplGiftReceived(c: GiftContext): EmailContent {
+  const subject = `[100p Books] ${c.senderName}님이 포토북을 선물했어요`;
+  const claimUrl = appUrl(`/gifts/${c.giftToken}`);
+  const text = [
+    `${c.recipientName}님, 안녕하세요. 100p Books 입니다.`,
+    ``,
+    `${c.senderName}님이 직접 만든 포토북을 선물했어요.`,
+    `로그인 후 아래 링크에서 받아보실 수 있어요.`,
+    ``,
+    c.message ? `[메시지]\n${c.message}\n` : "",
+    `[선물 정보]`,
+    `· 책 사이즈: ${c.bookSizeName}`,
+    `· 페이지 수: ${c.pageCount}p`,
+    ``,
+    `받기: ${claimUrl}`,
+    ``,
+    `선물은 30일 이내에 받아주세요.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const html = htmlShell({
+    preheader: `${c.senderName}님이 포토북을 선물했어요`,
+    heading: "포토북이 도착했어요",
+    bodyHtml: [
+      `<p style="margin:0 0 12px 0;"><b>${escapeHtml(c.recipientName)}</b>님, 안녕하세요.</p>`,
+      `<p style="margin:0 0 12px 0;"><b>${escapeHtml(c.senderName)}</b>님이 직접 만든 포토북을 선물했어요. 로그인 후 아래 버튼에서 받아보실 수 있어요.</p>`,
+      c.message
+        ? `<blockquote style="margin:16px 0;padding:12px 16px;background:#faf9f5;border-left:3px solid #d4ccb8;border-radius:6px;color:#2b2b2b;font-size:14px;line-height:1.7;">${escapeHtml(c.message)}</blockquote>`
+        : "",
+      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;border-collapse:collapse;background:#faf9f5;border-radius:8px;">`,
+      `<tr><td style="padding:8px 14px;color:#7d7666;font-size:13px;width:120px;">책 사이즈</td><td style="padding:8px 14px;font-size:14px;font-weight:500;">${escapeHtml(c.bookSizeName)}</td></tr>`,
+      `<tr><td style="padding:8px 14px;color:#7d7666;font-size:13px;">페이지 수</td><td style="padding:8px 14px;font-size:14px;font-weight:500;">${escapeHtml(`${c.pageCount}p`)}</td></tr>`,
+      `</table>`,
+      `<p style="margin:8px 0 0 0;color:#7d7666;font-size:13px;">선물은 30일 이내에 받아주세요.</p>`,
+    ].join(""),
+    ctaLabel: "선물 받기",
+    ctaHref: claimUrl,
+  });
+  return { subject, text, html };
+}
+
+function tplGiftClaimed(c: GiftContext): EmailContent {
+  const subject = `[100p Books] ${c.recipientName}님이 선물을 받았어요`;
+  const text = [
+    `${c.senderName}님, 100p Books 입니다.`,
+    ``,
+    `${c.recipientName}님이 보내주신 포토북 선물을 잘 받았어요!`,
+    c.projectTitle ? `· 프로젝트: ${c.projectTitle}` : "",
+    `· 책 사이즈: ${c.bookSizeName}`,
+    `· 페이지 수: ${c.pageCount}p`,
+    ``,
+    `따뜻한 마음을 나눠주셔서 감사합니다.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const html = htmlShell({
+    preheader: `${c.recipientName}님이 선물을 받았어요`,
+    heading: "선물이 잘 전달됐어요",
+    bodyHtml: [
+      `<p style="margin:0 0 12px 0;"><b>${escapeHtml(c.senderName)}</b>님, 안녕하세요.</p>`,
+      `<p style="margin:0 0 12px 0;"><b>${escapeHtml(c.recipientName)}</b>님이 보내주신 포토북 선물을 잘 받았어요!</p>`,
+      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;border-collapse:collapse;background:#faf9f5;border-radius:8px;">`,
+      c.projectTitle
+        ? `<tr><td style="padding:8px 14px;color:#7d7666;font-size:13px;width:120px;">프로젝트</td><td style="padding:8px 14px;font-size:14px;font-weight:500;">${escapeHtml(c.projectTitle)}</td></tr>`
+        : "",
+      `<tr><td style="padding:8px 14px;color:#7d7666;font-size:13px;width:120px;">책 사이즈</td><td style="padding:8px 14px;font-size:14px;font-weight:500;">${escapeHtml(c.bookSizeName)}</td></tr>`,
+      `<tr><td style="padding:8px 14px;color:#7d7666;font-size:13px;">페이지 수</td><td style="padding:8px 14px;font-size:14px;font-weight:500;">${escapeHtml(`${c.pageCount}p`)}</td></tr>`,
+      `</table>`,
+      `<p style="margin:8px 0 0 0;color:#7d7666;font-size:13px;">따뜻한 마음을 나눠주셔서 감사합니다.</p>`,
+    ].join(""),
+  });
+  return { subject, text, html };
+}
+
 /** App URL helper. NEXT_PUBLIC_APP_URL 미설정 시 빈 path 만 반환. */
 function appUrl(path: string): string {
   const base = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
@@ -433,6 +525,10 @@ export function renderEmailTemplate(
       return tplUserWelcome(asUser(context));
     case "user.account_deleted":
       return tplUserAccountDeleted(asUser(context));
+    case "gift.received":
+      return tplGiftReceived(asGift(context));
+    case "gift.claimed":
+      return tplGiftClaimed(asGift(context));
     default: {
       // unreachable — TS exhaustiveness
       const _x: never = template;
@@ -454,6 +550,15 @@ function asUser(c: TemplateContext): UserContext {
   if (c.kind !== "user") {
     throw new Error(
       `이 템플릿은 UserContext 가 필요합니다 (받은 kind: ${c.kind}).`,
+    );
+  }
+  return c;
+}
+
+function asGift(c: TemplateContext): GiftContext {
+  if (c.kind !== "gift") {
+    throw new Error(
+      `이 템플릿은 GiftContext 가 필요합니다 (받은 kind: ${c.kind}).`,
     );
   }
   return c;

@@ -189,6 +189,31 @@ orders           (id, project_id, user_id, qty, address_json, status, cover_pdf_
 | 한글 폰트 라이선스 | 관리자 업로드 시 라이선스 메타 필수 |
 | iOS HEIC 업로드 | 클라 `heic2any` → JPEG 변환 |
 
+### M16 — 성장 기능 (2개월)
+- **프로젝트 공유 링크**: 비로그인 조회 전용 공개 URL (`/share/[token]`)
+- **선물하기**: 수신자 이메일 입력 → 완성된 포토북 직접 발송 플로우
+- **할인 코드 시스템**: admin 발급, 유효기간/최대사용횟수/금액 or 비율 할인
+- **친구 추천(referral)**: 추천 링크 생성, 추천인/피추천인 보상 적립
+- **후기 갤러리**: 주문 완료 후 후기 작성(사진+텍스트), 좋아요 버튼, 공개 갤러리 페이지
+- **출석체크**: 매일 출석 버튼, 매월 1일 00시 초기화(월별 이력), 누적 출석수 카운트 + 보상
+
+DB 추가 테이블:
+```
+share_tokens     (id, project_id, token, expires_at, view_count)
+gifts            (id, order_id, sender_id, recipient_email, message, status, claimed_at)
+discount_codes   (id, code, type[percent|amount], value, max_uses, used_count, expires_at, active)
+discount_uses    (id, code_id, user_id, order_id, used_at)
+referrals        (id, referrer_id, referee_id, code, reward_status, created_at)
+reviews          (id, order_id, user_id, rating, body, image_keys[], likes_count, created_at)
+review_likes     (id, review_id, user_id)
+attendances      (id, user_id, checked_at, month_key[YYYY-MM], total_count)
+```
+
+### M17 — 모바일 최적화 (1개월)
+- **PWA**: `manifest.json` (앱 아이콘·테마색·standalone), Service Worker(오프라인 캐시), iOS Safari "홈 화면 추가" 가이드
+- **카메라 직접 업로드**: `<input accept="image/*" capture="environment">` + 갤러리/카메라 선택 UI
+- **모바일 한 손 조작 모드**: 에디터 도구바 하단 고정, 핀치 줌 전용 뷰포트, 대형 터치 타겟(44px+)
+
 ## 10. 다음 실행 액션
 
 `orchestrator` 에이전트를 호출하여 M0부터 순차 실행하거나,

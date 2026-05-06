@@ -10,7 +10,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "gen-icons": "npx tsx scripts/gen-icons.ts"
   },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.55",
@@ -22,6 +23,7 @@
     "@supabase/ssr": "0.5.2",
     "@supabase/supabase-js": "2.45.6",
     "@tosspayments/payment-sdk": "^1.9.1",
+    "canvas-confetti": "^1.9.4",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "exceljs": "^4.4.0",
@@ -43,6 +45,7 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",

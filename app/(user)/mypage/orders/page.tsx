@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import ReviewDialog from "@/components/reviews/ReviewDialog";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { createServerSupabase } from "@/lib/db/server";
@@ -35,6 +36,9 @@ interface OrderRow {
   } | null;
 }
 
+/** 후기 작성 가능한 주문 상태 */
+const REVIEWABLE_STATUSES: OrderStatus[] = ["shipped", "delivered"];
+
 export default async function MyOrdersPage() {
   let user;
   try {
@@ -52,6 +56,20 @@ export default async function MyOrdersPage() {
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
+  // 이미 후기를 작성한 주문 ID 목록 (서버 컴포넌트에서 미리 조회)
+  const rows0 = (data ?? []) as unknown as OrderRow[];
+  const reviewableIds = rows0
+    .filter((o) => REVIEWABLE_STATUSES.includes(o.status))
+    .map((o) => o.id);
+  let reviewedOrderIds = new Set<string>();
+  if (reviewableIds.length > 0) {
+    const { data: reviewedRows } = await supabase
+      .from("reviews")
+      .select("order_id")
+      .in("order_id", reviewableIds);
+    reviewedOrderIds = new Set((reviewedRows ?? []).map((r) => r.order_id as string));
+  }
+
   if (error) {
     return (
       <div className="container py-10">
@@ -62,7 +80,7 @@ export default async function MyOrdersPage() {
     );
   }
 
-  const rows = (data ?? []) as unknown as OrderRow[];
+  const rows = rows0;
 
   return (
     <div className="container py-6 md:py-10">
@@ -114,13 +132,22 @@ export default async function MyOrdersPage() {
                   {ORDER_STATUS_LABEL[o.status]}
                 </span>
               </div>
-              <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2">
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                 <span className="font-display text-xl font-semibold tracking-tight">
                   {KRW.format(o.amount)}원
                 </span>
-                <Button asChild size="sm" variant="outline">
-                  <Link href={`/mypage/orders/${o.id}`}>주문 상세</Link>
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  {REVIEWABLE_STATUSES.includes(o.status) && !reviewedOrderIds.has(o.id) ? (
+                    <ReviewDialog orderId={o.id} />
+                  ) : reviewedOrderIds.has(o.id) ? (
+                    <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                      후기 작성 완료
+                    </span>
+                  ) : null}
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={`/mypage/orders/${o.id}`}>주문 상세</Link>
+                  </Button>
+                </div>
               </div>
             </li>
           ))}

@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize, OrderAddress } from "@/lib/db/types";
+import { reasonMessage, validateDiscount } from "@/lib/discounts/validate";
 import { isPageDoc } from "@/lib/layout/types";
 import { calcOrderAmount } from "@/lib/orders/pricing";
 
@@ -36,6 +37,10 @@ const BodySchema = z.object({
   projectId: z.string().uuid(),
   qty: z.number().int().min(1).max(10),
   address: AddressSchema,
+  /** 사용자 입력 할인 코드 (선택). 비어있으면 미사용. */
+  discountCode: z.string().trim().min(1).max(40).optional(),
+  /** 사용할 포인트 (선택). 0 또는 미설정이면 미사용. 차감은 결제 confirm 시점. */
+  usePoints: z.number().int().min(0).optional(),
 });
 
 /**
@@ -77,7 +82,7 @@ export async function POST(req: Request) {
         parsed.error.flatten(),
       );
     }
-    const { projectId, qty, address } = parsed.data;
+    const { projectId, qty, address, discountCode, usePoints } = parsed.data;
 
     const supabase = createServerSupabase();
 
@@ -136,8 +141,60 @@ export async function POST(req: Request) {
       qty,
     });
 
-    // 4) orders INSERT (service_role 필요 — RLS 정책상 사용자 INSERT 불가)
+    // 3-1) 할인 코드 (선택) — 서버에서 재검증 + 금액 재계산
     const admin = createAdminSupabase();
+    let discountCodeId: string | null = null;
+    let discountAmount = 0;
+    if (discountCode) {
+      const dv = await validateDiscount({
+        supabase: admin,
+        code: discountCode,
+        userId: user.id,
+        subtotal: breakdown.total,
+      });
+      if (!dv.valid) {
+        return fail(
+          "DISCOUNT_INVALID",
+          reasonMessage(dv.reason),
+          400,
+          { reason: dv.reason },
+        );
+      }
+      discountCodeId = dv.code.id;
+      discountAmount = dv.discountAmount;
+    }
+
+    const subtotalAfterDiscount = Math.max(0, breakdown.total - discountAmount);
+
+    // 3-2) 포인트 사용 (선택) — 잔액 검증.
+    //   실제 차감은 결제 confirm 시점에 deduct_user_points 로 atomic 처리.
+    //   여기서는 검증만 + 주문 amount 산정.
+    let pointsUsed = 0;
+    if (usePoints && usePoints > 0) {
+      const { data: pts, error: ptsErr } = await admin
+        .from("user_points")
+        .select("balance")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (ptsErr) {
+        return fail("POINTS_QUERY_FAILED", ptsErr.message, 500);
+      }
+      const balance = pts?.balance ?? 0;
+      if (balance < usePoints) {
+        return fail(
+          "POINTS_INSUFFICIENT",
+          `포인트 잔액이 부족합니다. (보유 ${balance}, 사용 ${usePoints})`,
+          400,
+          { balance, requested: usePoints },
+        );
+      }
+      // 사용 포인트는 할인 후 금액을 초과할 수 없음.
+      pointsUsed = Math.min(usePoints, subtotalAfterDiscount);
+    }
+
+    const finalAmount = Math.max(0, subtotalAfterDiscount - pointsUsed);
+
+    // 4) orders INSERT (service_role 필요 — RLS 정책상 사용자 INSERT 불가)
     const tossOrderId = `100p-${nanoid(8)}`;
     const tossOrderName = `${bookSize.name} ${pages}p (수량 ${qty})`;
 
@@ -147,7 +204,7 @@ export async function POST(req: Request) {
         project_id: projectId,
         user_id: user.id,
         qty,
-        amount: breakdown.total,
+        amount: finalAmount,
         address: address as OrderAddress,
         status: "pending",
         toss_order_id: tossOrderId,
@@ -155,6 +212,9 @@ export async function POST(req: Request) {
         cover_pdf_key: null,
         interior_pdf_key: null,
         paid_at: null,
+        discount_code_id: discountCodeId,
+        discount_amount: discountAmount,
+        points_used: pointsUsed,
       })
       .select("id, amount, toss_order_id, created_at")
       .single();
@@ -172,6 +232,13 @@ export async function POST(req: Request) {
       tossOrderId: inserted.toss_order_id,
       tossOrderName,
       breakdown,
+      discount: discountCodeId
+        ? {
+            codeId: discountCodeId,
+            amount: discountAmount,
+          }
+        : null,
+      pointsUsed,
     });
   } catch (err) {
     return failFromError(err);

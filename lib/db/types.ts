@@ -35,6 +35,25 @@ export interface Profile {
   terms_agreed_at: string | null;
   /** 개인정보 처리방침 동의 시각 */
   privacy_agreed_at: string | null;
+  /** 친구 추천 코드 (M16-4). 미발급 = null. 8자 대문자 + 숫자. */
+  referral_code: string | null;
+}
+
+export type ReferralRewardStatus = "pending" | "rewarded";
+
+export interface Referral {
+  id: string;
+  referrer_id: string;
+  referee_id: string | null;
+  referral_code: string;
+  reward_status: ReferralRewardStatus;
+  created_at: string;
+}
+
+export interface UserPoints {
+  user_id: string;
+  balance: number;
+  updated_at: string;
 }
 
 export interface BookSize {
@@ -137,6 +156,31 @@ export interface EmailJob {
   updated_at: string;
 }
 
+export interface ShareToken {
+  id: string;
+  project_id: string;
+  token: string;
+  expires_at: string | null;
+  view_count: number;
+  created_at: string;
+}
+
+export type GiftStatus = "pending" | "claimed" | "expired";
+
+export interface Gift {
+  id: string;
+  order_id: string;
+  sender_id: string;
+  recipient_email: string;
+  message: string | null;
+  gift_token: string;
+  status: GiftStatus;
+  claimed_project_id: string | null;
+  claimed_at: string | null;
+  expires_at: string;
+  created_at: string;
+}
+
 export interface Order {
   id: string;
   project_id: string;
@@ -154,8 +198,73 @@ export interface Order {
   tracking_carrier: string | null;
   shipped_at: string | null;
   delivered_at: string | null;
+  /** 적용된 할인 코드 id (null = 미사용). */
+  discount_code_id: string | null;
+  /** 실제 할인 금액 (KRW). 0 = 미적용. */
+  discount_amount: number;
+  /** 사용된 포인트 (KRW). 0 = 미사용 (M16-4). */
+  points_used: number;
   created_at: string;
   updated_at: string;
+}
+
+export type DiscountType = "percent" | "amount";
+
+export interface DiscountCode {
+  id: string;
+  code: string;
+  type: DiscountType;
+  /** percent 의 경우 0 < value <= 100, amount 의 경우 양의 KRW 정수. */
+  value: number;
+  /** null = 무제한. */
+  max_uses: number | null;
+  used_count: number;
+  /** null = 무기한. */
+  expires_at: string | null;
+  active: boolean;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface DiscountUse {
+  id: string;
+  code_id: string;
+  user_id: string;
+  order_id: string | null;
+  used_at: string;
+}
+
+export interface Review {
+  id: string;
+  order_id: string;
+  user_id: string;
+  rating: number;
+  body: string | null;
+  image_keys: string[];
+  likes_count: number;
+  public: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReviewLike {
+  id: string;
+  review_id: string;
+  user_id: string;
+  created_at: string;
+}
+
+/**
+ * 출석체크 (M16-6).
+ * checked_date 는 KST 기준 YYYY-MM-DD.
+ * month_key 는 'YYYY-MM' (인덱스/집계 편의용 — checked_date 의 prefix).
+ */
+export interface Attendance {
+  id: string;
+  user_id: string;
+  checked_date: string;
+  month_key: string;
+  created_at: string;
 }
 
 /**
@@ -177,6 +286,92 @@ export interface Database {
         Insert: Omit<EmailJob, "id" | "created_at" | "updated_at"> &
           Partial<Pick<EmailJob, "id" | "created_at" | "updated_at">>;
         Update: Partial<EmailJob>;
+      };
+      share_tokens: {
+        Row: ShareToken;
+        Insert: Omit<ShareToken, "id" | "token" | "view_count" | "created_at"> &
+          Partial<Pick<ShareToken, "id" | "token" | "view_count" | "created_at">>;
+        Update: Partial<ShareToken>;
+      };
+      discount_codes: {
+        Row: DiscountCode;
+        Insert: Omit<DiscountCode, "id" | "used_count" | "created_at"> &
+          Partial<Pick<DiscountCode, "id" | "used_count" | "created_at">>;
+        Update: Partial<DiscountCode>;
+      };
+      discount_uses: {
+        Row: DiscountUse;
+        Insert: Omit<DiscountUse, "id" | "used_at"> &
+          Partial<Pick<DiscountUse, "id" | "used_at">>;
+        Update: Partial<DiscountUse>;
+      };
+      gifts: {
+        Row: Gift;
+        Insert: Omit<
+          Gift,
+          | "id"
+          | "gift_token"
+          | "status"
+          | "claimed_project_id"
+          | "claimed_at"
+          | "expires_at"
+          | "created_at"
+        > &
+          Partial<
+            Pick<
+              Gift,
+              | "id"
+              | "gift_token"
+              | "status"
+              | "claimed_project_id"
+              | "claimed_at"
+              | "expires_at"
+              | "created_at"
+              | "message"
+            >
+          >;
+        Update: Partial<Gift>;
+      };
+      referrals: {
+        Row: Referral;
+        Insert: Omit<Referral, "id" | "created_at"> &
+          Partial<Pick<Referral, "id" | "created_at" | "reward_status" | "referee_id">>;
+        Update: Partial<Referral>;
+      };
+      user_points: {
+        Row: UserPoints;
+        Insert: Omit<UserPoints, "updated_at"> &
+          Partial<Pick<UserPoints, "updated_at" | "balance">>;
+        Update: Partial<UserPoints>;
+      };
+      reviews: {
+        Row: Review;
+        Insert: Omit<Review, "id" | "created_at" | "updated_at" | "likes_count"> &
+          Partial<
+            Pick<
+              Review,
+              | "id"
+              | "created_at"
+              | "updated_at"
+              | "likes_count"
+              | "image_keys"
+              | "public"
+              | "body"
+            >
+          >;
+        Update: Partial<Review>;
+      };
+      review_likes: {
+        Row: ReviewLike;
+        Insert: Omit<ReviewLike, "id" | "created_at"> &
+          Partial<Pick<ReviewLike, "id" | "created_at">>;
+        Update: Partial<ReviewLike>;
+      };
+      attendances: {
+        Row: Attendance;
+        Insert: Omit<Attendance, "id" | "created_at"> &
+          Partial<Pick<Attendance, "id" | "created_at">>;
+        Update: Partial<Attendance>;
       };
     };
     Views: Record<string, never>;
@@ -201,6 +396,30 @@ export interface Database {
           p_shift?: number;
         };
         Returns: null;
+      };
+      increment_share_view: {
+        Args: { token_val: string };
+        Returns: number;
+      };
+      lookup_referral_code: {
+        Args: { p_code: string };
+        Returns: string | null;
+      };
+      ensure_user_points: {
+        Args: { p_user_id: string };
+        Returns: null;
+      };
+      award_referral_reward: {
+        Args: { p_referee_id: string; p_reward: number };
+        Returns: string | null;
+      };
+      deduct_user_points: {
+        Args: { p_user_id: string; p_amount: number };
+        Returns: number;
+      };
+      toggle_review_like: {
+        Args: { p_review_id: string; p_user_id: string };
+        Returns: { liked: boolean; likesCount: number };
       };
     };
     Enums: Record<string, never>;
