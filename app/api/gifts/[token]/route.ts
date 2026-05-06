@@ -8,6 +8,7 @@ import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { enqueueEmail } from "@/lib/email/queue";
+import { ORIGINALS_BUCKET, THUMBS_BUCKET } from "@/lib/image/constants";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -268,10 +269,13 @@ export async function GET(_req: Request, { params }: RouteCtx) {
  *
  *   멱등: 이미 claimed 면 기존 claimed_project_id 그대로 반환.
  *
- *   Storage 참조 정책 (M16-2):
- *     photos 행만 새로 INSERT 하고, storage_key/thumb_key 는 발신자 폴더의 객체를 그대로 참조한다.
- *     → 발신자가 원본을 삭제하면 수신자 미리보기가 깨지지만, M16-2 범위에서는 단순화를 우선.
- *     후속 마이그레이션에서 admin.storage.copy 로 전환 가능 (photos/copy-to-project 패턴 참조).
+ *   Storage 정책:
+ *     photos 행을 새로 INSERT 하면서 storage 객체(원본 + 썸네일)를 수신자 폴더
+ *     ({recipientId}/{newProjectId}/...) 로 admin.storage.copy 한다.
+ *     - 발신자가 원본을 삭제해도 수신자 미리보기가 유지된다.
+ *     - storage RLS 는 첫 path segment 가 auth.uid() 인지로 권한 검증하므로
+ *       수신자 폴더로 복사해야 수신자가 직접 SELECT 할 수 있다.
+ *     - copy 실패 시(원본 부재 등) best-effort 폴백: 원본 storage_key 를 그대로 참조.
  */
 export async function POST(req: Request, { params }: RouteCtx) {
   try {
@@ -384,17 +388,78 @@ export async function POST(req: Request, { params }: RouteCtx) {
       );
     }
 
-    // 2-2) 새 photos INSERT (storage_key/thumb_key 는 동일 — 발신자 객체 참조)
+    // 2-2) Storage 객체 복사 + 새 photos INSERT
+    //   - 발신자가 원본을 삭제해도 수신자 미리보기가 깨지지 않도록 storage 객체를
+    //     수신자 폴더({recipientId}/{newProjectId}/...)로 복사한다 (RLS 호환 경로).
+    //   - 복사 실패는 best-effort: 원본 storage_key 를 그대로 참조하도록 폴백 (M16-2 원래 정책).
+    //     copy 실패 사유는 발신자가 이미 객체를 지웠거나, 일시적 storage 오류 등.
     const photoIdMap: Record<string, string> = {};
+    const copiedKeys: { bucket: string; key: string }[] = [];
     if ((srcPhotos ?? []).length > 0) {
-      const photosInsert = (srcPhotos ?? []).map((p) => {
+      const photosInsert: Array<{
+        id: string;
+        project_id: string;
+        storage_key: string;
+        thumb_key: string | null;
+        filename: string | null;
+        mime: string | null;
+        size_bytes: number | null;
+        width: number | null;
+        height: number | null;
+        exif_taken_at: string | null;
+        exif_camera: string | null;
+        order_idx: number;
+      }> = [];
+
+      for (const p of srcPhotos ?? []) {
         const newId = randomUUID();
         photoIdMap[p.id] = newId;
-        return {
+
+        // 원본 storage_key 의 확장자 유지 (없으면 jpg)
+        const origExtMatch = p.storage_key.match(/\.([^.]+)$/);
+        const ext = origExtMatch ? origExtMatch[1] : "jpg";
+
+        let nextStorageKey = p.storage_key;
+        let nextThumbKey: string | null = p.thumb_key;
+
+        // 원본 buckets/photo-originals 복사 시도
+        const targetStorageKey = `${user.id}/${newProjectId}/${newId}.${ext}`;
+        const { error: origCopyErr } = await admin.storage
+          .from(ORIGINALS_BUCKET)
+          .copy(p.storage_key, targetStorageKey);
+        if (!origCopyErr) {
+          nextStorageKey = targetStorageKey;
+          copiedKeys.push({ bucket: ORIGINALS_BUCKET, key: targetStorageKey });
+        } else {
+          console.warn(
+            "[gifts/claim] storage copy(originals) failed — fallback to source key:",
+            { src: p.storage_key, error: origCopyErr.message },
+          );
+        }
+
+        // 썸네일 복사 시도 (있을 때만)
+        if (p.thumb_key) {
+          const targetThumbKey = `${user.id}/${newProjectId}/${newId}.webp`;
+          const { error: thumbCopyErr } = await admin.storage
+            .from(THUMBS_BUCKET)
+            .copy(p.thumb_key, targetThumbKey);
+          if (!thumbCopyErr) {
+            nextThumbKey = targetThumbKey;
+            copiedKeys.push({ bucket: THUMBS_BUCKET, key: targetThumbKey });
+          } else {
+            console.warn(
+              "[gifts/claim] storage copy(thumbs) failed — fallback to source key:",
+              { src: p.thumb_key, error: thumbCopyErr.message },
+            );
+            // nextThumbKey 는 원본(p.thumb_key) 그대로 유지
+          }
+        }
+
+        photosInsert.push({
           id: newId,
           project_id: newProjectId,
-          storage_key: p.storage_key,
-          thumb_key: p.thumb_key,
+          storage_key: nextStorageKey,
+          thumb_key: nextThumbKey,
           filename: p.filename,
           mime: p.mime,
           size_bytes: p.size_bytes,
@@ -403,15 +468,21 @@ export async function POST(req: Request, { params }: RouteCtx) {
           exif_taken_at: p.exif_taken_at,
           exif_camera: p.exif_camera,
           order_idx: p.order_idx,
-        };
-      });
+        });
+      }
 
       const { error: photoInsErr } = await admin
         .from("photos")
         .insert(photosInsert);
       if (photoInsErr) {
-        // 롤백: 방금 만든 project 제거 (cascade 로 photos 도 정리됨)
+        // 롤백: 방금 만든 project 제거 (cascade 로 photos 도 정리됨) + 복사한 storage 객체 제거
         await admin.from("projects").delete().eq("id", newProjectId);
+        for (const { bucket, key } of copiedKeys) {
+          await admin.storage
+            .from(bucket)
+            .remove([key])
+            .catch(() => undefined);
+        }
         return fail(
           "PHOTOS_CLONE_FAILED",
           `사진 메타 복제 실패: ${photoInsErr.message}`,
@@ -421,6 +492,15 @@ export async function POST(req: Request, { params }: RouteCtx) {
     }
 
     // 3) pages 클론 — fabric_json 내 photoId 치환
+    const rollbackStorage = async () => {
+      for (const { bucket, key } of copiedKeys) {
+        await admin.storage
+          .from(bucket)
+          .remove([key])
+          .catch(() => undefined);
+      }
+    };
+
     const { data: srcPages, error: srcPagesErr } = await admin
       .from("pages")
       .select("page_no, layout_mode, fabric_json")
@@ -428,6 +508,7 @@ export async function POST(req: Request, { params }: RouteCtx) {
       .order("page_no", { ascending: true });
     if (srcPagesErr) {
       await admin.from("projects").delete().eq("id", newProjectId);
+      await rollbackStorage();
       return fail("SRC_PAGES_QUERY_FAILED", srcPagesErr.message, 500);
     }
 
@@ -445,6 +526,7 @@ export async function POST(req: Request, { params }: RouteCtx) {
         .insert(pagesInsert);
       if (pagesInsErr) {
         await admin.from("projects").delete().eq("id", newProjectId);
+        await rollbackStorage();
         return fail(
           "PAGES_CLONE_FAILED",
           `페이지 복제 실패: ${pagesInsErr.message}`,
@@ -485,6 +567,7 @@ export async function POST(req: Request, { params }: RouteCtx) {
     if (!updated) {
       // 동시성: 다른 요청이 먼저 claim — 우리 클론을 롤백하고 기존 결과 사용
       await admin.from("projects").delete().eq("id", newProjectId);
+      await rollbackStorage();
       const { data: latest } = await admin
         .from("gifts")
         .select("claimed_project_id, status")

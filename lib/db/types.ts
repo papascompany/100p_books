@@ -421,6 +421,14 @@ export interface Database {
         Args: { p_review_id: string; p_user_id: string };
         Returns: { liked: boolean; likesCount: number };
       };
+      increment_discount_used: {
+        Args: { p_code_id: string };
+        Returns: null;
+      };
+      add_user_points: {
+        Args: { p_user_id: string; p_amount: number };
+        Returns: null;
+      };
     };
     Enums: Record<string, never>;
   };

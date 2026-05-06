@@ -123,29 +123,12 @@ export async function GET(req: Request) {
       if (cnt < MONTHLY_THRESHOLD) continue;
 
       try {
-        const { data: cur, error: selErr } = await admin
-          .from("user_points")
-          .select("balance")
-          .eq("user_id", userId)
-          .maybeSingle();
-
-        if (selErr) throw new Error(selErr.message);
-
-        if (cur) {
-          const { error: updErr } = await admin
-            .from("user_points")
-            .update({
-              balance: cur.balance + MONTHLY_BONUS,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("user_id", userId);
-          if (updErr) throw new Error(updErr.message);
-        } else {
-          const { error: insErr } = await admin
-            .from("user_points")
-            .insert({ user_id: userId, balance: MONTHLY_BONUS });
-          if (insErr) throw new Error(insErr.message);
-        }
+        // atomic 적립 — 동시성 안전 (0022_atomic_discount_increment.sql)
+        const { error: rpcErr } = await admin.rpc("add_user_points", {
+          p_user_id: userId,
+          p_amount: MONTHLY_BONUS,
+        });
+        if (rpcErr) throw new Error(rpcErr.message);
 
         rewarded += 1;
       } catch (e) {

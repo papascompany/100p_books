@@ -28,7 +28,8 @@ function kstToday(): { dateStr: string; monthKey: string } {
 }
 
 /**
- * user_points 에 +amount 를 upsert (멱등 아님 — 호출 측에서 중복 방지 필요).
+ * user_points 에 +amount 를 atomic 적립 (add_user_points RPC).
+ * 동시 호출 시 lost-update 방어 — INSERT ... ON CONFLICT DO UPDATE 단일 SQL.
  */
 async function creditPoints(
   admin: ReturnType<typeof createAdminSupabase>,
@@ -37,28 +38,12 @@ async function creditPoints(
 ): Promise<void> {
   if (amount <= 0) return;
 
-  // ensure_user_points 로 행 보장 후 update (RPC 보다 단순)
-  const { data: cur, error: selErr } = await admin
-    .from("user_points")
-    .select("balance")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (selErr) {
-    throw new Error(`user_points 조회 실패: ${selErr.message}`);
-  }
-
-  if (cur) {
-    const { error: updErr } = await admin
-      .from("user_points")
-      .update({ balance: cur.balance + amount, updated_at: new Date().toISOString() })
-      .eq("user_id", userId);
-    if (updErr) throw new Error(`user_points update 실패: ${updErr.message}`);
-  } else {
-    const { error: insErr } = await admin
-      .from("user_points")
-      .insert({ user_id: userId, balance: amount });
-    if (insErr) throw new Error(`user_points insert 실패: ${insErr.message}`);
+  const { error } = await admin.rpc("add_user_points", {
+    p_user_id: userId,
+    p_amount: amount,
+  });
+  if (error) {
+    throw new Error(`add_user_points 실패: ${error.message}`);
   }
 }
 

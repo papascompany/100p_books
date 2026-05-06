@@ -4,11 +4,8 @@ import { BookOpen, Clock, Gift, PackageOpen } from "lucide-react";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-
 import { GiftClaimButton } from "./GiftClaimButton";
 import { Button } from "@/components/ui/button";
-import { getSession } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 

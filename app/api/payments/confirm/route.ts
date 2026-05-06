@@ -235,7 +235,8 @@ export async function POST(req: Request) {
 
     // 4-1) 할인 코드 사용 마킹 — 결제 성공 후에만 기록.
     //   - discount_uses INSERT (UNIQUE(code_id, user_id) 로 중복 방지 — 멱등 호출 안전)
-    //   - discount_codes.used_count += 1
+    //   - discount_codes.used_count 증가는 atomic RPC(increment_discount_used)로
+    //     처리해 동시 결제 시 lost-update / 한도 초과를 방어한다.
     //   실패해도 결제는 살림 (관리자 보정 가능). console.warn 로 추적.
     if (order.discount_code_id) {
       const { error: useErr } = await admin.from("discount_uses").insert({
@@ -249,23 +250,15 @@ export async function POST(req: Request) {
           useErr.message,
         );
       } else if (!useErr) {
-        // 신규 사용 기록 — used_count 증가
-        const { data: dc, error: rdErr } = await admin
-          .from("discount_codes")
-          .select("used_count")
-          .eq("id", order.discount_code_id)
-          .maybeSingle();
-        if (!rdErr && dc) {
-          const { error: incErr } = await admin
-            .from("discount_codes")
-            .update({ used_count: (dc.used_count ?? 0) + 1 })
-            .eq("id", order.discount_code_id);
-          if (incErr) {
-            console.warn(
-              "[payments/confirm] discount used_count update failed:",
-              incErr.message,
-            );
-          }
+        // 신규 사용 기록 — used_count atomic 증가
+        const { error: incErr } = await admin.rpc("increment_discount_used", {
+          p_code_id: order.discount_code_id,
+        });
+        if (incErr) {
+          console.warn(
+            "[payments/confirm] increment_discount_used failed:",
+            incErr.message,
+          );
         }
       }
     }

@@ -66,6 +66,77 @@ export async function GET(_req: Request, { params }: RouteCtx) {
 }
 
 /**
+ * DELETE /api/projects/[id]
+ *   1. 소유권 검증
+ *   2. 결제 완료된 주문이 있으면 삭제 거부 (데이터 보관 필요)
+ *   3. pages 하드 삭제 → photos 하드 삭제 → project 하드 삭제
+ *
+ *   Storage 파일 삭제는 비동기 클린업 잡(별도 cron)에 위임.
+ *   RLS 가 2차 방어선.
+ */
+export async function DELETE(_req: Request, { params }: RouteCtx) {
+  try {
+    const user = await requireUser();
+    const supabase = createServerSupabase();
+
+    // 소유권 확인
+    const { data: project, error: selErr } = await supabase
+      .from("projects")
+      .select("id, user_id")
+      .eq("id", params.id)
+      .maybeSingle();
+
+    if (selErr) return fail("PROJECT_QUERY_FAILED", selErr.message, 500);
+    if (!project) return fail("NOT_FOUND", "프로젝트를 찾을 수 없습니다.", 404);
+    if (project.user_id !== user.id) {
+      return fail("FORBIDDEN", "해당 프로젝트에 대한 권한이 없습니다.", 403);
+    }
+
+    // 결제 완료 주문이 연결되어 있으면 삭제 거부
+    const { count: paidCount, error: ordErr } = await supabase
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", params.id)
+      .neq("status", "pending")
+      .neq("status", "cancelled");
+
+    if (ordErr) return fail("ORDER_QUERY_FAILED", ordErr.message, 500);
+    if ((paidCount ?? 0) > 0) {
+      return fail(
+        "HAS_PAID_ORDERS",
+        "결제 완료된 주문이 있는 포토북은 삭제할 수 없습니다.",
+        409,
+      );
+    }
+
+    // pages 삭제
+    const { error: pagesErr } = await supabase
+      .from("pages")
+      .delete()
+      .eq("project_id", params.id);
+    if (pagesErr) return fail("PAGES_DELETE_FAILED", pagesErr.message, 500);
+
+    // photos 삭제 (storage 키는 별도 cron 처리)
+    const { error: photosErr } = await supabase
+      .from("photos")
+      .delete()
+      .eq("project_id", params.id);
+    if (photosErr) return fail("PHOTOS_DELETE_FAILED", photosErr.message, 500);
+
+    // project 삭제
+    const { error: projErr } = await supabase
+      .from("projects")
+      .delete()
+      .eq("id", params.id);
+    if (projErr) return fail("PROJECT_DELETE_FAILED", projErr.message, 500);
+
+    return ok({ deleted: true });
+  } catch (err) {
+    return failFromError(err);
+  }
+}
+
+/**
  * PATCH /api/projects/[id]
  *   body: { title?, bookSizeId? }
  */

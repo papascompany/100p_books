@@ -1,10 +1,9 @@
 "use client";
 
-import { Heart, Loader2, Star } from "lucide-react";
+import { Heart, Star } from "lucide-react";
 import Image from "next/image";
 import * as React from "react";
 
-import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 
 interface ReviewItem {
