@@ -14,6 +14,7 @@ type NavItem = { href: string; label: string };
 const NAV: NavItem[] = [
   { href: "/", label: "홈" },
   { href: "/gallery", label: "갤러리" },
+  { href: "/attendance", label: "출석체크" },
   { href: "/projects", label: "내 포토북" },
   { href: "/upload", label: "만들기" },
 ];
