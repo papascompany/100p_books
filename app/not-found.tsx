@@ -6,7 +6,7 @@ export default function NotFound() {
   return (
     <main className="flex flex-1 items-center justify-center bg-white px-4 py-16">
       <div className="max-w-md text-center">
-        <p className="font-campaign text-[96px] leading-[0.9] text-[#cacacb]">
+        <p className="font-display-num text-[96px] leading-[0.9] text-[#dedede]">
           404
         </p>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">

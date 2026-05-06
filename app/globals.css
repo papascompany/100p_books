@@ -1,5 +1,7 @@
-/* Fonts: Bebas Neue (campaign display) + Inter (UI) */
-@import url("https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap");
+/* Pretendard Variable — 한글 기본 폰트 */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.css");
+/* Bebas Neue — 숫자/영문 디스플레이 전용 */
+@import url("https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -7,39 +9,38 @@
 
 @layer base {
   :root {
-    /* Nike palette — exact hex values mapped to HSL for shadcn compatibility */
-    --background: 0 0% 100%;          /* #ffffff canvas */
-    --foreground: 0 0% 7%;            /* #111111 ink */
+    /* Nike/Editorial palette */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 7%;
 
-    --card: 0 0% 100%;                /* #ffffff */
+    --card: 0 0% 100%;
     --card-foreground: 0 0% 7%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 7%;
 
-    --primary: 0 0% 7%;               /* #111111 ink */
-    --primary-foreground: 0 0% 100%;  /* #ffffff */
+    --primary: 0 0% 7%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 0 0% 96%;            /* #f5f5f5 soft-cloud */
-    --secondary-foreground: 0 0% 7%;  /* #111111 */
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 7%;
 
-    --muted: 0 0% 96%;                /* #f5f5f5 soft-cloud */
-    --muted-foreground: 0 0% 44%;     /* #707072 mute */
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 44%;
 
-    --accent: 0 0% 96%;               /* #f5f5f5 soft-cloud */
+    --accent: 0 0% 96%;
     --accent-foreground: 0 0% 7%;
 
-    --destructive: 1 97% 41%;         /* #d30005 sale */
+    --destructive: 1 97% 41%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 79%;               /* #cacacb hairline */
-    --input: 0 0% 79%;
-    --ring: 0 0% 7%;                  /* ink focus ring */
+    --border: 0 0% 87%;
+    --input: 0 0% 87%;
+    --ring: 0 0% 7%;
 
-    --radius: 0rem;                   /* Nike: zero radius for containers */
+    --radius: 0rem;
   }
 
-  /* No dark mode — Nike system is light-only, we keep a minimal dark */
   .dark {
     --background: 0 0% 7%;
     --foreground: 0 0% 96%;
@@ -83,7 +84,7 @@
 
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "kern", "liga";
+    font-feature-settings: "ss01", "cv01";
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -99,20 +100,26 @@
 }
 
 @layer utilities {
-  /* Campaign display font — Bebas Neue, Nike-style */
-  .font-campaign {
-    font-family: "Bebas Neue", "Anton", "Impact", "Arial Black", sans-serif;
-    line-height: 0.9;
-    letter-spacing: -0.005em;
-    text-transform: uppercase;
+  /* Bebas Neue 디스플레이 — 숫자/영문 전용 */
+  .font-display-num {
+    font-family: "Bebas Neue", "Anton", "Impact", sans-serif;
+    line-height: 1;
+    letter-spacing: -0.01em;
   }
 
-  /* Hairline divider */
+  /* 텍스트 그림자 — 사진 위 가독성 */
+  .text-shadow {
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  }
+  .text-shadow-lg {
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+  }
+
+  /* hairline */
   .border-hairline {
-    border-color: #cacacb;
+    border-color: #dedede;
   }
 
-  /* Soft-cloud surface */
   .bg-soft-cloud {
     background-color: #f5f5f5;
   }

@@ -10,10 +10,11 @@ export default function AuthLayout({
       <header className="container flex h-14 items-center border-b border-[#cacacb] bg-white">
         <Link
           href="/"
-          className="font-campaign text-xl text-[#111111]"
+          className="flex items-center gap-1.5 text-[#111111]"
           aria-label="홈으로"
         >
-          100P BOOKS
+          <span className="font-display-num text-2xl font-bold leading-none">100p</span>
+          <span className="text-base font-semibold tracking-tight">Books</span>
         </Link>
       </header>
       <div className="flex flex-1 items-center justify-center px-4 py-10 sm:py-16">
