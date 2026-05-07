@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import localFont from "next/font/local";
+import { Bebas_Neue } from "next/font/google";
 
 import { ThemeProvider, THEME_INIT_SCRIPT } from "@/components/theme/ThemeProvider";
 import Toaster from "@/components/ui/toaster";
@@ -6,6 +8,21 @@ import RegisterSW from "@/components/pwa/RegisterSW";
 import InstallPrompt from "@/components/pwa/InstallPrompt";
 
 import "./globals.css";
+
+const pretendard = localFont({
+  src: "../public/fonts/PretendardVariable.woff2",
+  variable: "--font-pretendard",
+  display: "swap",
+  preload: true,
+  weight: "45 920",
+});
+
+const bebasNeue = Bebas_Neue({
+  weight: "400",
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-bebas-neue",
+});
 
 const APP_URL = (
   process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
@@ -96,7 +113,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
         />
       </head>
-      <body className="min-h-screen font-sans antialiased bg-background text-foreground">
+      <body className={`${pretendard.variable} ${bebasNeue.variable} min-h-screen font-sans antialiased bg-background text-foreground`}>
         <ThemeProvider>
           <div className="flex min-h-screen flex-col">{children}</div>
           <Toaster />

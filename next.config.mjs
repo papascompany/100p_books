@@ -6,20 +6,6 @@ const supabaseHost =
 const nextConfig = {
   reactStrictMode: true,
 
-  // 클라이언트 번들 최적화: 아이콘/UI 라이브러리 tree-shaking 강제
-  // lucide-react 단독으로 ~500KB 절감 가능
-  optimizePackageImports: [
-    "lucide-react",
-    "@radix-ui/react-dialog",
-    "@radix-ui/react-dropdown-menu",
-    "@radix-ui/react-select",
-    "@radix-ui/react-tabs",
-    "@radix-ui/react-toast",
-    "@radix-ui/react-popover",
-    "@radix-ui/react-tooltip",
-    "date-fns",
-  ],
-
   images: {
     // 모바일 최적화: WebP/AVIF 자동 변환
     formats: ["image/avif", "image/webp"],
@@ -45,6 +31,19 @@ const nextConfig = {
   },
 
   experimental: {
+    // 클라이언트 번들 최적화: 아이콘/UI 라이브러리 tree-shaking 강제
+    // lucide-react 단독으로 ~500KB 절감 가능
+    optimizePackageImports: [
+      "lucide-react",
+      "@radix-ui/react-dialog",
+      "@radix-ui/react-dropdown-menu",
+      "@radix-ui/react-select",
+      "@radix-ui/react-tabs",
+      "@radix-ui/react-toast",
+      "@radix-ui/react-popover",
+      "@radix-ui/react-tooltip",
+      "date-fns",
+    ],
     serverActions: {
       bodySizeLimit: "4mb",
     },

@@ -61,37 +61,18 @@ export async function middleware(req: NextRequest) {
     },
   });
 
-  // 세션 리프레시 (쿠키에 반영)
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // 친구 추천 코드 — 비로그인 사용자에 한해 쿠키 set.
-  // 로그인된 사용자에게는 저장하지 않음 (이미 가입 처리가 끝났으므로).
-  if (refParam && !user) {
-    const code = refParam.trim().toUpperCase();
-    if (REFERRAL_CODE_REGEX.test(code)) {
-      const existing = req.cookies.get(REFERRAL_COOKIE)?.value;
-      if (existing !== code) {
-        res.cookies.set({
-          name: REFERRAL_COOKIE,
-          value: code,
-          path: "/",
-          maxAge: REFERRAL_COOKIE_MAX_AGE_SEC,
-          sameSite: "lax",
-          httpOnly: false,
-          secure: process.env.NODE_ENV === "production",
-        });
-      }
-    }
-  }
-
   const { pathname } = req.nextUrl;
   const isAdminPage = pathname.startsWith("/admin");
   const isAdminApi = pathname.startsWith("/api/admin");
 
   if (isAdminPage || isAdminApi) {
-    if (!user) {
+    // admin 라우트: 서버 검증 필수 (네트워크 왕복 1회 발생)
+    const {
+      data: { user: verifiedUser },
+    } = await supabase.auth.getUser();
+
+    // 친구 추천 코드 — admin 라우트에서는 저장하지 않음 (로그인 사용자)
+    if (!verifiedUser) {
       if (isAdminApi) {
         return new NextResponse(
           JSON.stringify({ ok: false, error: { code: "UNAUTHORIZED", message: "로그인이 필요합니다." } }),
@@ -107,7 +88,7 @@ export async function middleware(req: NextRequest) {
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
-      .eq("id", user.id)
+      .eq("id", verifiedUser.id)
       .single();
 
     if (!profile || profile.role !== "admin") {
@@ -120,6 +101,31 @@ export async function middleware(req: NextRequest) {
       const url = req.nextUrl.clone();
       url.pathname = "/";
       return NextResponse.redirect(url);
+    }
+  } else {
+    // 일반 라우트: 쿠키에서 세션 읽기만 (네트워크 없음)
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const user = session?.user ?? null;
+
+    // 친구 추천 코드 — 비로그인 사용자에 한해 쿠키 set.
+    if (refParam && !user) {
+      const code = refParam.trim().toUpperCase();
+      if (REFERRAL_CODE_REGEX.test(code)) {
+        const existing = req.cookies.get(REFERRAL_COOKIE)?.value;
+        if (existing !== code) {
+          res.cookies.set({
+            name: REFERRAL_COOKIE,
+            value: code,
+            path: "/",
+            maxAge: REFERRAL_COOKIE_MAX_AGE_SEC,
+            sameSite: "lax",
+            httpOnly: false,
+            secure: process.env.NODE_ENV === "production",
+          });
+        }
+      }
     }
   }
 

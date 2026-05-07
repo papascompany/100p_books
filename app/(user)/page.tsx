@@ -1,9 +1,32 @@
 import { ArrowRight, BookOpen, Camera, CheckCircle2, Images, Package, Sparkles, Star } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 
 import { Button } from "@/components/ui/button";
-import StepsSection from "@/components/home/StepsSection";
+
+const StepsSection = dynamic(() => import("@/components/home/StepsSection"), {
+  ssr: false,
+  loading: () => (
+    <section className="py-12 md:py-20 bg-[#111111]">
+      <div className="container">
+        <div className="mx-auto max-w-xl text-center mb-12 space-y-3">
+          <div className="h-4 w-24 bg-white/10 mx-auto rounded" />
+          <div className="h-8 w-64 bg-white/10 mx-auto rounded" />
+        </div>
+        <div className="grid gap-6 md:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="border border-white/10 bg-white/5 p-5 space-y-3">
+              <div className="size-20 rounded-full bg-white/10 mx-auto md:mx-0" />
+              <div className="h-5 w-32 bg-white/10 rounded" />
+              <div className="h-4 w-full bg-white/10 rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  ),
+});
 
 // ─── 데이터 ────────────────────────────────────────────────────────────────
 

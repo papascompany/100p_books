@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { X, Download, Share } from "lucide-react";
 
 // ── 타입 ──────────────────────────────────────────────────────────────────────
@@ -44,38 +43,47 @@ const SESSION_KEY = "pwa-install-dismissed";
 
 export default function InstallPrompt() {
   const [platform, setPlatform] = useState<Platform>("none");
-  const [visible, setVisible] = useState(false);
+  const [rendered, setRendered] = useState(false);
+  const [visible, setVisible] = useState(false); // CSS transition 트리거
   const deferredPrompt = useRef<BeforeInstallPromptEvent | null>(null);
 
+  function show(p: Platform) {
+    setPlatform(p);
+    setRendered(true);
+    // 두 번의 rAF: DOM 마운트 후 transition 시작
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setVisible(true));
+    });
+  }
+
+  function dismiss() {
+    sessionStorage.setItem(SESSION_KEY, "1");
+    setVisible(false);
+    setTimeout(() => setRendered(false), 300);
+  }
+
   useEffect(() => {
-    // 이번 세션에 이미 닫았으면 표시하지 않음
     if (sessionStorage.getItem(SESSION_KEY)) return;
 
     const detected = detectPlatform();
     if (detected === "none") return;
 
     if (detected === "android") {
-      // beforeinstallprompt 이벤트 대기
       const handler = (e: Event) => {
         e.preventDefault();
         deferredPrompt.current = e as BeforeInstallPromptEvent;
-        setPlatform("android");
-        setVisible(true);
+        show("android");
       };
       window.addEventListener("beforeinstallprompt", handler);
       return () => window.removeEventListener("beforeinstallprompt", handler);
     }
 
     if (detected === "ios") {
-      setPlatform("ios");
-      setVisible(true);
+      show("ios");
     }
   }, []);
 
-  function dismiss() {
-    sessionStorage.setItem(SESSION_KEY, "1");
-    setVisible(false);
-  }
+  if (!rendered) return null;
 
   async function handleInstall() {
     if (!deferredPrompt.current) return;
@@ -88,59 +96,54 @@ export default function InstallPrompt() {
   }
 
   return (
-    <AnimatePresence>
-      {visible && (
-        <motion.div
-          key="install-prompt"
-          initial={{ y: "100%", opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: "100%", opacity: 0 }}
-          transition={{ duration: 0.28, ease: "easeOut" }}
-          className="fixed bottom-0 left-0 right-0 z-[200] px-4 pb-safe-bottom"
-          role="dialog"
-          aria-modal="false"
-          aria-label="앱 설치 안내"
-        >
-          <div className="mb-4 rounded-2xl bg-white dark:bg-neutral-900 shadow-[0_4px_32px_rgba(0,0,0,0.12)] border border-neutral-100 dark:border-neutral-800 p-5">
-            {/* 헤더 */}
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2.5">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/icons/icon-192.png"
-                  alt="100p Books 아이콘"
-                  width={40}
-                  height={40}
-                  className="rounded-xl"
-                />
-                <div>
-                  <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-                    100p Books
-                  </p>
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                    홈 화면에 추가하기
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={dismiss}
-                aria-label="닫기"
-                className="p-2 -mr-1 rounded-full text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-              >
-                <X size={18} aria-hidden />
-              </button>
+    <div
+      className={[
+        "fixed bottom-0 left-0 right-0 z-[200] px-4 pb-safe-bottom",
+        "transition-all duration-300 ease-out",
+        visible ? "translate-y-0 opacity-100" : "translate-y-full opacity-0",
+      ].join(" ")}
+      role="dialog"
+      aria-modal="false"
+      aria-label="앱 설치 안내"
+    >
+      <div className="mb-4 rounded-2xl bg-white dark:bg-neutral-900 shadow-[0_4px_32px_rgba(0,0,0,0.12)] border border-neutral-100 dark:border-neutral-800 p-5">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/icons/icon-192.png"
+              alt="100p Books 아이콘"
+              width={40}
+              height={40}
+              className="rounded-xl"
+            />
+            <div>
+              <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                100p Books
+              </p>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                홈 화면에 추가하기
+              </p>
             </div>
-
-            {/* 플랫폼별 안내 */}
-            {platform === "ios" ? (
-              <IosGuide onDismiss={dismiss} />
-            ) : (
-              <AndroidGuide onInstall={handleInstall} onDismiss={dismiss} />
-            )}
           </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+          <button
+            onClick={dismiss}
+            aria-label="닫기"
+            className="p-2 -mr-1 rounded-full text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+          >
+            <X size={18} aria-hidden />
+          </button>
+        </div>
+
+        {/* 플랫폼별 안내 */}
+        {platform === "ios" ? (
+          <IosGuide onDismiss={dismiss} />
+        ) : (
+          <AndroidGuide onInstall={handleInstall} onDismiss={dismiss} />
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -86,10 +86,9 @@ const config: Config = {
         DEFAULT: "0px",
       },
       fontFamily: {
-        /* Pretendard Variable — 한글/UI 기본 폰트 */
+        /* Pretendard Variable — 한글/UI 기본 폰트 (next/font CSS 변수) */
         sans: [
-          "Pretendard Variable",
-          "Pretendard",
+          "var(--font-pretendard)",
           "ui-sans-serif",
           "system-ui",
           "-apple-system",
@@ -98,14 +97,13 @@ const config: Config = {
           "sans-serif",
         ],
         display: [
-          "Pretendard Variable",
-          "Pretendard",
+          "var(--font-pretendard)",
           "ui-sans-serif",
           "sans-serif",
         ],
-        /* Bebas Neue — 숫자/영문 디스플레이 전용 */
+        /* Bebas Neue — 숫자/영문 디스플레이 전용 (next/font CSS 변수) */
         campaign: [
-          "Bebas Neue",
+          "var(--font-bebas-neue)",
           "Anton",
           "Impact",
           "Arial Black",
