@@ -4,16 +4,25 @@ import { Eye, Save } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import dynamic from "next/dynamic";
+
 import Cover3DPreview from "@/components/editor/Cover3DPreview";
 import CoverSpineGuide from "@/components/editor/CoverSpineGuide";
 import CoverTemplateDialog from "@/components/editor/CoverTemplateDialog";
-import FabricStage, {
-  PREVIEW_DPI,
-  type FabricStageHandle,
-} from "@/components/editor/FabricStage";
+import type { FabricStageHandle } from "@/components/editor/FabricStage";
 import PhotoPickerDialog from "@/components/editor/PhotoPickerDialog";
 import ResourcePalette from "@/components/editor/ResourcePalette";
-import SelectionPanel from "@/components/editor/SelectionPanel";
+
+const FabricStage = dynamic(() => import("@/components/editor/FabricStage"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-64 w-full items-center justify-center bg-[#f5f5f5]">
+      <div className="size-10 animate-spin rounded-full border-4 border-[#dedede] border-t-[#111111]" />
+    </div>
+  ),
+});
+const SelectionPanel = dynamic(() => import("@/components/editor/SelectionPanel"), { ssr: false });
+const PREVIEW_DPI = 72;
 import Toolbar, { type ToolbarTool } from "@/components/editor/Toolbar";
 import MobileBottomSheet from "@/components/layout/MobileBottomSheet";
 import { Button } from "@/components/ui/button";
@@ -103,11 +112,9 @@ export default function CoverEditor({
   const dims = calcCoverDimensions({ bookSize, pageCount });
   const spineTooNarrow = dims.spineMm < SPINE_TEXT_MIN_MM;
 
-  // 첫 마운트 시 doc 로드
-  useEffect(() => {
-    const handle = stageRef.current;
-    if (!handle) return;
-    void handle.loadDoc(initialDoc, initialPhotoUrls);
+  // 첫 마운트 시 doc 로드 — FabricStage 준비 완료 시 (lazy load 지원)
+  const handleStageReady = useCallback(() => {
+    void stageRef.current?.loadDoc(initialDoc, initialPhotoUrls);
     // 의도적으로 초기 1회만 로드.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -522,6 +529,7 @@ export default function CoverEditor({
                   setCanUndo(u);
                   setCanRedo(r);
                 }}
+                onReady={handleStageReady}
               />
               {showGuide ? (
                 <CoverSpineGuide

@@ -5,11 +5,19 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import dynamic from "next/dynamic";
+
 import CollageTemplateDialog from "@/components/editor/CollageTemplateDialog";
-import FabricStage, {
-  PREVIEW_DPI,
-  type FabricStageHandle,
-} from "@/components/editor/FabricStage";
+import type { FabricStageHandle } from "@/components/editor/FabricStage";
+const FabricStage = dynamic(() => import("@/components/editor/FabricStage"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex flex-1 items-center justify-center bg-[#f5f5f5]">
+      <div className="size-10 animate-spin rounded-full border-4 border-[#dedede] border-t-[#111111]" />
+    </div>
+  ),
+});
+const PREVIEW_DPI = 72;
 import KeyboardShortcutsHelp, {
   useShortcutsAutoShow,
 } from "@/components/editor/KeyboardShortcutsHelp";
@@ -17,7 +25,7 @@ import MobileToolbar, { type MobileTab } from "@/components/editor/MobileToolbar
 import PagePreviewDialog from "@/components/editor/PagePreviewDialog";
 import PhotoPickerDialog from "@/components/editor/PhotoPickerDialog";
 import ResourcePalette from "@/components/editor/ResourcePalette";
-import SelectionPanel from "@/components/editor/SelectionPanel";
+const SelectionPanel = dynamic(() => import("@/components/editor/SelectionPanel"), { ssr: false });
 import Toolbar, { type ToolbarTool } from "@/components/editor/Toolbar";
 import MobileBottomSheet from "@/components/layout/MobileBottomSheet";
 import { Button } from "@/components/ui/button";
@@ -31,7 +39,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/use-toast";
 import type { BookSize } from "@/lib/db/types";
-import { fabricClipboard } from "@/lib/fabric/clipboard";
+// fabricClipboard: 실제 사용 시점에 동적으로 import (fabric.js 번들 분리)
+const getClipboard = () => import("@/lib/fabric/clipboard").then((m) => m.fabricClipboard);
 import type { TaggedFabricObject } from "@/lib/fabric/serialize";
 import { PAGEDOC_VERSION, type PageDoc } from "@/lib/layout/types";
 import { cn } from "@/lib/utils";
@@ -142,11 +151,10 @@ export default function PageEditor({
     }
   }, [shouldAutoShowShortcuts]);
 
-  // 페이지 doc 로드 (FabricStage 마운트 후)
-  useEffect(() => {
-    const handle = stageRef.current;
-    if (!handle || !initialDoc) return;
-    void handle.loadDoc(initialDoc, initialPhotoUrls);
+  // 페이지 doc 로드 — FabricStage 준비 완료 시 (lazy load 지원)
+  const handleStageReady = useCallback(() => {
+    if (!initialDoc) return;
+    void stageRef.current?.loadDoc(initialDoc, initialPhotoUrls);
   }, [initialDoc, initialPhotoUrls]);
 
   // 자동 저장 debounce
@@ -223,7 +231,7 @@ export default function PageEditor({
   }, []);
 
   // ====================== 단축키 핸들러 ======================
-  const copySelection = useCallback(() => {
+  const copySelection = useCallback(async () => {
     const handle = stageRef.current;
     if (!handle) return;
     const sel = handle.getSelection();
@@ -234,7 +242,8 @@ export default function PageEditor({
       });
       return;
     }
-    const snap = fabricClipboard.copy(
+    const clipboard = await getClipboard();
+    const snap = clipboard.copy(
       sel,
       handle.getDpi(),
       handle.getBleedMm(),
@@ -248,14 +257,15 @@ export default function PageEditor({
   const pasteFromClipboard = useCallback(async () => {
     const handle = stageRef.current;
     if (!handle) return;
-    if (!fabricClipboard.hasContent) {
+    const clipboard = await getClipboard();
+    if (!clipboard.hasContent) {
       toast({
         description: "클립보드가 비어있어요.",
         variant: "warning",
       });
       return;
     }
-    const obj = fabricClipboard.read();
+    const obj = clipboard.read();
     if (!obj) return;
     await handle.pasteLayoutObject(obj, initialPhotoUrls);
     setDirty(true);
@@ -335,7 +345,7 @@ export default function PageEditor({
         }
         if (k === "c") {
           e.preventDefault();
-          copySelection();
+          void copySelection();
           return;
         }
         if (k === "v") {
@@ -598,6 +608,7 @@ export default function PageEditor({
               setCanUndo(u);
               setCanRedo(r);
             }}
+            onReady={handleStageReady}
           />
           <div className="flex flex-wrap items-center gap-2">
             <Button

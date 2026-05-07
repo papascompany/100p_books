@@ -113,6 +113,8 @@ export interface FabricStageProps {
   ) => void;
   /** History 변동 알림 (UI 토글용). */
   onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void;
+  /** 캔버스 초기화 완료 — lazy load 시 doc 로딩 트리거용. 최초 1회만 발생. */
+  onReady?: () => void;
   className?: string;
 }
 
@@ -137,6 +139,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       onModified,
       onLongPress,
       onHistoryChange,
+      onReady,
       className,
     } = props;
 
@@ -153,6 +156,8 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
     const onModifiedRef = useRef(onModified);
     const onLongPressRef = useRef(onLongPress);
     const onHistoryChangeRef = useRef(onHistoryChange);
+    const onReadyRef = useRef(onReady);
+    const readyCalledRef = useRef(false);
     useEffect(() => {
       onSelectionChangeRef.current = onSelectionChange;
     }, [onSelectionChange]);
@@ -165,6 +170,9 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
     useEffect(() => {
       onHistoryChangeRef.current = onHistoryChange;
     }, [onHistoryChange]);
+    useEffect(() => {
+      onReadyRef.current = onReady;
+    }, [onReady]);
 
     // 캔버스 논리 크기(px) — bleed 포함
     const stagePxSize = useMemo(() => {
@@ -281,6 +289,12 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         }, 150);
       });
       ro.observe(wrapper);
+
+      // 최초 캔버스 초기화 완료 신호 (lazy-load 시 doc 로딩 트리거)
+      if (!readyCalledRef.current) {
+        readyCalledRef.current = true;
+        onReadyRef.current?.();
+      }
 
       return () => {
         if (resizeTimer) clearTimeout(resizeTimer);

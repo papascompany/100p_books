@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
-import { Bebas_Neue } from "next/font/google";
 
 import { ThemeProvider, THEME_INIT_SCRIPT } from "@/components/theme/ThemeProvider";
 import Toaster from "@/components/ui/toaster";
@@ -17,11 +16,12 @@ const pretendard = localFont({
   weight: "45 920",
 });
 
-const bebasNeue = Bebas_Neue({
-  weight: "400",
-  subsets: ["latin"],
-  display: "swap",
+const bebasNeue = localFont({
+  src: "../public/fonts/BebasNeue-Regular.woff2",
   variable: "--font-bebas-neue",
+  display: "swap",
+  preload: true,
+  weight: "400",
 });
 
 const APP_URL = (
