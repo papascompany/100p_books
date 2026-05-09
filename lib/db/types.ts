@@ -37,6 +37,35 @@ export interface Profile {
   privacy_agreed_at: string | null;
   /** 친구 추천 코드 (M16-4). 미발급 = null. 8자 대문자 + 숫자. */
   referral_code: string | null;
+  /** OAuth 프로필 사진 URL (카카오/구글 등). */
+  avatar_url: string | null;
+  /** 가입 시 사용된 OAuth 프로바이더 ('kakao' | 'google' | 'email' | null). */
+  oauth_provider: string | null;
+}
+
+/**
+ * 포인트 거래 내역 (M16-7).
+ * amount > 0 적립, amount < 0 사용. balance_after 는 거래 후 잔액.
+ */
+export type PointLedgerReason =
+  | "attendance"
+  | "attendance_bonus"
+  | "referral_reward"
+  | "order_use"
+  | "order_refund"
+  | "admin_adjust"
+  | "welcome";
+
+export interface PointLedger {
+  id: string;
+  user_id: string;
+  amount: number;
+  reason: PointLedgerReason;
+  ref_type: string | null;
+  ref_id: string | null;
+  balance_after: number;
+  memo: string | null;
+  created_at: string;
 }
 
 export type ReferralRewardStatus = "pending" | "rewarded";
@@ -373,6 +402,12 @@ export interface Database {
           Partial<Pick<Attendance, "id" | "created_at">>;
         Update: Partial<Attendance>;
       };
+      point_ledger: {
+        Row: PointLedger;
+        Insert: Omit<PointLedger, "id" | "created_at"> &
+          Partial<Pick<PointLedger, "id" | "created_at">>;
+        Update: Partial<PointLedger>;
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -427,6 +462,36 @@ export interface Database {
       };
       add_user_points: {
         Args: { p_user_id: string; p_amount: number };
+        Returns: null;
+      };
+      add_user_points_v2: {
+        Args: {
+          p_user_id: string;
+          p_amount: number;
+          p_reason: PointLedgerReason;
+          p_ref_type?: string | null;
+          p_ref_id?: string | null;
+          p_memo?: string | null;
+        };
+        Returns: number;
+      };
+      deduct_user_points_v2: {
+        Args: {
+          p_user_id: string;
+          p_amount: number;
+          p_reason: PointLedgerReason;
+          p_ref_type?: string | null;
+          p_ref_id?: string | null;
+          p_memo?: string | null;
+        };
+        Returns: number;
+      };
+      award_referral_reward_v2: {
+        Args: { p_referee_id: string; p_reward: number };
+        Returns: string | null;
+      };
+      sync_oauth_profile: {
+        Args: { p_user_id: string };
         Returns: null;
       };
     };

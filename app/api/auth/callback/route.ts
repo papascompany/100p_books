@@ -62,6 +62,17 @@ export async function GET(req: NextRequest) {
       /* 무시 — 후속 /api/auth/agree 클라 호출로 보완 가능 */
     }
 
+    // OAuth 프로필 동기화 (카카오/구글 등) — display_name / avatar_url 비어있을 때만 채움.
+    // 이메일 매직링크의 경우 raw_user_meta_data 가 비어있어 no-op.
+    try {
+      await admin.rpc("sync_oauth_profile", { p_user_id: userId });
+    } catch (e) {
+      console.warn(
+        "[auth/callback] sync_oauth_profile 실패:",
+        e instanceof Error ? e.message : String(e),
+      );
+    }
+
     // 본인 추천 코드 발급 (없으면 신규 발급)
     let myCode: string | null = null;
     try {

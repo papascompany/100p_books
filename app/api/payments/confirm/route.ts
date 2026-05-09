@@ -153,12 +153,19 @@ export async function POST(req: Request) {
     //    Toss 결제는 이미 성공했으므로 차감 실패 시에도 결제는 살린다 (관리자 보정).
     if (order.points_used && order.points_used > 0) {
       const { data: newBalance, error: dedErr } = await admin.rpc(
-        "deduct_user_points",
-        { p_user_id: order.user_id, p_amount: order.points_used },
+        "deduct_user_points_v2",
+        {
+          p_user_id: order.user_id,
+          p_amount: order.points_used,
+          p_reason: "order_use",
+          p_ref_type: "orders",
+          p_ref_id: order.id,
+          p_memo: `주문 ${order.id.slice(0, 8)} 결제 시 포인트 사용`,
+        },
       );
       if (dedErr) {
         console.warn(
-          "[payments/confirm] deduct_user_points 호출 실패:",
+          "[payments/confirm] deduct_user_points_v2 호출 실패:",
           dedErr.message,
         );
       } else if (typeof newBalance === "number" && newBalance < 0) {
@@ -211,7 +218,7 @@ export async function POST(req: Request) {
       } else if ((priorPaidCount ?? 0) === 0) {
         // 첫 결제 — referrals.pending 이 있으면 보상 지급.
         const { data: referrerId, error: rwdErr } = await admin.rpc(
-          "award_referral_reward",
+          "award_referral_reward_v2",
           { p_referee_id: order.user_id, p_reward: REFERRAL_REWARD },
         );
         if (rwdErr) {

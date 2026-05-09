@@ -10,6 +10,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import AttendanceWidget from "@/components/mypage/AttendanceWidget";
+import PointHistoryCard from "@/components/mypage/PointHistoryCard";
 import PointsBadge from "@/components/mypage/PointsBadge";
 import ReferralCard from "@/components/mypage/ReferralCard";
 import {
@@ -193,6 +194,11 @@ export default async function MyPage() {
       {/* 추천 링크 섹션 */}
       <div className="mt-6">
         <ReferralCard />
+      </div>
+
+      {/* 포인트 거래 내역 */}
+      <div className="mt-6">
+        <PointHistoryCard />
       </div>
     </div>
   );

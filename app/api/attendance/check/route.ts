@@ -28,22 +28,30 @@ function kstToday(): { dateStr: string; monthKey: string } {
 }
 
 /**
- * user_points 에 +amount 를 atomic 적립 (add_user_points RPC).
+ * user_points 에 +amount 를 atomic 적립 (add_user_points_v2 RPC).
  * 동시 호출 시 lost-update 방어 — INSERT ... ON CONFLICT DO UPDATE 단일 SQL.
+ * v2 는 point_ledger 행도 함께 기록한다.
  */
 async function creditPoints(
   admin: ReturnType<typeof createAdminSupabase>,
   userId: string,
   amount: number,
+  reason: "attendance" | "attendance_bonus",
+  refId?: string,
+  memo?: string,
 ): Promise<void> {
   if (amount <= 0) return;
 
-  const { error } = await admin.rpc("add_user_points", {
+  const { error } = await admin.rpc("add_user_points_v2", {
     p_user_id: userId,
     p_amount: amount,
+    p_reason: reason,
+    p_ref_type: refId ? "attendances" : null,
+    p_ref_id: refId ?? null,
+    p_memo: memo ?? null,
   });
   if (error) {
-    throw new Error(`add_user_points 실패: ${error.message}`);
+    throw new Error(`add_user_points_v2 실패: ${error.message}`);
   }
 }
 
@@ -130,7 +138,14 @@ export async function POST() {
 
     if (!alreadyChecked) {
       try {
-        await creditPoints(admin, user.id, DAILY_REWARD);
+        await creditPoints(
+          admin,
+          user.id,
+          DAILY_REWARD,
+          "attendance",
+          undefined,
+          `일일 출석 (${dateStr})`,
+        );
         pointsAwarded += DAILY_REWARD;
       } catch (e) {
         console.warn(
@@ -142,7 +157,14 @@ export async function POST() {
       // 정확히 10일째 도달한 시점에 보너스 1회 지급.
       if (totalThisMonth === TEN_DAY_THRESHOLD) {
         try {
-          await creditPoints(admin, user.id, TEN_DAY_BONUS);
+          await creditPoints(
+            admin,
+            user.id,
+            TEN_DAY_BONUS,
+            "attendance_bonus",
+            undefined,
+            `${monthKey} 10일 달성 보너스`,
+          );
           pointsAwarded += TEN_DAY_BONUS;
           tenDayBonus = true;
         } catch (e) {
