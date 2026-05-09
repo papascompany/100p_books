@@ -1,5 +1,7 @@
 import "server-only";
 
+import { Resend } from "resend";
+
 import { createAdminSupabase } from "@/lib/db/admin";
 import type { EmailJob } from "@/lib/db/types";
 
@@ -12,9 +14,10 @@ import type { EmailJob } from "@/lib/db/types";
  *   2. 각 잡을 sendEmail() 로 전달.
  *   3. 결과에 따라 status 마킹.
  *
- * SMTP 미통합:
- *   - sendEmail() 이 SMTP 미설정을 감지하면 status='cancelled', last_error 명시.
- *   - 운영에서 Resend 등 통합 시 본 함수의 sendEmail 분기만 교체하면 됨.
+ * Resend 통합:
+ *   - RESEND_API_KEY 가 설정되어 있으면 Resend SDK 로 발송.
+ *   - EMAIL_FROM 환경변수: 발신자 주소 (기본: "100p Books <noreply@100pbooks.com>").
+ *   - 미설정이면 status='cancelled', last_error 명시.
  *
  * 재시도:
  *   - 실패한 잡은 status='failed' + attempt+1.
@@ -148,7 +151,7 @@ export async function processEmailQueue(
 }
 
 // =====================================================================
-// sendEmail — Stub. SMTP 미설정이면 cancelled 로 마킹.
+// sendEmail — Resend SDK 발송.
 // =====================================================================
 
 interface SendResult {
@@ -156,38 +159,52 @@ interface SendResult {
   error?: string;
 }
 
+/** 발신자 주소. 환경변수 EMAIL_FROM 미설정이면 기본값 사용. */
+function fromAddress(): string {
+  return process.env.EMAIL_FROM ?? "100p Books <noreply@100pbooks.com>";
+}
+
 async function sendEmail(job: EmailJob): Promise<SendResult> {
-  // SMTP / Resend 환경변수 확인
-  const smtpHost = process.env.SMTP_HOST;
   const resendKey = process.env.RESEND_API_KEY;
 
-  if (!smtpHost && !resendKey) {
-    // 콘솔 로그만 — 운영자가 큐가 쌓이는 것을 보고 SMTP 통합을 진행할 수 있도록.
+  if (!resendKey) {
     console.warn(
-      `[email/worker] SMTP not configured — cancelling job ${job.id} (template=${job.template}, to=${job.to_email})`,
+      `[email/worker] RESEND_API_KEY 미설정 — job ${job.id} cancelled (template=${job.template}, to=${job.to_email})`,
     );
     return {
       kind: "cancelled",
-      error: "SMTP not configured (no SMTP_HOST/RESEND_API_KEY)",
+      error: "RESEND_API_KEY 환경변수가 설정되지 않았습니다.",
     };
   }
 
-  // 실제 발송 통합은 Phase 12 — 본 마일스톤은 stub.
-  // TODO(phase 12): Resend SDK 또는 nodemailer 또는 supabase auth admin sendEmail 사용.
-  //   if (resendKey) {
-  //     const { Resend } = await import("resend");
-  //     const r = new Resend(resendKey);
-  //     await r.emails.send({ from, to, subject, text, html });
-  //     return { kind: "sent" };
-  //   }
-  //   if (smtpHost) {
-  //     const transporter = await import("nodemailer").then((m) => m.createTransport(...));
-  //     await transporter.sendMail({ ... });
-  //     return { kind: "sent" };
-  //   }
+  try {
+    const resend = new Resend(resendKey);
 
-  return {
-    kind: "failed",
-    error: "SMTP/Resend integration not yet implemented (Phase 12)",
-  };
+    const payload: Parameters<typeof resend.emails.send>[0] = {
+      from: fromAddress(),
+      to: job.to_name ? `${job.to_name} <${job.to_email}>` : job.to_email,
+      subject: job.subject,
+      text: job.body_text,
+      ...(job.body_html ? { html: job.body_html } : {}),
+    };
+
+    const { error } = await resend.emails.send(payload);
+
+    if (error) {
+      console.error("[email/worker] Resend error:", error, {
+        jobId: job.id,
+        template: job.template,
+      });
+      return { kind: "failed", error: `Resend: ${error.message}` };
+    }
+
+    return { kind: "sent" };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[email/worker] sendEmail exception:", msg, {
+      jobId: job.id,
+      template: job.template,
+    });
+    return { kind: "failed", error: msg };
+  }
 }
