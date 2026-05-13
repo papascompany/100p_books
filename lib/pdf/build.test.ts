@@ -67,6 +67,16 @@ describe("text-wrap", () => {
 // =====================================================================
 // PageDoc → PNG → PDF 통합 (옵셔널 — native binary 의존)
 // =====================================================================
+//
+// ⚠️ 이 native 통합 케이스는 vitest jsdom 환경에서 신뢰성 있게 동작하지 않는다.
+//   @napi-rs/canvas 의 toBuffer() 가 jsdom 의 HTMLCanvasElement polyfill 과
+//   충돌해 NaN 을 반환하며 pdf-lib.embedPng 에서 TypeError 가 발생한다.
+//
+//   대안: `pnpm verify:pdf` (scripts/verify-pdf.ts) — text + photo+shadow
+//   2 페이지를 실제 Node 환경에서 합성하고 PDF 1.7 헤더 / 바이트 수를 검증한다.
+//
+//   본 native 케이스는 향후 vitest 의 "node" 풀 분리 또는 별도 환경 추가
+//   시까지 default-skip 으로 유지한다.
 
 const enableNative = process.env.PDF_NATIVE_TEST === "1";
 const describeNative = enableNative ? describe : describe.skip;

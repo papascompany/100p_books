@@ -186,27 +186,38 @@ async function drawPhoto(
     cx.rotate((obj.rotation * Math.PI) / 180);
   }
 
-  // shadow (rotate 적용 후, 이미지 그리기 직전)
+  // Pass 1 — shadow only.
+  //   clip() 을 호출하면 이후의 drawImage 그림자가 clip 영역 안으로 갇혀 보이지 않는다.
+  //   따라서 clip 전에 슬롯 모양을 흰색으로 fill 해서 그림자만 캔버스에 미리 새긴다.
+  //   - cover 모드: 이미지가 슬롯을 가득 채우므로 흰 fill 은 위에서 덮여 보이지 않음.
+  //   - contain 모드: 슬롯 내부 빈 공간이 흰색으로 채워져 자연스러움.
+  //   shadow 색/오프셋/블러는 PageDoc 의 PhotoObject.shadow 그대로 사용.
   if (obj.shadow) {
+    cx.save();
     cx.shadowColor = obj.shadow.color;
     cx.shadowBlur = mmToPx(obj.shadow.blurMm, dpi);
     cx.shadowOffsetX = 0;
     cx.shadowOffsetY = mmToPx(obj.shadow.offsetYMm, dpi);
+    cx.fillStyle = "#ffffff";
+    cx.beginPath();
+    if (radiusPx > 0) {
+      pathRoundRect(cx, -wPx / 2, -hPx / 2, wPx, hPx, radiusPx);
+    } else {
+      cx.rect(-wPx / 2, -hPx / 2, wPx, hPx);
+    }
+    cx.fill();
+    cx.restore();
   }
 
-  // clipping path (slot box, 회전된 좌표계에서 -w/2, -h/2 박스)
+  // Pass 2 — clipping path (slot box, 회전된 좌표계에서 -w/2, -h/2 박스).
+  //   여기부터는 shadow 가 비활성 상태 (Pass 1 save/restore 로 격리됨).
+  cx.beginPath();
   if (radiusPx > 0) {
-    cx.beginPath();
     pathRoundRect(cx, -wPx / 2, -hPx / 2, wPx, hPx, radiusPx);
-    cx.clip();
-    // shadow 는 clip 바깥으로 새지 않으므로 별도 처리 — clip 후엔 shadow 무력화됨.
-    // 그림자를 살리려면 clip 전에 fillRect 로 배경을 그리거나 별도 단계가 필요.
-    // 본 단계에서는 borderRadius + shadow 동시 적용은 그림자가 잘릴 수 있음 — 알려진 한계.
   } else {
-    cx.beginPath();
     cx.rect(-wPx / 2, -hPx / 2, wPx, hPx);
-    cx.clip();
   }
+  cx.clip();
 
   // crop fit
   const iw = img.width;

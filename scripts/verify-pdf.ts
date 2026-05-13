@@ -21,7 +21,15 @@ import { resolve } from "node:path";
 import { PAGEDOC_VERSION, type PageDoc } from "@/lib/layout/types";
 import { buildInteriorPdf } from "@/lib/pdf/build";
 
-const doc: PageDoc = {
+// 32×32 단색(연한 회색) PNG — photo 객체 검증용 더미. base64 디코드 후 Buffer 반환.
+// 실제 사진 다운로드 의존성 없이 borderRadius + shadow 패스를 검증한다.
+const DUMMY_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAJklEQVR4nO3OMQEAAAjDMMC/56" +
+  "EBznSgvW0lQghtEELYIYSwQwhhh17/AmHsErl/AAAAAElFTkSuQmCC";
+const DUMMY_PNG = Buffer.from(DUMMY_PNG_BASE64, "base64");
+
+// Page 1 — text + rect (회귀 확인용 — 기존 케이스 그대로)
+const textOnlyDoc: PageDoc = {
   version: PAGEDOC_VERSION,
   bookSizeId: "00000000-0000-0000-0000-000000000000",
   pageNo: 1,
@@ -72,12 +80,59 @@ const doc: PageDoc = {
   ],
 };
 
+// Page 2 — photo + borderRadius + shadow.
+//   render-page.ts 의 shadow/clip 2-pass 패스 검증용.
+//   shadow 가 borderRadius 모서리 바깥까지 정상 출력되어야 한다.
+const photoShadowDoc: PageDoc = {
+  version: PAGEDOC_VERSION,
+  bookSizeId: "00000000-0000-0000-0000-000000000000",
+  pageNo: 2,
+  layoutMode: "polaroid",
+  widthMm: 145,
+  heightMm: 145,
+  bleedMm: 2,
+  backgroundColor: "#fafafa",
+  objects: [
+    {
+      type: "photo",
+      objectId: "p1",
+      photoId: "dummy-photo-1",
+      leftMm: 30,
+      topMm: 30,
+      widthMm: 85,
+      heightMm: 85,
+      rotation: 0,
+      cropMode: "cover",
+      borderRadiusMm: 8,
+      shadow: {
+        blurMm: 3,
+        offsetYMm: 1.5,
+        color: "rgba(0,0,0,0.35)",
+      },
+    },
+    {
+      type: "text",
+      objectId: "t3",
+      leftMm: 20,
+      topMm: 125,
+      widthMm: 105,
+      heightMm: 12,
+      text: "shadow + borderRadius",
+      fontFamily: "Pretendard",
+      fontSizePt: 10,
+      fill: "#666",
+      align: "center",
+      lineHeight: 1.4,
+    },
+  ],
+};
+
 async function main() {
   const t0 = Date.now();
   const pdfBuf = await buildInteriorPdf({
-    pages: [doc],
+    pages: [textOnlyDoc, photoShadowDoc],
     bookSize: {
-      id: doc.bookSizeId,
+      id: textOnlyDoc.bookSizeId,
       name: "verify-145sq",
       width_mm: 145,
       height_mm: 145,
@@ -88,8 +143,9 @@ async function main() {
       display_order: 0,
       created_at: new Date().toISOString(),
     },
-    resolveImageUrl: async () => {
-      throw new Error("no photo expected in text/rect-only verify");
+    resolveImageUrl: async (photoId: string) => {
+      if (photoId === "dummy-photo-1") return DUMMY_PNG;
+      throw new Error(`unexpected photoId in verify: ${photoId}`);
     },
     meta: { title: "100p_books 검증", author: "scripts/verify-pdf.ts" },
   });
@@ -108,6 +164,7 @@ async function main() {
   writeFileSync(outPath, pdfBuf);
 
   console.log("[verify-pdf] OK");
+  console.log("  pages:        2 (text+rect / photo+borderRadius+shadow)");
   console.log("  magic:        %PDF");
   console.log("  bytes:       ", pdfBuf.byteLength.toLocaleString());
   console.log("  elapsed_ms:  ", elapsed);
