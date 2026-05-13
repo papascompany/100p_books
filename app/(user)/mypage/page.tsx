@@ -1,5 +1,6 @@
 import {
   ChevronRight,
+  Coins,
   Image as ImageIcon,
   Package,
   Star,
@@ -165,6 +166,26 @@ export default async function MyPage() {
           </Card>
         </Link>
 
+        <Link href="/mypage/points" className="group">
+          <Card className="h-full transition-colors hover:border-[#111111]">
+            <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Coins className="size-5 text-amber-500" />
+                  포인트 내역
+                </CardTitle>
+                <CardDescription className="mt-1.5">
+                  적립과 사용 이력을 확인해 보세요.
+                </CardDescription>
+              </div>
+              <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              출석체크와 친구 추천으로 적립한 포인트는 주문 시 1P = 1원으로 쓸 수 있어요.
+            </CardContent>
+          </Card>
+        </Link>
+
         <Link href="/gallery" className="group">
           <Card className="h-full transition-colors hover:border-[#111111]">
             <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
@@ -196,9 +217,9 @@ export default async function MyPage() {
         <ReferralCard />
       </div>
 
-      {/* 포인트 거래 내역 */}
+      {/* 포인트 거래 내역 (최근 20건 — 전체는 /mypage/points 에서) */}
       <div className="mt-6">
-        <PointHistoryCard />
+        <PointHistoryCard limit={20} showViewAll />
       </div>
     </div>
   );

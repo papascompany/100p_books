@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 
 import OrderPdfButtons from "./OrderPdfButtons";
 import { GiftDialog } from "@/components/orders/GiftDialog";
+import ReviewDialog from "@/components/reviews/ReviewDialog";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
@@ -78,6 +79,18 @@ export default async function OrderDetailPage({ params }: PageProps) {
   if (!row) notFound();
   const order = row as unknown as OrderDetailRow;
   // RLS 가 user_id 기준 SELECT 를 보호하므로 추가 소유권 체크는 생략.
+
+  const isReviewable =
+    order.status === "shipped" || order.status === "delivered";
+  let hasReview = false;
+  if (isReviewable) {
+    const { data: existing } = await supabase
+      .from("reviews")
+      .select("id")
+      .eq("order_id", order.id)
+      .maybeSingle();
+    hasReview = !!existing;
+  }
 
   // PDF signedUrl 발급 (paid 이상일 때만)
   let coverUrl: string | null = null;
@@ -188,6 +201,13 @@ export default async function OrderDetailPage({ params }: PageProps) {
         {canDownloadPdfs(order.status) && (
           <GiftDialog orderId={order.id} />
         )}
+        {isReviewable && !hasReview ? (
+          <ReviewDialog orderId={order.id} />
+        ) : isReviewable && hasReview ? (
+          <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+            후기 작성 완료
+          </span>
+        ) : null}
       </div>
     </div>
   );

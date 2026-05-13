@@ -7,6 +7,7 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,17 @@ function formatRelativeDate(iso: string): string {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export default function PointHistoryCard() {
+interface PointHistoryCardProps {
+  /** 가져올 ledger 행 수 (기본 20, 최대 200). */
+  limit?: number;
+  /** "전체 보기" 링크 노출 여부 (기본 false). */
+  showViewAll?: boolean;
+}
+
+export default function PointHistoryCard({
+  limit = 20,
+  showViewAll = false,
+}: PointHistoryCardProps = {}) {
   const [data, setData] = React.useState<PointsResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -61,7 +72,7 @@ export default function PointHistoryCard() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/points?limit=20", { cache: "no-store" });
+      const res = await fetch(`/api/points?limit=${limit}`, { cache: "no-store" });
       const json = (await res.json()) as {
         ok: boolean;
         data?: PointsResponse;
@@ -77,7 +88,7 @@ export default function PointHistoryCard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [limit]);
 
   React.useEffect(() => {
     void load();
@@ -204,6 +215,18 @@ export default function PointHistoryCard() {
             아직 포인트 내역이 없어요. 출석체크와 친구 추천으로 적립을 시작해보세요!
           </p>
         )}
+
+        {showViewAll && data && data.ledger.length >= limit ? (
+          <div className="mt-3 border-t pt-3 text-center">
+            <Link
+              href="/mypage/points"
+              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              전체 내역 보기
+              <span aria-hidden>→</span>
+            </Link>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
