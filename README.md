@@ -43,7 +43,8 @@
 | PDF | **`@napi-rs/canvas` + `pdf-lib` + `@pdf-lib/fontkit`** (자체 렌더러, Fabric 서버 의존 X) |
 | 이미지 | sharp (서버) + heic2any/exifr (클라) |
 | 송장 | exceljs |
-| 테스트 | Vitest 2 + jsdom |
+| 이메일 | Resend SDK |
+| 테스트 | Vitest 2 + jsdom (유닛) · **Playwright 1.60** (E2E desktop+mobile) |
 | 배포 | Vercel + Supabase |
 
 ---
@@ -80,11 +81,16 @@
 │   ├── orders/              # 가격/상태 머신
 │   ├── payments/            # 토스 confirm/조회
 │   └── admin/               # excel 송장 빌더
-├── supabase/migrations/     # 9개 SQL (스키마 + RLS + 시드 + Storage + RPC + tracking)
+├── supabase/migrations/     # 23개 SQL (스키마 + RLS + 시드 + Storage + RPC + tracking + ledger 등)
+├── e2e/                     # Playwright E2E (smoke.spec.ts 외)
+├── scripts/                 # gen-icons / verify-pdf / server-only stub
+├── tests/mocks/             # vitest 환경 alias (server-only stub)
 ├── PLAN.md                  # 마일스톤·일정
 ├── ARCHITECTURE.md          # DPI·좌표계·PDF 파이프라인
 ├── PROGRESS.md              # 진행 상황·이벤트 로그
-└── QA_REPORT.md             # 최종 정적 QA 리포트
+├── STATUS.md                # 현재 상태 + 다음 우선순위
+├── SECURITY.md              # 보안 패치 이력 + 잔존 CVE
+└── QA_REPORT.md             # 정적 QA 리포트 (M0~M7)
 ```
 
 ---
@@ -212,13 +218,14 @@ pnpm build        # production 빌드
 
 | 검증 | 결과 |
 |---|---|
-| `pnpm install` | ✅ 15.5초 |
 | `pnpm typecheck` | ✅ 에러 0건 |
-| `pnpm lint` | ✅ 에러 0건 (경고 2건, 무해) |
-| `pnpm test` | ✅ 12 파일 / 106 통과 / 1 skip |
-| `pnpm build` | ✅ 모든 라우트 production 빌드 성공 |
+| `pnpm test` | ✅ 15 파일 / 153 통과 / 1 skip |
+| `pnpm build` | ✅ 31 라우트 production 빌드 성공 |
+| `pnpm verify:pdf` | ✅ 145mm sq · 40KB / 353ms · PDF 1.7 |
+| `pnpm e2e` (chromium desktop+mobile) | ✅ 12/12 통과 (5.7s) |
+| Lighthouse 모바일 (운영) | ✅ Performance 97 · LCP 1.5s · CLS 0 |
 
-[QA_REPORT.md](QA_REPORT.md) 참고.
+상세: [STATUS.md](STATUS.md) · [QA_REPORT.md](QA_REPORT.md)
 
 ---
 
@@ -237,8 +244,14 @@ pnpm build        # production 빌드
 | M8 | 정적 QA · 폴리싱 | ✅ |
 | M9 | UX 보강 (Toast / 다크모드 / 우편번호 SDK) | ✅ |
 | M10 | 법규 준수 + Vercel 배포 준비 | ✅ |
+| M11 | 클립아트 영속화 + PDF 재시도 큐 + 감사 로그 | ✅ |
+| M12 | 편집기 UX 보강 (reorder / 추가삭제 / 복붙 / 단축키) | ✅ |
+| M15 | 페이지 미리보기 + 이메일 인프라 (큐 / 템플릿 / 워커) | ✅ |
+| M16 | 성장 기능 (공유 / 선물 / 할인 / 추천 / 후기 / 출석 / 포인트 / 카카오 OAuth) | ✅ |
+| M17 | 모바일 PWA (manifest / SW / 카메라 직접 업로드) | ✅ |
+| M8-보강 | PDF 런타임 검증 / E2E Playwright / Lighthouse | ✅ (2026-05-13) |
 
-상세: [PLAN.md](PLAN.md) / [PROGRESS.md](PROGRESS.md)
+상세: [PLAN.md](PLAN.md) · [PROGRESS.md](PROGRESS.md) · [STATUS.md](STATUS.md)
 
 ---
 
@@ -358,4 +371,4 @@ Agent(subagent_type="pdf-generator", prompt="...")
 - QA 리포트: [QA_REPORT.md](QA_REPORT.md)
 - 프로젝트 규약: [CLAUDE.md](CLAUDE.md)
 
-오토파일럿으로 M0~M8 9개 마일스톤을 순차 위임·검수·패치한 결과물입니다.
+오토파일럿으로 M0~M17 마일스톤을 순차 위임·검수·패치한 결과물입니다. (M8 측정 보강 2026-05-13)
