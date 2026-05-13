@@ -20,7 +20,38 @@
 | M7 관리자 콘솔 | ✅ 완료 | - | 책 사이즈 CRUD, 리소스, 주문, Excel |
 | M16 성장 기능 | 🟡 일부 완료 | - | 아래 세부 표 참조 |
 | M17 모바일 PWA | ✅ 완료 | - | manifest, SW, 카메라 업로드 |
-| M8 QA & 폴리싱 | ❌ 미착수 | - | E2E, Lighthouse, WCAG 미측정 |
+| M8 QA & 폴리싱 | 🟡 일부 완료 | 2026-05-13 | PDF 런타임·E2E·Lighthouse 측정 완료, WCAG 미측정 |
+
+---
+
+## M8 QA & 측정 결과 (2026-05-13)
+
+### PDF 파이프라인 런타임 검증
+- 스크립트: `pnpm verify:pdf` (`scripts/verify-pdf.ts`)
+- 결과: 145mm sq · text 2 + rect 1 · **39,996 bytes / 353ms** · PDF 1.7 헤더 정상
+- vitest jsdom 환경에서는 `@napi-rs/canvas` toBuffer 가 NaN → tsx 기반 별도 검증으로 우회
+- 출력: `tmp/verify-pdf-out.pdf` (gitignored)
+
+### Playwright E2E
+- 설정: `playwright.config.ts` (chromium-desktop + mobile-chromium 2 프로젝트)
+- 스모크: `e2e/smoke.spec.ts` 6 케이스 × 2 viewport = **12/12 통과** (5.7s)
+- 실행: `pnpm e2e` (자동 dev 서버) / `PLAYWRIGHT_BASE_URL=... pnpm e2e` (외부 URL)
+- 커버: 홈, /upload(가드), /gallery, /login, /mypage, /mypage/points
+
+### Lighthouse 모바일 (운영 https://100pbooks.vercel.app/)
+| 지표 | 값 | 점수 | 목표 |
+|---|---|---|---|
+| **Performance** | — | **97/100** | — |
+| **LCP** | **1.5s** | 1.00 | < 2.5s ✅ |
+| FCP | 1.3s | 0.98 | < 1.8s ✅ |
+| TBT | 10ms | 1.00 | < 200ms ✅ |
+| CLS | 0 | 1.00 | < 0.1 ✅ |
+| Speed Index | 4.8s | 0.68 | < 3.4s ⚠ |
+| TTI | 7.3s | 0.49 | < 3.8s ⚠ |
+
+Core Web Vitals(LCP/CLS/INP-대용 TBT) 모두 통과. Speed Index/TTI 는 클라이언트 JS
+사이즈(fabric chunk 등)의 영향이며 핵심 LCP 에는 영향 없음.
+리포트: `tmp/lighthouse/100pbooks.report.html`
 
 ---
 

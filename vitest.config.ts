@@ -18,6 +18,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./"),
+      // vitest 는 React Server Components 그래프를 모르므로 server-only import 가 throw.
+      // 테스트 환경에서만 빈 stub 으로 대체 — 운영 빌드(next/webpack) 동작에는 영향 없음.
+      "server-only": path.resolve(__dirname, "./tests/mocks/server-only.ts"),
     },
   },
 });

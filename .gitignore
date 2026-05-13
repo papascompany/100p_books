@@ -56,3 +56,6 @@ logs
 # Claude Code 로컬 메모 (개인 메모, 커밋 금지)
 CLAUDE.local.md
 .claude/local/
+tmp/
+playwright-report/
+test-results/
