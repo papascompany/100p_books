@@ -1,10 +1,13 @@
-import { ArrowRight, BookOpen, Camera, CheckCircle2, Images, Package, Sparkles, Star } from "lucide-react";
+import { ArrowRight, BookOpen, CheckCircle2, Package, Star } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 
+import BookSizeCards from "@/components/home/BookSizeCards";
+import FeatureCards from "@/components/home/FeatureCards";
 import { Button } from "@/components/ui/button";
 
+// StepsSection 만 ssr:false 유지 — 기존 동작 호환을 위해.
 const StepsSection = dynamic(() => import("@/components/home/StepsSection"), {
   ssr: false,
   loading: () => (
@@ -29,31 +32,7 @@ const StepsSection = dynamic(() => import("@/components/home/StepsSection"), {
 });
 
 // ─── 데이터 ────────────────────────────────────────────────────────────────
-
-const FEATURES = [
-  {
-    icon: Sparkles,
-    title: "자동 레이아웃",
-    desc: "사진을 올리면 AI가 EXIF 촬영 시각 기준으로 정렬하고 폴라로이드 페이지를 자동 완성합니다.",
-  },
-  {
-    icon: Camera,
-    title: "감성 편집 에디터",
-    desc: "2·3·4·6 분할 콜라주, 여백·글씨·스티커까지. 모바일에서도 빠르게 나만의 감성을 담으세요.",
-  },
-  {
-    icon: Images,
-    title: "300dpi 인쇄 품질",
-    desc: "재단선 포함 인쇄용 PDF를 자동 생성. 전문 인쇄소에서 제작해 집 앞까지 배송합니다.",
-  },
-] as const;
-
-
-const BOOK_SIZES = [
-  { name: "미니", size: "96×128mm", desc: "손에 쏙 들어오는 작은 책", icon: "📖" },
-  { name: "스퀘어", size: "148×148mm", desc: "SNS 감성 정사각형 포맷", icon: "📚" },
-  { name: "A5", size: "148×210mm", desc: "일반 노트 사이즈, 넉넉한 여백", icon: "📕" },
-] as const;
+// FEATURES / BOOK_SIZES 는 각각 FeatureCards / BookSizeCards 컴포넌트로 이전됨.
 
 const REVIEWS = [
   { name: "김지현", rating: 5, text: "결혼기념일 선물로 주문했는데 너무 예쁘게 나왔어요! 남편이 감동받았습니다." },
@@ -187,71 +166,11 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ══ 3. 특징 3-컬럼 ══════════════════════════════════════════════════ */}
-      <section className="py-10 md:py-14 bg-white">
-        <div className="container">
-          <div className="mx-auto max-w-xl text-center mb-8">
-            <h2 className="text-2xl font-bold tracking-tight md:text-3xl">
-              완벽한 포토북을 위한 세 가지 핵심
-            </h2>
-            <p className="mt-2 text-sm text-[#707072]">
-              복잡한 디자인 작업 없이도 전문가 수준의 포토북을 만들 수 있습니다.
-            </p>
-          </div>
+      {/* ══ 3. 특징 3-컬럼 (사진 배경 + framer-motion) ═════════════════════ */}
+      <FeatureCards />
 
-          <div className="grid gap-4 md:grid-cols-3 md:gap-5">
-            {FEATURES.map(({ icon: Icon, title, desc }, i) => (
-              <div
-                key={title}
-                className="border border-[#dedede] bg-white p-5 transition-shadow hover:shadow-[0_4px_20px_rgba(0,0,0,0.07)]"
-              >
-                <div className="flex items-center gap-2.5 mb-3">
-                  <div className="flex size-9 items-center justify-center rounded-full bg-[#f5f5f5]">
-                    <Icon className="size-4 text-[#111111]" />
-                  </div>
-                  <span className="font-display-num text-3xl text-[#e0e0e0] leading-none">0{i + 1}</span>
-                </div>
-                <h3 className="text-base font-bold mb-1.5">{title}</h3>
-                <p className="text-sm text-[#707072] leading-relaxed">{desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ══ 4. 북 사이즈 쇼케이스 ══════════════════════════════════════════ */}
-      <section className="py-10 md:py-14 bg-[#f5f5f5]">
-        <div className="container">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-7">
-            <div>
-              <h2 className="text-2xl font-bold tracking-tight md:text-3xl">나에게 딱 맞는 사이즈</h2>
-              <p className="mt-1 text-sm text-[#707072]">세 가지 판형 중 원하는 스타일을 선택하세요.</p>
-            </div>
-            <Button asChild variant="secondary" size="sm">
-              <Link href="/upload">선택하러 가기</Link>
-            </Button>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            {BOOK_SIZES.map(({ name, size, desc, icon }) => (
-              <div
-                key={name}
-                className="bg-white border border-[#dedede] p-5 flex flex-col gap-3 group hover:border-[#111111] transition-colors cursor-pointer"
-              >
-                <span className="text-3xl">{icon}</span>
-                <div>
-                  <p className="text-base font-bold">{name}</p>
-                  <p className="text-xs font-medium text-[#707072] mt-0.5">{size}</p>
-                </div>
-                <p className="text-sm text-[#707072] leading-relaxed">{desc}</p>
-                <span className="inline-flex items-center text-sm font-medium text-[#111111] gap-1 group-hover:gap-2 transition-all mt-auto">
-                  선택하기 <ArrowRight className="size-3.5" />
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* ══ 4. 북 사이즈 쇼케이스 (사진 배경 + framer-motion) ══════════════ */}
+      <BookSizeCards />
 
       {/* ══ 5. 사용 방법 3스텝 ══════════════════════════════════════════════ */}
       <StepsSection />
