@@ -31,6 +31,13 @@ const nextConfig = {
   },
 
   experimental: {
+    // App Router 클라이언트 측 Router Cache 의 TTL.
+    // 다녀온 페이지를 다시 방문할 때 prefetch 한 RSC payload 를 재사용 → 즉시 표시.
+    // dynamic 30s 는 우리 mypage/주문/에디터 진입 동선에서 가장 큰 체감 향상.
+    staleTimes: {
+      dynamic: 30,
+      static: 180,
+    },
     // 클라이언트 번들 최적화: 아이콘/UI 라이브러리 tree-shaking 강제
     // lucide-react 단독으로 ~500KB 절감 가능
     optimizePackageImports: [
