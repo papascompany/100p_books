@@ -494,6 +494,15 @@ export interface Database {
         Args: { p_user_id: string };
         Returns: null;
       };
+      get_user_dashboard_counts: {
+        Args: { p_user_id: string };
+        Returns: {
+          order_count: number;
+          project_count: number;
+          active_photo_count: number;
+          trash_photo_count: number;
+        };
+      };
     };
     Enums: Record<string, never>;
   };

@@ -22,7 +22,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth/session";
-import { createServerSupabase } from "@/lib/db/server";
+import { createAdminSupabase } from "@/lib/db/admin";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -39,34 +39,27 @@ export default async function MyPage() {
     redirect("/login?next=/mypage");
   }
 
-  const supabase = createServerSupabase();
-  const [{ count: orderCount }, { data: projectIdsRow }] = await Promise.all([
-    supabase
-      .from("orders")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id),
-    supabase.from("projects").select("id").eq("user_id", user.id),
-  ]);
+  // 0024 마이그레이션 — 4개 카운트를 단일 RPC 로 묶어서 RTT 1회로 단축.
+  // (기존: orders count + projects.id 조회 → photos count 2회, 총 2 RTT)
+  // RPC 가 table 반환이라 SDK 타입은 행 배열 — 첫 행만 사용.
+  type DashboardCounts = {
+    order_count: number;
+    project_count: number;
+    active_photo_count: number;
+    trash_photo_count: number;
+  };
+  const admin = createAdminSupabase();
+  const { data: countsRows } = await admin.rpc("get_user_dashboard_counts", {
+    p_user_id: user.id,
+  });
+  const counts = (Array.isArray(countsRows) ? countsRows[0] : countsRows) as
+    | DashboardCounts
+    | null
+    | undefined;
 
-  const projectIds = (projectIdsRow ?? []).map((p) => p.id);
-  let activePhotoCount = 0;
-  let trashCount = 0;
-  if (projectIds.length > 0) {
-    const [{ count: ac }, { count: tc }] = await Promise.all([
-      supabase
-        .from("photos")
-        .select("id", { count: "exact", head: true })
-        .in("project_id", projectIds)
-        .is("deleted_at", null),
-      supabase
-        .from("photos")
-        .select("id", { count: "exact", head: true })
-        .in("project_id", projectIds)
-        .not("deleted_at", "is", null),
-    ]);
-    activePhotoCount = ac ?? 0;
-    trashCount = tc ?? 0;
-  }
+  const orderCount = counts?.order_count ?? 0;
+  const activePhotoCount = counts?.active_photo_count ?? 0;
+  const trashCount = counts?.trash_photo_count ?? 0;
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-10">

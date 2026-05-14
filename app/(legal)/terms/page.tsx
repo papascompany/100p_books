@@ -9,6 +9,10 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
+// 약관 본문은 정적 콘텐츠 → 빌드 시 prerender + CDN 캐시.
+export const dynamic = "force-static";
+export const revalidate = false;
+
 export default function TermsPage() {
   return (
     <LegalArticle title="서비스 이용약관" updatedAt="2026-05-05">

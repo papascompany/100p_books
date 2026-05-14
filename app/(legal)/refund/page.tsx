@@ -12,6 +12,10 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
+// 환불 정책은 정적 콘텐츠 → 빌드 시 prerender + CDN 캐시.
+export const dynamic = "force-static";
+export const revalidate = false;
+
 export default function RefundPage() {
   return (
     <LegalArticle title="교환·환불 정책" updatedAt="2026-05-05">
