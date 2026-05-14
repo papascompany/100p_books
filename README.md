@@ -81,7 +81,7 @@
 │   ├── orders/              # 가격/상태 머신
 │   ├── payments/            # 토스 confirm/조회
 │   └── admin/               # excel 송장 빌더
-├── supabase/migrations/     # 23개 SQL (스키마 + RLS + 시드 + Storage + RPC + tracking + ledger 등)
+├── supabase/migrations/     # 24개 SQL (스키마 + RLS + 시드 + Storage + RPC + tracking + ledger + dashboard counts)
 ├── e2e/                     # Playwright E2E (smoke.spec.ts 외)
 ├── scripts/                 # gen-icons / verify-pdf / server-only stub
 ├── tests/mocks/             # vitest 환경 alias (server-only stub)
@@ -220,8 +220,8 @@ pnpm build        # production 빌드
 |---|---|
 | `pnpm typecheck` | ✅ 에러 0건 |
 | `pnpm test` | ✅ 15 파일 / 153 통과 / 1 skip |
-| `pnpm build` | ✅ 31 라우트 production 빌드 성공 |
-| `pnpm verify:pdf` | ✅ 145mm sq · 40KB / 353ms · PDF 1.7 |
+| `pnpm build` | ✅ 31 라우트 (정적 7 · 동적 24) production 성공 |
+| `pnpm verify:pdf` | ✅ 2 페이지 (text+rect / photo+borderRadius+shadow) · 67KB / 834ms · PDF 1.7 |
 | `pnpm e2e` (chromium desktop+mobile) | ✅ 12/12 통과 (5.7s) |
 | Lighthouse 모바일 (운영) | ✅ Performance 97 · LCP 1.5s · CLS 0 |
 
@@ -250,6 +250,9 @@ pnpm build        # production 빌드
 | M16 | 성장 기능 (공유 / 선물 / 할인 / 추천 / 후기 / 출석 / 포인트 / 카카오 OAuth) | ✅ |
 | M17 | 모바일 PWA (manifest / SW / 카메라 직접 업로드) | ✅ |
 | M8-보강 | PDF 런타임 검증 / E2E Playwright / Lighthouse | ✅ (2026-05-13) |
+| M5-패치 | PDF borderRadius + shadow 2-pass 분리 | ✅ (2026-05-13) |
+| M-홈리뉴얼 | §3 특징 / §4 사이즈 카드 사진 배경 + fade-up 진입 | ✅ (2026-05-14) |
+| M-내비최적화 | staleTimes / loading 8개 / 단일 RPC / SW SWR / legal 정적 | ✅ (2026-05-14) |
 
 상세: [PLAN.md](PLAN.md) · [PROGRESS.md](PROGRESS.md) · [STATUS.md](STATUS.md)
 
