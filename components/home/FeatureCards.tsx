@@ -24,24 +24,24 @@ const FEATURES: readonly FeatureItem[] = [
     title: "자동 레이아웃",
     desc: "사진을 올리면 AI가 EXIF 촬영 시각 기준으로 정렬하고 폴라로이드 페이지를 자동 완성합니다.",
     imageSrc:
-      "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=900&q=80",
-    alt: "폴라로이드 사진들이 정돈된 책상",
+      "https://images.unsplash.com/photo-1606159068539-43f36b99d1b2?w=900&q=80",
+    alt: "폴라로이드 사진들이 가지런히 정렬된 모습",
   },
   {
     num: "02",
     title: "감성 편집 에디터",
     desc: "2·3·4·6 분할 콜라주, 여백·글씨·스티커까지. 모바일에서도 빠르게 나만의 감성을 담으세요.",
     imageSrc:
-      "https://images.unsplash.com/photo-1542038784456-1ea8e935640e?w=900&q=80",
-    alt: "사진을 배치하는 감성 편집 작업대",
+      "https://images.unsplash.com/photo-1530538987395-032d1800fdd4?w=900&q=80",
+    alt: "빈티지한 분위기로 펼쳐진 사진 앨범",
   },
   {
     num: "03",
     title: "300dpi 인쇄 품질",
     desc: "재단선 포함 인쇄용 PDF를 자동 생성. 전문 인쇄소에서 제작해 집 앞까지 배송합니다.",
     imageSrc:
-      "https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=900&q=80",
-    alt: "고품질 인쇄로 펼쳐진 포토북",
+      "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=900&q=80",
+    alt: "고품질 인쇄로 펼쳐진 사진집의 디테일",
   },
 ];
 

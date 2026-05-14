@@ -30,8 +30,8 @@ const BOOK_SIZES: readonly BookSizeItem[] = [
     desc: "손에 쏙 들어오는 작은 책",
     ratio: "3/5",
     imageSrc:
-      "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=900&q=80",
-    alt: "손에 든 미니 사이즈 포토북",
+      "https://images.unsplash.com/photo-1495640388908-05fa85288e61?w=900&q=80",
+    alt: "손에 쏙 들어오는 작은 사진집",
   },
   {
     name: "스퀘어",
@@ -39,8 +39,8 @@ const BOOK_SIZES: readonly BookSizeItem[] = [
     desc: "SNS 감성 정사각형 포맷",
     ratio: "1/1",
     imageSrc:
-      "https://images.unsplash.com/photo-1523438885200-e635ba2c371e?w=900&q=80",
-    alt: "정사각형 SNS 감성 포토북",
+      "https://images.unsplash.com/photo-1611532736597-de2d4265fba3?w=900&q=80",
+    alt: "정사각형 포맷의 감성 사진집",
   },
   {
     name: "A5",
@@ -48,8 +48,8 @@ const BOOK_SIZES: readonly BookSizeItem[] = [
     desc: "일반 노트 사이즈, 넉넉한 여백",
     ratio: "3/5",
     imageSrc:
-      "https://images.unsplash.com/photo-1504208434309-cb69f4fe52b0?w=900&q=80",
-    alt: "A5 노트 사이즈 포토북",
+      "https://images.unsplash.com/photo-1531346878377-a5be20888e57?w=900&q=80",
+    alt: "A5 사이즈의 펼쳐진 화보집",
   },
 ];
 
