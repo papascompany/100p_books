@@ -3,7 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import { enqueueEmail } from "@/lib/email/queue";
@@ -36,7 +36,7 @@ const BLOCKING_STATUSES = [
  * body: { confirmEmail: string, reason?: string }
  *
  * 흐름:
- *   1. requireUser
+ *   1. requireActiveUser — 잔존 세션으로 재탈퇴 시도 차단 (deleted_at 가드)
  *   2. confirmEmail 일치 검증 (auth.user.email 기준)
  *   3. 진행 중 주문 존재 검사 → 거부
  *   4. service_role: anonymize_account RPC + auth.users.deleteUser
@@ -44,7 +44,7 @@ const BLOCKING_STATUSES = [
  */
 export async function POST(req: Request) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     const raw = (await req.json().catch(() => ({}))) as unknown;
     const parsed = BodySchema.safeParse(raw ?? {});

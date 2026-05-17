@@ -112,6 +112,24 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
         />
+        {/*
+         * preconnect — TCP + TLS 핸드셰이크를 LCP 이전에 미리 수행.
+         *   - Supabase Storage / Auth API: 인증된 모든 페이지가 자주 호출.
+         *   - Unsplash CDN: 홈 페이지의 사진 6장 + 히어로/CTA 외부 이미지.
+         * crossOrigin="" 은 자격증명 없는 동일출처 핸드셰이크 (이미지/Auth 모두 해당).
+         */}
+        <link
+          rel="preconnect"
+          href="https://images.unsplash.com"
+          crossOrigin=""
+        />
+        {process.env.NEXT_PUBLIC_SUPABASE_URL ? (
+          <link
+            rel="preconnect"
+            href={process.env.NEXT_PUBLIC_SUPABASE_URL}
+            crossOrigin=""
+          />
+        ) : null}
       </head>
       <body className={`${pretendard.variable} ${bebasNeue.variable} min-h-screen font-sans antialiased bg-background text-foreground`}>
         <ThemeProvider>
