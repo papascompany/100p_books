@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lillys ↔ 100p Books — 파트너 연동 시각화</title>
+<style>
+  :root {
+    --bg: #0b0c0e;
+    --panel: #111317;
+    --panel-2: #161a20;
+    --border: #23262d;
+    --text: #e8eaed;
+    --text-dim: #9ba3ad;
+    --text-mute: #6b7280;
+    --accent: #f5b14d;
+    --lillys: #ff6a8a;     /* Lillys 색 */
+    --p100: #5aa8ff;       /* 100p 색 */
+    --user: #b08cff;       /* 사용자 색 */
+    --green: #38d398;
+    --yellow: #f5c542;
+    --red: #ef4f4f;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #fafafa;
+      --panel: #ffffff;
+      --panel-2: #f5f5f5;
+      --border: #e5e5e5;
+      --text: #111111;
+      --text-dim: #4a5460;
+      --text-mute: #8a93a0;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text); }
+  body {
+    font-family: -apple-system, "Pretendard Variable", "Pretendard",
+                 BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    line-height: 1.55; font-size: 14px;
+    padding: 32px 24px; max-width: 1280px; margin: 0 auto;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--p100); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+         font-size: 12.5px; background: var(--panel-2); padding: 1px 6px;
+         border-radius: 4px; }
+
+  header { margin-bottom: 28px; }
+  .h-top { display: flex; flex-wrap: wrap; gap: 16px;
+           align-items: baseline; justify-content: space-between; }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+  .h-sub { color: var(--text-dim); font-size: 13px; margin-top: 6px; }
+  .h-meta { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px;
+            color: var(--text-dim); font-size: 12.5px; }
+
+  section { margin-top: 36px; }
+  h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.005em;
+       padding-bottom: 10px; margin-bottom: 14px;
+       border-bottom: 1px solid var(--border);
+       display: flex; align-items: baseline; gap: 10px; }
+  h2 .h2-tag {
+    font-size: 11px; font-weight: 600; padding: 2px 8px;
+    border-radius: 999px; background: var(--panel-2);
+    color: var(--text-dim); letter-spacing: 0.02em;
+  }
+
+  /* 3-액터 다이어그램 */
+  .actors {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+    margin-bottom: 18px;
+  }
+  .actor {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px; text-align: center;
+  }
+  .actor.lillys { border-color: var(--lillys); }
+  .actor.p100   { border-color: var(--p100); }
+  .actor.user   { border-color: var(--user); }
+  .actor .badge {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+    margin-bottom: 6px;
+  }
+  .actor.lillys .badge { background: rgba(255,106,138,0.15); color: var(--lillys); }
+  .actor.p100   .badge { background: rgba(90,168,255,0.15);  color: var(--p100); }
+  .actor.user   .badge { background: rgba(176,140,255,0.15); color: var(--user); }
+  .actor h3 { font-size: 14px; font-weight: 600; }
+  .actor p { color: var(--text-dim); font-size: 12.5px; margin-top: 4px; }
+
+  /* 시퀀스 다이어그램 (SVG) */
+  .seq-wrap {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px;
+    overflow-x: auto;
+  }
+  .seq-svg { display: block; min-width: 760px; max-width: 100%; height: auto; }
+
+  /* 단계별 카드 */
+  .steps {
+    display: grid; gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+  .step {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; position: relative;
+  }
+  .step .step-no {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent); color: #000; font-size: 12px; font-weight: 700;
+    margin-right: 8px;
+  }
+  .step h4 { font-size: 13.5px; font-weight: 600; display: inline; }
+  .step p { color: var(--text-dim); font-size: 12.5px; margin-top: 8px; }
+  .step .pill {
+    display: inline-block; padding: 1px 7px; border-radius: 999px;
+    font-size: 10.5px; font-weight: 600; margin-left: 4px;
+    background: var(--panel-2); color: var(--text-mute);
+  }
+  .step .pill.lillys { background: rgba(255,106,138,0.18); color: var(--lillys); }
+  .step .pill.p100   { background: rgba(90,168,255,0.18);  color: var(--p100); }
+  .step .pill.user   { background: rgba(176,140,255,0.18); color: var(--user); }
+  .step .pill.s2s    { background: rgba(56,211,152,0.18);  color: var(--green); }
+
+  /* API 카드 */
+  .api-grid {
+    display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  }
+  .api-card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 16px;
+  }
+  .api-card .api-head {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    margin-bottom: 8px;
+  }
+  .api-method {
+    padding: 2px 8px; border-radius: 4px; font-weight: 700;
+    font-size: 10.5px; letter-spacing: 0.04em;
+  }
+  .api-method.POST { background: rgba(56,211,152,0.18); color: var(--green); }
+  .api-method.GET  { background: rgba(90,168,255,0.18); color: var(--p100); }
+  .api-path { font-family: monospace; font-size: 12px; color: var(--text); }
+  .api-dir { font-size: 11px; color: var(--text-mute); }
+  .api-body { color: var(--text-dim); font-size: 12.5px; }
+  .api-body ul { padding-left: 16px; margin-top: 4px; }
+  .api-body li { padding: 2px 0; }
+
+  /* 보안 그리드 */
+  table { width: 100%; border-collapse: collapse;
+          background: var(--panel); border: 1px solid var(--border);
+          border-radius: 10px; overflow: hidden; font-size: 13px; }
+  th, td { padding: 9px 12px; text-align: left;
+           border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  th { background: var(--panel-2); color: var(--text-dim);
+       font-weight: 600; font-size: 11.5px; letter-spacing: 0.02em;
+       text-transform: uppercase; }
+
+  /* 푸터 */
+  footer { margin-top: 48px; padding-top: 16px;
+           border-top: 1px solid var(--border);
+           color: var(--text-mute); font-size: 11.5px;
+           display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+  footer a { color: var(--text-mute); }
+
+  @media print {
+    :root { --bg: #fff; --panel: #fff; --panel-2: #f5f5f5;
+            --border: #ccc; --text: #000; --text-dim: #333; --text-mute: #666; }
+    body { padding: 18px; max-width: none; font-size: 11px; }
+    a { color: #000; }
+    .seq-svg { background: #fff; }
+    section, .step, .api-card { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="h-top">
+    <div>
+      <h1>Lillys ↔ 100p Books — 파트너 연동 시각화</h1>
+      <p class="h-sub">Lillys 사용자가 한 번의 클릭으로 사진 모음을 100p Books 포토북으로 만들고 주문 완료까지 — End-to-End 흐름</p>
+    </div>
+    <div class="h-meta">
+      <span>v1 초안 · 2026-05-14</span>
+    </div>
+  </div>
+  <div class="h-meta">
+    <span>원본 문서 <a href="lillys-integration.md">lillys-integration.md</a></span>
+    <span>100p Books <code>100pbooks.com</code></span>
+    <span>통합 모델 <b>A — SSO + Redirect</b></span>
+  </div>
+</header>
+
+<!-- 3-액터 -->
+<section>
+  <h2>등장 인물</h2>
+  <div class="actors">
+    <div class="actor lillys">
+      <span class="badge">Partner</span>
+      <h3>Lillys</h3>
+      <p>사진 호스팅 · 사용자 식별 · 결제 완료 webhook 수신</p>
+    </div>
+    <div class="actor p100">
+      <span class="badge">Service</span>
+      <h3>100p Books</h3>
+      <p>임포트 처리 · 에디터 · PDF · 결제 · 인쇄 발주</p>
+    </div>
+    <div class="actor user">
+      <span class="badge">End-User</span>
+      <h3>사용자</h3>
+      <p>Lillys에서 클릭 → 100p에서 편집/컨펌/결제 → Lillys로 복귀</p>
+    </div>
+  </div>
+</section>
+
+<!-- 시퀀스 다이어그램 -->
+<section>
+  <h2>End-to-End 시퀀스 <span class="h2-tag">11 STEPS</span></h2>
+  <div class="seq-wrap">
+    <svg class="seq-svg" viewBox="0 0 1100 900" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, 'Pretendard Variable', sans-serif" font-size="12">
+      <!-- defs: 화살표 마커 -->
+      <defs>
+        <marker id="arrow-lillys" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#ff6a8a"/>
+        </marker>
+        <marker id="arrow-p100" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#5aa8ff"/>
+        </marker>
+        <marker id="arrow-user" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#b08cff"/>
+        </marker>
+      </defs>
+
+      <!-- 액터 헤더 (3 lifeline) -->
+      <!-- Lillys: x=180, 100p: x=580, User: x=960 -->
+      <g>
+        <rect x="80" y="20" width="200" height="40" rx="8" fill="#1a1c20" stroke="#ff6a8a" stroke-width="1.5"/>
+        <text x="180" y="45" text-anchor="middle" fill="#ff6a8a" font-weight="700">Lillys 서버</text>
+
+        <rect x="480" y="20" width="200" height="40" rx="8" fill="#1a1c20" stroke="#5aa8ff" stroke-width="1.5"/>
+        <text x="580" y="45" text-anchor="middle" fill="#5aa8ff" font-weight="700">100p Books 서버</text>
+
+        <rect x="860" y="20" width="200" height="40" rx="8" fill="#1a1c20" stroke="#b08cff" stroke-width="1.5"/>
+        <text x="960" y="45" text-anchor="middle" fill="#b08cff" font-weight="700">사용자 (브라우저)</text>
+      </g>
+
+      <!-- Lifeline 점선 -->
+      <line x1="180" y1="60" x2="180" y2="880" stroke="#ff6a8a" stroke-width="1" stroke-dasharray="4 4" opacity="0.4"/>
+      <line x1="580" y1="60" x2="580" y2="880" stroke="#5aa8ff" stroke-width="1" stroke-dasharray="4 4" opacity="0.4"/>
+      <line x1="960" y1="60" x2="960" y2="880" stroke="#b08cff" stroke-width="1" stroke-dasharray="4 4" opacity="0.4"/>
+
+      <!-- ① import 호출 (Lillys → 100p) -->
+      <g>
+        <line x1="180" y1="100" x2="580" y2="100" stroke="#ff6a8a" stroke-width="2" marker-end="url(#arrow-lillys)"/>
+        <text x="382" y="92" text-anchor="middle" fill="#ff6a8a" font-weight="600">① POST /api/partner/import (HMAC + photos)</text>
+      </g>
+
+      <!-- ② 검증 + 티켓 (100p 자체 내부) -->
+      <g>
+        <rect x="500" y="115" width="160" height="50" rx="6" fill="#1a1c20" stroke="#5aa8ff" opacity="0.8"/>
+        <text x="580" y="135" text-anchor="middle" fill="#5aa8ff" font-size="11">② 검증 + 티켓 발급</text>
+        <text x="580" y="153" text-anchor="middle" fill="#9ba3ad" font-size="10">DB: partner_imports INSERT</text>
+      </g>
+
+      <!-- ③ 202 응답 (100p → Lillys) -->
+      <g>
+        <line x1="580" y1="195" x2="180" y2="195" stroke="#5aa8ff" stroke-width="2" marker-end="url(#arrow-p100)"/>
+        <text x="382" y="187" text-anchor="middle" fill="#5aa8ff" font-weight="600">③ 202 { ticket, redirect_url, ETA }</text>
+      </g>
+
+      <!-- ④ async: 사진 fetch + layout -->
+      <g>
+        <rect x="500" y="215" width="160" height="50" rx="6" fill="#1a1c20" stroke="#5aa8ff" opacity="0.8" stroke-dasharray="3 3"/>
+        <text x="580" y="235" text-anchor="middle" fill="#5aa8ff" font-size="11">④ async — 사진 fetch + 레이아웃</text>
+        <text x="580" y="253" text-anchor="middle" fill="#9ba3ad" font-size="10">Storage 적재 · projects/photos INSERT</text>
+      </g>
+
+      <!-- ⑤ Lillys → User: redirect -->
+      <g>
+        <line x1="180" y1="295" x2="960" y2="295" stroke="#ff6a8a" stroke-width="2" marker-end="url(#arrow-lillys)"/>
+        <text x="570" y="287" text-anchor="middle" fill="#ff6a8a" font-weight="600">⑤ HTTP 302 → /p/lillys/start?ticket=…</text>
+      </g>
+
+      <!-- ⑥ User → 100p: ticket 사용 -->
+      <g>
+        <line x1="960" y1="335" x2="580" y2="335" stroke="#b08cff" stroke-width="2" marker-end="url(#arrow-user)"/>
+        <text x="770" y="327" text-anchor="middle" fill="#b08cff" font-weight="600">⑥ GET /p/lillys/start?ticket=…</text>
+      </g>
+
+      <!-- ⑦ 100p → User: 세션 + 에디터 redirect -->
+      <g>
+        <line x1="580" y1="375" x2="960" y2="375" stroke="#5aa8ff" stroke-width="2" marker-end="url(#arrow-p100)"/>
+        <text x="770" y="367" text-anchor="middle" fill="#5aa8ff" font-weight="600">⑦ Set-Cookie + 302 → /editor/[projectId]</text>
+      </g>
+
+      <!-- ⑧ 편집 -->
+      <g>
+        <rect x="710" y="395" width="240" height="48" rx="6" fill="#1a1c20" stroke="#b08cff" opacity="0.85"/>
+        <text x="830" y="414" text-anchor="middle" fill="#b08cff" font-size="11">⑧ 편집 (내지 + 표지)</text>
+        <text x="830" y="432" text-anchor="middle" fill="#9ba3ad" font-size="10">Fabric.js · 자동 레이아웃 결과 노출 → 자유 편집</text>
+      </g>
+
+      <!-- ⑨ 결제 -->
+      <g>
+        <line x1="960" y1="475" x2="580" y2="475" stroke="#b08cff" stroke-width="2" marker-end="url(#arrow-user)"/>
+        <text x="770" y="467" text-anchor="middle" fill="#b08cff" font-weight="600">⑨ 컨펌 → /order → TossPayments 결제 confirm</text>
+      </g>
+
+      <!-- ⑩ 100p 내부: paid + PDF + 인쇄 -->
+      <g>
+        <rect x="500" y="495" width="160" height="62" rx="6" fill="#1a1c20" stroke="#5aa8ff" opacity="0.8"/>
+        <text x="580" y="514" text-anchor="middle" fill="#5aa8ff" font-size="11">⑩ paid + PDF 빌드</text>
+        <text x="580" y="530" text-anchor="middle" fill="#9ba3ad" font-size="10">@napi-rs/canvas + pdf-lib</text>
+        <text x="580" y="546" text-anchor="middle" fill="#9ba3ad" font-size="10">인쇄소 발주 큐</text>
+      </g>
+
+      <!-- ⑪ webhook (100p → Lillys) -->
+      <g>
+        <line x1="580" y1="595" x2="180" y2="595" stroke="#5aa8ff" stroke-width="2" marker-end="url(#arrow-p100)"/>
+        <text x="382" y="587" text-anchor="middle" fill="#5aa8ff" font-weight="600">⑪ POST {lillys_webhook} order.paid (HMAC)</text>
+      </g>
+
+      <!-- ⑫ 이후 상태 변경 webhook -->
+      <g>
+        <line x1="580" y1="640" x2="180" y2="640" stroke="#5aa8ff" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrow-p100)"/>
+        <text x="382" y="632" text-anchor="middle" fill="#5aa8ff" font-weight="600" opacity="0.85">⑫ in_production / shipped / delivered webhook</text>
+      </g>
+
+      <!-- ⑬ 사용자 → Lillys로 복귀 -->
+      <g>
+        <line x1="960" y1="690" x2="180" y2="690" stroke="#b08cff" stroke-width="2" marker-end="url(#arrow-user)"/>
+        <text x="570" y="682" text-anchor="middle" fill="#b08cff" font-weight="600">⑬ callback_url 로 돌아가기 클릭</text>
+      </g>
+
+      <!-- 범례 -->
+      <g transform="translate(80, 760)">
+        <text x="0" y="0" fill="#9ba3ad" font-size="11" font-weight="600">RANGE</text>
+        <line x1="0" y1="20" x2="40" y2="20" stroke="#ff6a8a" stroke-width="2"/>
+        <text x="48" y="24" fill="#ff6a8a" font-size="11">Lillys → other</text>
+        <line x1="170" y1="20" x2="210" y2="20" stroke="#5aa8ff" stroke-width="2"/>
+        <text x="218" y="24" fill="#5aa8ff" font-size="11">100p Books → other</text>
+        <line x1="370" y1="20" x2="410" y2="20" stroke="#b08cff" stroke-width="2"/>
+        <text x="418" y="24" fill="#b08cff" font-size="11">사용자 → other</text>
+        <line x1="540" y1="20" x2="580" y2="20" stroke="#5aa8ff" stroke-width="2" stroke-dasharray="6 4"/>
+        <text x="588" y="24" fill="#5aa8ff" font-size="11">반복 webhook (상태 변경)</text>
+      </g>
+    </svg>
+  </div>
+</section>
+
+<!-- 단계별 카드 -->
+<section>
+  <h2>단계별 설명 <span class="h2-tag">DETAIL</span></h2>
+  <div class="steps">
+    <div class="step"><span class="step-no">1</span><h4>import 호출</h4><span class="pill lillys">Lillys</span><span class="pill s2s">서버→서버</span>
+      <p><code>POST /api/partner/import</code> · HMAC-SHA256 서명 + photos[] + meta. Idempotency-Key 필수.</p>
+    </div>
+    <div class="step"><span class="step-no">2</span><h4>검증 + 티켓 발급</h4><span class="pill p100">100p</span>
+      <p>서명/ts/idem 검증 → <code>partner_imports</code> INSERT → ticket(SHA256 저장, 30분 TTL) 생성.</p>
+    </div>
+    <div class="step"><span class="step-no">3</span><h4>202 응답</h4><span class="pill p100">100p</span>
+      <p><code>{ ticket, redirect_url, estimated_ready_seconds }</code> 반환. 사진 fetch 는 백그라운드.</p>
+    </div>
+    <div class="step"><span class="step-no">4</span><h4>비동기 사진 fetch</h4><span class="pill p100">100p · async</span>
+      <p>Lillys CDN 에서 photos[].url 다운로드 → Storage 적재 → 자동 레이아웃 (polaroid/collage 등).</p>
+    </div>
+    <div class="step"><span class="step-no">5</span><h4>사용자 redirect</h4><span class="pill lillys">Lillys</span>
+      <p>HTTP 302 → <code>https://100pbooks.com/p/lillys/start?ticket=…</code>. 사용자는 별다른 입력 없이 진입.</p>
+    </div>
+    <div class="step"><span class="step-no">6</span><h4>ticket 사용</h4><span class="pill user">User</span>
+      <p>브라우저가 100p Books 의 ticket 검증 페이지에 접속. 토큰 1회 사용 + 만료 검증.</p>
+    </div>
+    <div class="step"><span class="step-no">7</span><h4>세션 발급 + 에디터</h4><span class="pill p100">100p</span>
+      <p>Set-Cookie (Supabase JWT) + 302 → <code>/editor/[projectId]</code>. 자동 레이아웃된 상태에서 시작.</p>
+    </div>
+    <div class="step"><span class="step-no">8</span><h4>편집</h4><span class="pill user">User</span>
+      <p>Fabric.js 에디터에서 내지 + 표지 자유 편집. 사진 추가/삭제, 텍스트, 스티커.</p>
+    </div>
+    <div class="step"><span class="step-no">9</span><h4>컨펌 + 결제</h4><span class="pill user">User</span><span class="pill p100">100p</span>
+      <p>책 사이즈/수량/배송지 확정 → TossPayments confirm. address 는 import 데이터로 prefill.</p>
+    </div>
+    <div class="step"><span class="step-no">10</span><h4>PDF + 인쇄 발주</h4><span class="pill p100">100p · async</span>
+      <p>결제 성공 즉시 300dpi PDF 빌드 (표지 + 내지) → 인쇄소 발주 큐 적재.</p>
+    </div>
+    <div class="step"><span class="step-no">11</span><h4>webhook 1차</h4><span class="pill p100">100p</span><span class="pill s2s">서버→서버</span>
+      <p><code>POST {lillys_webhook_url}</code> · event: <code>order.status_changed</code> · status=<code>paid</code>.</p>
+    </div>
+    <div class="step"><span class="step-no">12</span><h4>webhook 반복</h4><span class="pill p100">100p</span>
+      <p>in_production / shipped (운송장 포함) / delivered / cancelled / refunded 마다 동일 webhook.</p>
+    </div>
+    <div class="step"><span class="step-no">13</span><h4>Lillys 복귀</h4><span class="pill user">User</span>
+      <p>주문 성공 페이지에서 "Lillys 로 돌아가기" 클릭 → callback_url 로 이동.</p>
+    </div>
+  </div>
+</section>
+
+<!-- API 카드 -->
+<section>
+  <h2>API 명세 — 4개 엔드포인트 <span class="h2-tag">API</span></h2>
+  <div class="api-grid">
+
+    <div class="api-card">
+      <div class="api-head">
+        <span class="api-method POST">POST</span>
+        <span class="api-path">/api/partner/import</span>
+        <span class="api-dir">Lillys → 100p</span>
+      </div>
+      <div class="api-body">
+        사진 묶음 + 메타 import. HMAC + Idempotency-Key 필수.
+        <ul>
+          <li>req: photos[1..100] · partner_user_email · title · book_size_hint · address?</li>
+          <li>res 202: { import_id, ticket, redirect_url, estimated_ready_seconds }</li>
+          <li>err: 400 INVALID_BODY · 401 INVALID_SIGNATURE · 413 TOO_MANY_PHOTOS</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-head">
+        <span class="api-method GET">GET</span>
+        <span class="api-path">/api/partner/import/[id]</span>
+        <span class="api-dir">Lillys → 100p</span>
+      </div>
+      <div class="api-body">
+        진행도 폴링 / 멱등 조회.
+        <ul>
+          <li>res: { status: pending|importing|ready|failed, photos_imported, project_id }</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-head">
+        <span class="api-method POST">POST</span>
+        <span class="api-path">{lillys_webhook_url}</span>
+        <span class="api-dir">100p → Lillys</span>
+      </div>
+      <div class="api-body">
+        주문 상태 변경 통지. 멱등(event_id) + 재시도(1m/5m/30m/2h/12h).
+        <ul>
+          <li>event: <code>order.status_changed</code></li>
+          <li>data: { order_id, import_id, status, amount, tracking? }</li>
+          <li>헤더: X-100p-Signature (HMAC) · X-100p-Event-Id · X-100p-Ts</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="api-card">
+      <div class="api-head">
+        <span class="api-method POST">POST</span>
+        <span class="api-path">/api/partner/lookup</span>
+        <span class="api-dir">Lillys → 100p</span>
+      </div>
+      <div class="api-body">
+        CS 화면용 — partner_user_id 로 진행 중 주문/프로젝트 조회.
+        <ul>
+          <li>res: { orders[], projects[] }</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 보안 -->
+<section>
+  <h2>보안 / 멱등 / 운영 <span class="h2-tag">SECURITY</span></h2>
+  <table>
+    <thead><tr><th>위협</th><th>방어</th></tr></thead>
+    <tbody>
+      <tr><td>페이로드 위조</td><td>HMAC-SHA256(<code>secret</code>, <code>${ts}.${body}</code>) · ts skew ±300s</td></tr>
+      <tr><td>Replay attack</td><td>Idempotency-Key UNIQUE + ts 검증 + ticket 1회 사용</td></tr>
+      <tr><td>Ticket 탈취</td><td>HTTPS only · 30분 TTL · ticket_hash 저장(평문 미저장)</td></tr>
+      <tr><td>Webhook 위조 (100p → Lillys)</td><td>역방향 HMAC · Lillys 가 lillys_webhook_secret 으로 검증</td></tr>
+      <tr><td>외부 사진 SSRF</td><td>URL 도메인 화이트리스트 (<code>*.lillys.com</code>) · 내부 IP/loopback 차단</td></tr>
+      <tr><td>임의 callback redirect</td><td>callback_url 도메인 화이트리스트</td></tr>
+      <tr><td>Rate limit</td><td>partner_id 당 600/min · IP 당 60/min</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 데이터 매핑 -->
+<section>
+  <h2>데이터 매핑 (Lillys ↔ 100p Books)</h2>
+  <table>
+    <thead><tr><th>Lillys 필드</th><th>100p 매핑</th><th>비고</th></tr></thead>
+    <tbody>
+      <tr><td><code>partner_user_id</code></td><td><code>partner_imports.partner_user_id</code></td><td>Lillys 내부 ID 그대로 보관</td></tr>
+      <tr><td><code>partner_user_email</code></td><td><code>auth.users.email</code> 매칭 또는 신규</td><td>같은 이메일 기존 100p 계정 있으면 연결</td></tr>
+      <tr><td><code>title</code></td><td><code>projects.title</code> + 표지 기본 제목</td><td>사용자가 에디터에서 변경 가능</td></tr>
+      <tr><td><code>book_size_hint</code></td><td><code>projects.book_size_id</code> (선조회)</td><td>square_148 → 14.5×14.5cm 등 매핑 테이블</td></tr>
+      <tr><td><code>auto_layout</code></td><td><code>page_doc.layoutMode</code></td><td>polaroid / collage_2v / collage_4 …</td></tr>
+      <tr><td><code>photos[].url</code></td><td>fetch → Storage <code>photo-originals/{user.id}/{project.id}/{photo.id}.jpg</code></td><td>3회 retry · 실패 시 import status=failed</td></tr>
+      <tr><td><code>photos[].taken_at</code></td><td><code>photos.taken_at</code></td><td>EXIF 없을 때 fallback · 정렬 사용</td></tr>
+      <tr><td><code>photos[].caption</code></td><td>레이아웃 자동 텍스트 객체</td><td>200자 trim</td></tr>
+      <tr><td><code>address</code></td><td><code>orders.address</code> 결제 단계 prefill</td><td>사용자가 수정 가능</td></tr>
+      <tr><td><code>callback_url</code></td><td>주문 성공 페이지 "돌아가기" 링크</td><td>도메인 화이트리스트</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 구현 로드맵 -->
+<section>
+  <h2>구현 로드맵 (100p 측) <span class="h2-tag">~1.5주</span></h2>
+  <table>
+    <thead><tr><th style="width:40px">#</th><th>작업</th><th style="width:80px">산정</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>DB 마이그레이션 0025 — partners / partner_imports / partner_webhook_attempts + orders 컬럼</td><td>0.5일</td></tr>
+      <tr><td>2</td><td>lib/partner/ — HMAC 서명·검증·idempotency 유틸</td><td>0.5일</td></tr>
+      <tr><td>3</td><td>POST /api/partner/import + import job worker (사진 fetch + 레이아웃)</td><td>2일</td></tr>
+      <tr><td>4</td><td>POST /api/partner/webhook 송출 + 재시도 큐(1m/5m/30m/2h/12h)</td><td>1일</td></tr>
+      <tr><td>5</td><td>/p/lillys/start 진입 페이지 — ticket → 세션 → editor</td><td>1일</td></tr>
+      <tr><td>6</td><td>Admin 콘솔 — partners CRUD · secret 회전 · 호출/실패 로그</td><td>1일</td></tr>
+      <tr><td>7</td><td>통합 테스트 (mock Lillys 서버) + Playwright E2E</td><td>1일</td></tr>
+      <tr><td>8</td><td>운영 가이드 + Lillys 측 SDK / curl 예제</td><td>0.5일</td></tr>
+      <tr><td colspan="2" style="text-align:right; font-weight:700">합계</td><td style="font-weight:700">~7.5일</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 미해결 -->
+<section>
+  <h2>추후 협의 필요 <span class="h2-tag">OPEN</span></h2>
+  <table>
+    <thead><tr><th>항목</th><th>옵션</th></tr></thead>
+    <tbody>
+      <tr><td>결제 주체</td><td>현재 안: 100p 결제. 변경: Lillys 통합 결제 + settlement API</td></tr>
+      <tr><td>계정 매칭</td><td>email 일치 시 자동 연결 vs 항상 별도 sub-account</td></tr>
+      <tr><td>사진 만료</td><td>Lillys CDN TTL 짧으면 import 즉시 다운로드 강제</td></tr>
+      <tr><td>편집 데이터 회수</td><td>Lillys 가 최종 PDF/페이지 결과 받고 자체 보관할지</td></tr>
+      <tr><td>i18n</td><td>Lillys 사용자 한국어 외 언어 지원 여부</td></tr>
+      <tr><td>취소/환불 흐름</td><td>Lillys → 100p 취소 요청 API 필요 여부</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  <div>Lillys ↔ 100p Books 연동 · v1 초안 · 2026-05-14</div>
+  <div>원본 문서 <a href="lillys-integration.md">lillys-integration.md</a></div>
+</footer>
+
+</body>
+</html>
