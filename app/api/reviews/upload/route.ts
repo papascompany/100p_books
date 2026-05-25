@@ -10,6 +10,7 @@ import {
   MAX_FILE_BYTES,
   extForMime,
 } from "@/lib/image/constants";
+import { enforceRateLimit } from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -37,6 +38,17 @@ const ALLOWED_MIME_SET = new Set<string>(ALLOWED_MIME_TYPES);
 export async function POST(req: Request) {
   try {
     const user = await requireUser();
+
+    // 🛡 Rate limit — 시간당 20회 (남용 차단)
+    const rl = await enforceRateLimit("review-upload", req, user.id);
+    if (!rl.success) {
+      return fail(
+        "RATE_LIMITED",
+        "후기 이미지 업로드 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.",
+        429,
+        { resetAt: rl.reset, limit: rl.limit },
+      );
+    }
 
     const contentType = req.headers.get("content-type") ?? "";
     if (!contentType.toLowerCase().startsWith("multipart/form-data")) {

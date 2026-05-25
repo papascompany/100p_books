@@ -44,14 +44,18 @@ export default function DeleteAccountCard({
   const [open, setOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [confirmEmail, setConfirmEmail] = React.useState("");
+  const [confirmText, setConfirmText] = React.useState("");
   const [reason, setReason] = React.useState<string>(REASONS[0].value);
   const [reasonText, setReasonText] = React.useState("");
   const [agreed, setAgreed] = React.useState(false);
 
+  const CONFIRM_PHRASE = "회원 탈퇴";
   const blocked = blockingOrderCount > 0;
   const emailMatches =
     confirmEmail.trim().toLowerCase() === (email ?? "").trim().toLowerCase();
-  const canSubmit = !busy && !blocked && emailMatches && agreed && !!email;
+  const textMatches = confirmText.trim() === CONFIRM_PHRASE;
+  const canSubmit =
+    !busy && !blocked && emailMatches && textMatches && agreed && !!email;
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -66,6 +70,7 @@ export default function DeleteAccountCard({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           confirmEmail: confirmEmail.trim(),
+          confirmText: confirmText.trim(),
           reason: composedReason || undefined,
         }),
       });
@@ -207,6 +212,28 @@ export default function DeleteAccountCard({
                 {confirmEmail && !emailMatches ? (
                   <p className="text-xs text-destructive">
                     이메일이 일치하지 않습니다.
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="confirm-text" className="text-sm font-medium">
+                  의도 확인 — <span className="font-bold text-destructive">{CONFIRM_PHRASE}</span> 을(를) 정확히 입력하세요
+                </label>
+                <Input
+                  id="confirm-text"
+                  type="text"
+                  autoComplete="off"
+                  placeholder={CONFIRM_PHRASE}
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  required
+                  disabled={busy}
+                  aria-describedby="confirm-text-help"
+                />
+                {confirmText && !textMatches ? (
+                  <p id="confirm-text-help" className="text-xs text-destructive">
+                    문구가 정확히 일치하지 않습니다. ('{CONFIRM_PHRASE}')
                   </p>
                 ) : null}
               </div>

@@ -65,6 +65,22 @@
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
       ]
+    },
+    {
+      "source": "/((?!api/).*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(self), geolocation=(), microphone=(), payment=(self), accelerometer=(), gyroscope=(), magnetometer=(), usb=(), interest-cohort=()"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self' https://kauth.kakao.com https://api.tosspayments.com; img-src 'self' https://*.supabase.co https://images.unsplash.com https://k.kakaocdn.net data: blob:; media-src 'self' blob: data:; script-src 'self' 'unsafe-inline' https://js.tosspayments.com https://t1.daumcdn.net; style-src 'self' 'unsafe-inline'; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self' https://*.supabase.co https://api.tosspayments.com https://kauth.kakao.com https://kapi.kakao.com https://images.unsplash.com; frame-src 'self' https://js.tosspayments.com https://*.tosspayments.com https://kauth.kakao.com; manifest-src 'self'"
+        }
+      ]
     }
   ]
 }

@@ -13,6 +13,7 @@ import {
   extForMime,
 } from "@/lib/image/constants";
 import { validateFile } from "@/lib/image/validate";
+import { enforceRateLimit } from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -40,6 +41,18 @@ const BodySchema = z.object({
 export async function POST(req: Request) {
   try {
     const user = await requireUser();
+
+    // 🛡 Rate limit — 분당 30회 (한 번에 100장이 1 회 요청, 동시 호출 폭주 차단)
+    const rl = await enforceRateLimit("photo-upload", req, user.id);
+    if (!rl.success) {
+      return fail(
+        "RATE_LIMITED",
+        "업로드 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.",
+        429,
+        { resetAt: rl.reset, limit: rl.limit },
+      );
+    }
+
     const raw = (await req.json().catch(() => ({}))) as unknown;
     const parsed = BodySchema.safeParse(raw);
     if (!parsed.success) {

@@ -7,13 +7,22 @@ import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import { enqueueEmail } from "@/lib/email/queue";
+import { enforceRateLimit } from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+/** 명시적 의도 확인용 — 정확히 이 문구만 통과. */
+const CONFIRM_PHRASE = "회원 탈퇴";
+
 const BodySchema = z.object({
   /** 본인 이메일 재입력 — 정상 식별이 가능한 사용자만 탈퇴 가능 */
   confirmEmail: z.string().email().max(254),
+  /** 명시적 의도 확인 문구 — "회원 탈퇴" 정확히 입력해야 통과 */
+  confirmText: z
+    .string()
+    .min(1, `'${CONFIRM_PHRASE}' 문구를 정확히 입력해 주세요.`)
+    .max(20),
   /** 탈퇴 사유 (선택) */
   reason: z.string().max(500).optional(),
 });
@@ -33,18 +42,30 @@ const BLOCKING_STATUSES = [
 /**
  * POST /api/account/delete
  *
- * body: { confirmEmail: string, reason?: string }
+ * body: { confirmEmail: string, confirmText: "회원 탈퇴", reason?: string }
  *
  * 흐름:
- *   1. requireActiveUser — 잔존 세션으로 재탈퇴 시도 차단 (deleted_at 가드)
- *   2. confirmEmail 일치 검증 (auth.user.email 기준)
- *   3. 진행 중 주문 존재 검사 → 거부
- *   4. service_role: anonymize_account RPC + auth.users.deleteUser
- *   5. 클라이언트는 응답 후 자체적으로 페이지 이동 + signOut 처리
+ *   1. Rate limit — 시간당 5회 (잔존 세션 brute force 차단)
+ *   2. requireActiveUser — deleted_at 가드 (재탈퇴 차단)
+ *   3. confirmEmail + confirmText 이중 검증
+ *   4. 진행 중 주문 존재 검사 → 거부
+ *   5. service_role: anonymize_account RPC + auth.users.deleteUser
+ *   6. 클라이언트는 응답 후 자체적으로 페이지 이동 + signOut 처리
  */
 export async function POST(req: Request) {
   try {
     const user = await requireActiveUser();
+
+    // 🛡 Rate limit — 시간당 5회 (잔존 세션 brute force 차단)
+    const rl = await enforceRateLimit("account-delete", req, user.id);
+    if (!rl.success) {
+      return fail(
+        "RATE_LIMITED",
+        "탈퇴 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.",
+        429,
+        { resetAt: rl.reset, limit: rl.limit },
+      );
+    }
 
     const raw = (await req.json().catch(() => ({}))) as unknown;
     const parsed = BodySchema.safeParse(raw ?? {});
@@ -57,7 +78,16 @@ export async function POST(req: Request) {
       );
     }
 
-    const { confirmEmail, reason } = parsed.data;
+    const { confirmEmail, confirmText, reason } = parsed.data;
+
+    // 명시적 의도 — 정확한 문구 강제 (UI 클릭 실수 방지 + 자동화 봇 차단)
+    if (confirmText.trim() !== CONFIRM_PHRASE) {
+      return fail(
+        "CONFIRM_TEXT_MISMATCH",
+        `'${CONFIRM_PHRASE}' 문구를 정확히 입력해 주세요.`,
+        400,
+      );
+    }
 
     // 2) 이메일 일치 — auth.user.email 우선, 없으면 profiles.email
     const supabase = createServerSupabase();
