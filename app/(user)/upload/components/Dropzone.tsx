@@ -90,26 +90,26 @@ export default function Dropzone({ onFiles, disabled = false, hint }: DropzonePr
           "relative flex min-h-[280px] cursor-pointer flex-col items-center justify-center gap-4 border-2 border-dashed p-10 text-center transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
           isOver
-            ? "border-[#111111] bg-[#f5f5f5]"
-            : "border-[#cacacb] bg-[#f5f5f5] hover:border-[#111111]",
+            ? "border-coral bg-coral-50"
+            : "border-hairline bg-soft-cloud hover:border-coral hover:bg-coral-50/50",
           disabled && "cursor-not-allowed opacity-60",
         )}
       >
-        <div className="flex size-14 items-center justify-center rounded-full bg-white border border-[#cacacb]">
+        <div className="flex size-14 items-center justify-center rounded-full bg-white border border-hairline">
           {isOver ? (
-            <Upload className="size-6 text-[#111111]" aria-hidden />
+            <Upload className="size-6 text-coral" aria-hidden />
           ) : (
-            <ImagePlus className="size-6 text-[#111111]" aria-hidden />
+            <ImagePlus className="size-6 text-ink" aria-hidden />
           )}
         </div>
 
         <div>
-          <p className="text-xl font-semibold tracking-tight text-[#111111]">
+          <p className="text-xl font-semibold tracking-tight text-ink">
             {isOver
-              ? "이대로 놓아주세요"
+              ? "여기에 놓아주세요"
               : isMobile
-                ? "탭하여 사진 추가"
-                : "사진을 끌어다 놓거나 클릭"}
+                ? "탭해서 사진 추가하기"
+                : "사진을 끌어다 놓거나 클릭하기"}
           </p>
           <p className="mt-1.5 text-sm text-muted-foreground">
             JPEG · PNG · WebP · HEIC · 최대 20MB · 100장

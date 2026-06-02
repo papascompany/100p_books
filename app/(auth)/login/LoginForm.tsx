@@ -159,7 +159,7 @@ export default function LoginForm() {
   }
 
   return (
-    <Card className="w-full max-w-md">
+    <Card className="w-full max-w-md rounded-2xl shadow-soft">
       <CardHeader className="text-center">
         <CardTitle className="text-3xl font-semibold tracking-tight">
           다시 만나 반가워요
@@ -176,10 +176,10 @@ export default function LoginForm() {
           <div
             role="status"
             aria-live="polite"
-            className="border border-[#cacacb] bg-[#f5f5f5] p-5 text-center"
+            className="rounded-2xl border border-hairline bg-soft-cloud p-5 text-center"
           >
-            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-white border border-[#cacacb]">
-              <Mail className="size-6 text-[#111111]" aria-hidden />
+            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-white border border-hairline">
+              <Mail className="size-6 text-ink" aria-hidden />
             </div>
             <p className="mt-3 text-base font-medium">이메일을 확인해주세요</p>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -192,7 +192,7 @@ export default function LoginForm() {
             <button
               type="button"
               onClick={() => setStatus({ kind: "idle" })}
-              className="mt-4 text-sm font-medium text-rose-600 underline-offset-4 hover:underline"
+              className="mt-4 text-sm font-medium text-coral underline-offset-4 hover:underline"
             >
               다른 이메일로 다시 보내기
             </button>
@@ -273,7 +273,7 @@ export default function LoginForm() {
             {status.kind === "error" ? (
               <p
                 role="alert"
-                className="border border-[#d30005]/30 bg-[#d30005]/5 px-3 py-2 text-sm text-[#d30005]"
+                className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
               >
                 {status.message}
               </p>
@@ -282,7 +282,7 @@ export default function LoginForm() {
             <Button
               type="submit"
               size="lg"
-              variant="gradient"
+              variant="coral"
               className={cn("mt-1 w-full", isSubmitting && "opacity-90")}
               disabled={isSubmitting || !agreed}
             >

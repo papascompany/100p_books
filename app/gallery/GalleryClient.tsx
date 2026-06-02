@@ -173,7 +173,7 @@ export default function GalleryClient({
     <div>
       {/* 정렬 탭 */}
       <div
-        className="flex gap-1 border-b border-[#cacacb]"
+        className="flex gap-1 border-b border-hairline"
         role="tablist"
         aria-label="정렬 기준"
       >
@@ -185,10 +185,10 @@ export default function GalleryClient({
             onClick={() => setSort(s)}
             className={
               "relative px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring " +
-              "after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[#111111] after:transition-opacity " +
+              "after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-coral after:transition-opacity " +
               (sort === s
-                ? "text-[#111111] after:opacity-100"
-                : "text-[#707072] hover:text-[#111111] after:opacity-0")
+                ? "text-ink after:opacity-100"
+                : "text-mute hover:text-ink after:opacity-0")
             }
           >
             {s === "recent" ? "최신순" : "인기순"}
@@ -200,7 +200,7 @@ export default function GalleryClient({
       {fetchError ? (
         <div
           role="alert"
-          className="mt-6 border border-[#d30005]/30 bg-[#d30005]/5 p-4 text-sm text-[#d30005]"
+          className="mt-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
         >
           후기를 불러오지 못했습니다: {fetchError}
         </div>
@@ -208,8 +208,8 @@ export default function GalleryClient({
 
       {/* 그리드 */}
       {items.length === 0 && !loading ? (
-        <div className="mt-12 border-t border-[#cacacb] bg-[#f5f5f5] p-8 text-center">
-          <p className="text-sm text-[#707072]">아직 등록된 후기가 없습니다.</p>
+        <div className="mt-12 rounded-2xl border border-hairline bg-soft-cloud p-8 text-center">
+          <p className="text-sm text-mute">아직 등록된 후기가 없습니다.</p>
         </div>
       ) : (
         <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
@@ -268,7 +268,7 @@ function ReviewCard(props: {
   return (
     <article className="group overflow-hidden border-0 bg-canvas">
       {/* 대표 이미지 */}
-      <div className="relative aspect-square w-full overflow-hidden bg-[#f5f5f5]">
+      <div className="relative aspect-square w-full overflow-hidden bg-soft-cloud">
         {coverUrl ? (
           <Image
             src={coverUrl}
@@ -294,7 +294,7 @@ function ReviewCard(props: {
               className={
                 "h-3.5 w-3.5 " +
                 (n <= item.rating
-                  ? "fill-amber-400 text-amber-400"
+                  ? "fill-star-amber text-star-amber"
                   : "text-muted-foreground/30")
               }
               aria-hidden
@@ -325,7 +325,7 @@ function ReviewCard(props: {
             <Heart
               className={
                 "h-3.5 w-3.5 transition-colors " +
-                (isLiked ? "fill-rose-500 text-rose-500" : "")
+                (isLiked ? "fill-coral text-coral" : "")
               }
               aria-hidden
             />
@@ -341,12 +341,12 @@ function ReviewCard(props: {
 
 function ReviewSkeleton() {
   return (
-    <div className="overflow-hidden border-0 bg-[#f5f5f5]" aria-hidden>
-      <div className="aspect-square w-full animate-pulse bg-[#e5e5e5]" />
+    <div className="overflow-hidden rounded-2xl border-0 bg-soft-cloud" aria-hidden>
+      <div className="aspect-square w-full animate-pulse bg-hairline" />
       <div className="p-3 space-y-2">
-        <div className="h-3 w-24 animate-pulse rounded bg-muted" />
-        <div className="h-3 w-full animate-pulse rounded bg-muted" />
-        <div className="h-3 w-3/4 animate-pulse rounded bg-muted" />
+        <div className="h-3 w-24 animate-pulse rounded bg-hairline" />
+        <div className="h-3 w-full animate-pulse rounded bg-hairline" />
+        <div className="h-3 w-3/4 animate-pulse rounded bg-hairline" />
       </div>
     </div>
   );

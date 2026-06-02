@@ -11,28 +11,28 @@ const STEPS = [
     num: "01",
     icon: Upload,
     title: "사진 업로드",
-    desc: "최대 100장. HEIC, JPG, PNG 모두 지원하며 EXIF 기준으로 자동 정렬됩니다.",
-    accent: "#f59e0b",
-    glow: "rgba(245,158,11,0.35)",
-    border: "rgba(245,158,11,0.4)",
+    desc: "최대 100장. HEIC, JPG, PNG 모두 올릴 수 있고 찍은 순서대로 자동 정렬돼요.",
+    accent: "#FF6B5E",
+    glow: "rgba(255,107,94,0.35)",
+    border: "rgba(255,107,94,0.4)",
   },
   {
     num: "02",
     icon: Wand2,
     title: "자동 배치 & 편집",
-    desc: "AI가 페이지를 채우고, 원하는 레이아웃으로 자유롭게 수정하세요.",
-    accent: "#60a5fa",
-    glow: "rgba(96,165,250,0.35)",
-    border: "rgba(96,165,250,0.4)",
+    desc: "페이지가 자동으로 채워지고, 원하는 레이아웃으로 자유롭게 바꿀 수 있어요.",
+    accent: "#FFD9D2",
+    glow: "rgba(255,217,210,0.35)",
+    border: "rgba(255,217,210,0.4)",
   },
   {
     num: "03",
     icon: ShoppingBag,
     title: "인쇄 주문",
-    desc: "결제 후 3~5일 안에 고품질 포토북이 도착합니다.",
-    accent: "#f472b6",
-    glow: "rgba(244,114,182,0.35)",
-    border: "rgba(244,114,182,0.4)",
+    desc: "결제 후 3~5일 안에 고품질 포토북이 집 앞에 도착해요.",
+    accent: "#FFB23E",
+    glow: "rgba(255,178,62,0.35)",
+    border: "rgba(255,178,62,0.4)",
   },
 ] as const;
 
@@ -85,14 +85,14 @@ export default function StepsSection() {
   return (
     <section
       ref={sectionRef}
-      className="relative py-12 md:py-20 bg-[#111111] overflow-hidden"
+      className="relative py-12 md:py-20 bg-ink overflow-hidden"
     >
       {/* 배경 텍스처 그라디언트 */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(255,255,255,0.04) 0%, transparent 70%)",
+            "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(255,107,94,0.05) 0%, transparent 70%)",
         }}
       />
 
@@ -120,7 +120,7 @@ export default function StepsSection() {
             variants={headingVariants}
             className="mt-2 text-sm text-white/40"
           >
-            복잡한 과정 없이 세 단계만 거치면 됩니다.
+            세 단계만 거치면 나만의 감성 포토북이 완성돼요.
           </motion.p>
         </motion.div>
 
@@ -132,7 +132,7 @@ export default function StepsSection() {
               className="h-full origin-left"
               style={{
                 background:
-                  "linear-gradient(90deg, #f59e0b 0%, #60a5fa 50%, #f472b6 100%)",
+                  "linear-gradient(90deg, #FF6B5E 0%, #FFD9D2 50%, #FFB23E 100%)",
               }}
               variants={lineVariants}
               initial="hidden"
@@ -146,7 +146,7 @@ export default function StepsSection() {
               className="w-full origin-top"
               style={{
                 background:
-                  "linear-gradient(180deg, #f59e0b 0%, #60a5fa 50%, #f472b6 100%)",
+                  "linear-gradient(180deg, #FF6B5E 0%, #FFD9D2 50%, #FFB23E 100%)",
               }}
               variants={{
                 hidden: { scaleY: 0 },
@@ -239,7 +239,7 @@ export default function StepsSection() {
                       "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)",
                   }}
                 >
-                  {/* 호버 시 accent 그라디언트 상단 라인 */}
+                  {/* 호버 시 coral accent 그라디언트 상단 라인 */}
                   <motion.div
                     className="absolute inset-x-0 top-0 h-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                     style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }}
@@ -271,7 +271,7 @@ export default function StepsSection() {
           <Button
             asChild
             size="lg"
-            className="bg-white text-[#111111] hover:bg-[#f5f5f5] border-0 font-semibold"
+            className="bg-coral text-white hover:bg-coral-600 border-0 font-semibold shadow-coral-glow"
           >
             <Link href="/upload">
               지금 시작하기

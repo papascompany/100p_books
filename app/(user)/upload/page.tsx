@@ -93,14 +93,14 @@ export default async function UploadPage({ searchParams }: PageProps) {
   return (
     <div className="container py-8 md:py-12">
       <header className="mx-auto max-w-3xl text-center">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-[#9e9ea0]">
+        <p className="text-xs font-medium uppercase tracking-[0.2em] text-stone">
           STEP 1 OF 4
         </p>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-          사진을 모아주세요.
+          소중한 사진을 모아주세요.
         </h1>
         <p className="mt-3 text-base text-muted-foreground">
-          최대 100장까지 업로드할 수 있어요. HEIC 도 자동으로 변환됩니다.
+          최대 100장까지 올릴 수 있어요. HEIC도 자동으로 변환돼요.
         </p>
       </header>
 

@@ -96,8 +96,8 @@ function ErrorPage({
 
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 text-center">
-      <div className="mb-6 flex size-20 items-center justify-center rounded-full bg-rose-50 dark:bg-rose-950/30">
-        <BookOpen className="size-9 text-rose-400" aria-hidden />
+      <div className="mb-6 flex size-20 items-center justify-center rounded-full bg-coral-50 dark:bg-coral-950/30">
+        <BookOpen className="size-9 text-coral-400" aria-hidden />
       </div>
       <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
         {isExpired ? "링크가 만료됐어요" : "포토북을 찾을 수 없어요"}
@@ -107,7 +107,7 @@ function ErrorPage({
           ? "이 공유 링크는 유효기간이 지났어요. 책을 공유한 분께 새 링크를 요청해 보세요."
           : (message ?? "이 주소는 유효하지 않거나 삭제된 공유 링크입니다.")}
       </p>
-      <Button asChild variant="gradient" size="lg" className="mt-8 h-12 px-7">
+      <Button asChild variant="coral" size="lg" className="mt-8 h-12 px-7">
         <Link href="/">나만의 포토북 만들기</Link>
       </Button>
     </div>
@@ -161,8 +161,8 @@ export default async function SharePage({ params }: PageProps) {
   return (
     <>
       {/* 상단 배너 */}
-      <div className="border-b bg-amber-50/80 dark:bg-amber-950/20">
-        <div className="container flex items-center justify-center gap-2 py-2.5 text-center text-xs text-amber-700 dark:text-amber-400 sm:text-sm">
+      <div className="border-b border-hairline bg-coral-50/60 dark:bg-coral-950/20">
+        <div className="container flex items-center justify-center gap-2 py-2.5 text-center text-xs text-coral-700 dark:text-coral-400 sm:text-sm">
           <BookOpen className="size-3.5 shrink-0" aria-hidden />
           <span>공유된 포토북입니다 · 조회 전용</span>
           {expiresDate ? (
@@ -195,15 +195,15 @@ export default async function SharePage({ params }: PageProps) {
       <main className="container max-w-4xl py-10 md:py-14">
         {/* 표지 카드 */}
         <section aria-labelledby="cover-heading" className="mb-10">
-          <div className="overflow-hidden rounded-2xl border bg-gradient-to-br from-rose-50 via-amber-50 to-white shadow-soft dark:from-rose-950/20 dark:via-amber-950/10 dark:to-card">
+          <div className="overflow-hidden rounded-2xl border border-hairline bg-gradient-to-br from-coral-50 via-peach to-white shadow-soft dark:from-coral-950/20 dark:via-coral-950/10 dark:to-card">
             <div className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:gap-8 sm:p-8">
               {/* 아이콘 */}
-              <div className="flex size-16 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-amber-400 shadow-soft-lg sm:size-20">
+              <div className="flex size-16 shrink-0 items-center justify-center rounded-xl bg-coral shadow-soft-lg sm:size-20">
                 <BookOpen className="size-8 text-white sm:size-10" aria-hidden />
               </div>
 
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium uppercase tracking-[0.18em] text-rose-500/90">
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-coral/90">
                   포토북
                 </p>
                 <h1
@@ -228,7 +228,7 @@ export default async function SharePage({ params }: PageProps) {
                 </div>
               </div>
 
-              <Button asChild variant="gradient" size="sm" className="shrink-0">
+              <Button asChild variant="coral" size="sm" className="shrink-0">
                 <Link href="/upload">이 책 만들기</Link>
               </Button>
             </div>
@@ -305,7 +305,7 @@ export default async function SharePage({ params }: PageProps) {
 
         {/* 하단 CTA */}
         <section className="mt-14">
-          <div className="overflow-hidden rounded-2xl border bg-gradient-to-br from-rose-50 via-amber-50 to-white p-8 shadow-soft dark:from-rose-950/30 dark:via-amber-950/20 dark:to-background">
+          <div className="overflow-hidden rounded-2xl border border-hairline bg-gradient-to-br from-coral-50 via-peach/50 to-white p-8 shadow-soft dark:from-coral-950/30 dark:via-coral-950/20 dark:to-background">
             <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 className="font-display text-xl font-semibold tracking-tight sm:text-2xl">
@@ -315,7 +315,7 @@ export default async function SharePage({ params }: PageProps) {
                   100장의 사진을 업로드하면 3분 안에 첫 페이지가 완성됩니다.
                 </p>
               </div>
-              <Button asChild variant="gradient" size="lg" className="h-11 shrink-0 px-6">
+              <Button asChild variant="coral" size="lg" className="h-11 shrink-0 px-6">
                 <Link href="/upload">지금 시작하기</Link>
               </Button>
             </div>

@@ -58,16 +58,16 @@ export default function UploadSourceSheet({
           disabled={disabled}
           onClick={() => galleryRef.current?.click()}
           className={cn(
-            "flex w-full items-center gap-4 rounded-xl border border-border bg-background px-5 py-4",
-            "text-left transition-colors",
-            "hover:border-rose-300 hover:bg-rose-50/40",
+            "flex w-full items-center gap-4 rounded-xl border border-hairline bg-background px-5 py-4",
+            "text-left transition-colors shadow-soft",
+            "hover:border-coral-300 hover:bg-coral-50/40",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             "active:scale-[0.98]",
             disabled && "cursor-not-allowed opacity-60",
           )}
           aria-label="갤러리에서 사진 선택"
         >
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-rose-100/80 text-rose-600">
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-coral-100/80 text-coral-600">
             <ImageIcon className="size-6" aria-hidden />
           </span>
           <div>
@@ -84,16 +84,16 @@ export default function UploadSourceSheet({
           disabled={disabled}
           onClick={() => cameraRef.current?.click()}
           className={cn(
-            "flex w-full items-center gap-4 rounded-xl border border-border bg-background px-5 py-4",
-            "text-left transition-colors",
-            "hover:border-amber-300 hover:bg-amber-50/40",
+            "flex w-full items-center gap-4 rounded-xl border border-hairline bg-background px-5 py-4",
+            "text-left transition-colors shadow-soft",
+            "hover:border-coral-200 hover:bg-coral-50/30",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             "active:scale-[0.98]",
             disabled && "cursor-not-allowed opacity-60",
           )}
           aria-label="카메라로 사진 찍기"
         >
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-amber-100/80 text-amber-600">
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-peach/60 text-coral-600">
             <Camera className="size-6" aria-hidden />
           </span>
           <div>

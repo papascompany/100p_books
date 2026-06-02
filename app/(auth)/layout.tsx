@@ -6,11 +6,11 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <main className="flex flex-1 flex-col bg-[#f5f5f5]">
-      <header className="container flex h-14 items-center border-b border-[#cacacb] bg-white">
+    <main className="flex flex-1 flex-col bg-soft-cloud">
+      <header className="container flex h-14 items-center border-b border-hairline bg-white">
         <Link
           href="/"
-          className="flex items-center gap-1.5 text-[#111111]"
+          className="flex items-center gap-1.5 text-ink"
           aria-label="홈으로"
         >
           <span className="font-display-num text-2xl font-bold leading-none">100p</span>

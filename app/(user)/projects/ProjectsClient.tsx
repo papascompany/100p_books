@@ -59,11 +59,11 @@ function relativeTime(iso: string): string {
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   draft: {
     label: "편집중",
-    className: "bg-white text-[#707072] border border-[#cacacb]",
+    className: "bg-white text-mute border border-hairline",
   },
   ordered: {
     label: "완성",
-    className: "bg-[#111111] text-white border border-[#111111]",
+    className: "bg-ink text-white border border-ink",
   },
 };
 
@@ -172,12 +172,12 @@ function ProjectCard({ project, onDeleted }: ProjectCardProps) {
   const thumbSrc = extractCoverThumb(project.cover_json);
 
   return (
-    <article className="group relative flex flex-col overflow-hidden border border-[#e5e5e5] bg-white hover:border-[#cacacb] transition-colors">
+    <article className="group relative flex flex-col overflow-hidden rounded-2xl border border-hairline bg-white shadow-soft transition-all hover:-translate-y-1 hover:border-coral hover:shadow-soft-lg">
       {/* 썸네일 */}
       <button
         type="button"
         aria-label={`${project.title ?? "제목 없음"} 편집하기`}
-        className="relative aspect-square w-full overflow-hidden bg-[#f5f5f5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        className="relative aspect-square w-full overflow-hidden bg-soft-cloud focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         onClick={() => router.push(`/editor/${project.id}`)}
       >
         {thumbSrc ? (
@@ -189,8 +189,8 @@ function ProjectCard({ project, onDeleted }: ProjectCardProps) {
             className="object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-[#f5f5f5]">
-            <BookOpen className="size-10 text-[#cacacb]" aria-hidden />
+          <div className="flex h-full w-full items-center justify-center bg-soft-cloud">
+            <BookOpen className="size-10 text-hairline" aria-hidden />
           </div>
         )}
         {/* 상태 배지 (썸네일 좌하단) */}
@@ -235,12 +235,12 @@ export default function ProjectsClient({ projects: initialProjects }: Props) {
             내 포토북
           </h1>
           {projects.length > 0 && (
-            <span className="inline-flex items-center bg-[#f5f5f5] px-2.5 py-0.5 text-xs font-medium text-[#707072]">
+            <span className="inline-flex items-center rounded-full bg-soft-cloud px-2.5 py-0.5 text-xs font-medium text-mute">
               {projects.length}
             </span>
           )}
         </div>
-        <Button asChild size="sm">
+        <Button asChild size="sm" variant="coral">
           <Link href="/upload">
             <Plus className="size-4" aria-hidden />
             새 포토북 만들기
@@ -250,9 +250,9 @@ export default function ProjectsClient({ projects: initialProjects }: Props) {
 
       {projects.length === 0 ? (
         /* 빈 상태 */
-        <div className="flex flex-col items-center justify-center border border-[#cacacb] bg-[#f5f5f5] px-6 py-16 text-center">
-          <div className="mb-4 flex size-16 items-center justify-center bg-white">
-            <BookOpen className="size-8 text-[#cacacb]" aria-hidden />
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-hairline bg-soft-cloud px-6 py-16 text-center">
+          <div className="mb-4 flex size-16 items-center justify-center rounded-2xl bg-white shadow-soft">
+            <BookOpen className="size-8 text-hairline" aria-hidden />
           </div>
           <p className="text-base font-semibold text-foreground">
             아직 만든 포토북이 없어요
@@ -262,6 +262,7 @@ export default function ProjectsClient({ projects: initialProjects }: Props) {
           </p>
           <Button
             className="mt-6"
+            variant="coral"
             onClick={() => router.push("/upload")}
           >
             <Plus className="size-4" aria-hidden />

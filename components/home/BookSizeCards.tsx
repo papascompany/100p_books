@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
  *   - 카드 = 풀블리드 Unsplash 사진 + 다크 그라디언트 + 흰 텍스트.
  *   - 사이즈별 비율(aspect) 다르게 — 미니/A5 는 세로 길게, 스퀘어는 정사각.
  *   - 진입: CSS @keyframes fadeUp + stagger.
- *   - 호버: 사진 1.07x + 카드 살짝 들림 + amber 라인 + 화살표 →→.
+ *   - 호버: 사진 1.07x + 카드 살짝 들림 + coral 라인 + 화살표 →→.
  *   - prefers-reduced-motion: globals.css 가 모든 motion 단축.
  */
 
@@ -55,17 +55,17 @@ const BOOK_SIZES: readonly BookSizeItem[] = [
 
 export default function BookSizeCards() {
   return (
-    <section className="bg-[#f5f5f5] py-12 md:py-16">
+    <section className="bg-soft-cloud py-12 md:py-16">
       <div className="container">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-8 animate-fade-up">
           <div>
-            <p className="text-xs font-medium uppercase tracking-[0.25em] text-[#707072] mb-2">
+            <p className="text-xs font-medium uppercase tracking-[0.25em] text-mute mb-2">
               Pick Your Size
             </p>
             <h2 className="text-2xl font-bold tracking-tight md:text-3xl">
               나에게 딱 맞는 사이즈
             </h2>
-            <p className="mt-2 text-sm text-[#707072]">
+            <p className="mt-2 text-sm text-mute">
               세 가지 판형 중 원하는 스타일을 선택하세요.
             </p>
           </div>
@@ -81,7 +81,7 @@ export default function BookSizeCards() {
             <Link
               key={b.name}
               href="/upload"
-              className="group relative block isolate overflow-hidden animate-fade-up motion-safe:hover:-translate-y-1.5 transition-transform duration-500 ease-out"
+              className="group relative block isolate overflow-hidden rounded-2xl animate-fade-up motion-safe:hover:-translate-y-1.5 transition-transform duration-500 ease-out"
               style={{ aspectRatio: b.ratio, animationDelay: `${120 + i * 120}ms` }}
               aria-label={`${b.name} (${b.size}) 선택하기`}
             >
@@ -103,13 +103,13 @@ export default function BookSizeCards() {
                 }}
               />
 
-              {/* amber wash 호버 */}
+              {/* coral wash 호버 */}
               <div
                 aria-hidden
                 className="absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
                 style={{
                   background:
-                    "linear-gradient(180deg, rgba(245,158,11,0.05) 0%, transparent 60%)",
+                    "linear-gradient(180deg, rgba(255,107,94,0.06) 0%, transparent 60%)",
                 }}
               />
 
@@ -126,15 +126,15 @@ export default function BookSizeCards() {
                 <p className="mt-1.5 text-xs leading-relaxed text-white/75">
                   {b.desc}
                 </p>
-                <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-amber-300 transition-all duration-300 group-hover:gap-2">
+                <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-coral-300 transition-all duration-300 group-hover:gap-2">
                   선택하기 <ArrowRight className="size-3.5" />
                 </span>
               </div>
 
-              {/* amber 하단 라인 */}
+              {/* coral 하단 라인 */}
               <span
                 aria-hidden
-                className="absolute inset-x-0 bottom-0 z-10 h-0.5 origin-left scale-x-0 bg-amber-300 transition-transform duration-500 group-hover:scale-x-100"
+                className="absolute inset-x-0 bottom-0 z-10 h-0.5 origin-left scale-x-0 bg-coral transition-transform duration-500 group-hover:scale-x-100"
               />
             </Link>
           ))}

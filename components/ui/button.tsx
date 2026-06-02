@@ -7,43 +7,47 @@ import { cn } from "@/lib/utils";
 const buttonVariants = cva(
   [
     "inline-flex items-center justify-center gap-2 whitespace-nowrap",
-    "text-base font-medium transition-colors",
+    "text-base font-semibold transition-all duration-200",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
     "disabled:pointer-events-none disabled:opacity-50",
     "[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
-    /* Nike: all buttons are pill-shaped */
+    /* 모던 캐주얼: pill 형태 유지 */
     "rounded-full",
   ].join(" "),
   {
     variants: {
       variant: {
-        /* Nike button-primary: black pill */
+        /* 기본: 잉크 모노 pill */
         default:
-          "bg-[#111111] text-white hover:bg-[#111111]/90 active:scale-[0.98] active:opacity-90",
-        /* Nike button-secondary: soft-cloud pill */
+          "bg-ink text-white shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]",
+        /* 포인트 CTA: 코랄 pill (주요 행동 유도) */
+        coral:
+          "bg-coral text-white shadow-soft hover:bg-coral-600 hover:shadow-coral-glow hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]",
+        /* 보조: soft pill */
         secondary:
-          "bg-[#f5f5f5] text-[#111111] hover:bg-[#e5e5e5] active:scale-[0.98]",
-        /* Nike button-outline-on-image: white pill on photos */
+          "bg-soft-cloud text-ink hover:bg-[#e7e7ea] active:scale-[0.98]",
+        /* 사진 위 아웃라인 (흰 배경) */
         outline:
-          "bg-white text-[#111111] border border-[#cacacb] hover:border-[#111111] active:scale-[0.98]",
-        /* Destructive: sale red pill */
+          "bg-white text-ink border border-hairline shadow-soft hover:border-ink hover:shadow-soft-lg active:scale-[0.98]",
+        /* 코랄 아웃라인 — 가벼운 강조 */
+        "coral-outline":
+          "bg-coral-50 text-coral-700 border border-coral-200 hover:bg-coral-100 hover:border-coral-300 active:scale-[0.98]",
+        /* 위험 */
         destructive:
-          "bg-[#d30005] text-white hover:bg-[#d30005]/90 active:scale-[0.98]",
-        /* Ghost: no background, ink text */
-        ghost: "hover:bg-[#f5f5f5] text-[#111111] active:scale-[0.98]",
-        /* Link: underline only */
-        link: "text-[#111111] underline-offset-4 hover:underline p-0 h-auto",
-        /* Legacy gradient → now maps to primary black pill */
+          "bg-[#d30005] text-white shadow-soft hover:bg-[#d30005]/90 active:scale-[0.98]",
+        /* 고스트 */
+        ghost: "hover:bg-soft-cloud text-ink active:scale-[0.98]",
+        /* 링크 */
+        link: "text-coral-600 underline-offset-4 hover:underline p-0 h-auto",
+        /* legacy gradient → 코랄로 매핑 */
         gradient:
-          "bg-[#111111] text-white hover:bg-[#111111]/90 active:scale-[0.98] active:opacity-90",
+          "bg-coral text-white shadow-soft hover:bg-coral-600 hover:shadow-coral-glow hover:-translate-y-0.5 active:scale-[0.98]",
       },
       size: {
-        /* Nike standard: h-12 = 48px */
         default: "h-12 px-8 text-base",
         sm: "h-10 px-6 text-sm",
-        lg: "h-12 px-8 text-base",
-        /* Icon button: 40px circular */
-        icon: "h-10 w-10 bg-[#f5f5f5] text-[#111111]",
+        lg: "h-14 px-10 text-base",
+        icon: "h-10 w-10 bg-soft-cloud text-ink",
       },
     },
     defaultVariants: {

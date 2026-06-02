@@ -356,7 +356,7 @@ export default function OrderForm(props: OrderFormProps) {
         </header>
 
         {/* 수량 */}
-        <section className="rounded-2xl border bg-card p-4 sm:p-5">
+        <section className="rounded-2xl border border-hairline bg-card p-4 sm:p-5 shadow-soft">
           <h2 className="text-sm font-semibold">수량</h2>
           <div className="mt-3 flex items-center gap-3">
             <Button
@@ -392,7 +392,7 @@ export default function OrderForm(props: OrderFormProps) {
         </section>
 
         {/* 배송지 */}
-        <section className="rounded-2xl border bg-card p-4 sm:p-5">
+        <section className="rounded-2xl border border-hairline bg-card p-4 sm:p-5 shadow-soft">
           <h2 className="text-sm font-semibold">배송지</h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <Field label="받는 분" required>
@@ -466,23 +466,23 @@ export default function OrderForm(props: OrderFormProps) {
         </section>
 
         {/* 할인 코드 */}
-        <section className="rounded-2xl border bg-card p-4 sm:p-5">
+        <section className="rounded-2xl border border-hairline bg-card p-4 sm:p-5 shadow-soft">
           <h2 className="flex items-center gap-1.5 text-sm font-semibold">
-            <Tag className="h-4 w-4 text-muted-foreground" aria-hidden />
+            <Tag className="h-4 w-4 text-coral" aria-hidden />
             할인 코드
           </h2>
 
           {discount.appliedCode ? (
             /* 적용 완료 상태 */
-            <div className="mt-3 flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 dark:border-emerald-800 dark:bg-emerald-950/40">
+            <div className="mt-3 flex items-center justify-between rounded-lg border border-coral-200 bg-coral-50 px-3 py-2.5 dark:border-coral-700 dark:bg-coral-950/30">
               <div className="flex items-center gap-2">
                 <CheckCircle2
-                  className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+                  className="h-4 w-4 shrink-0 text-coral-600 dark:text-coral-400"
                   aria-hidden
                 />
-                <p className="text-sm text-emerald-700 dark:text-emerald-300">
+                <p className="text-sm text-coral-700 dark:text-coral-300">
                   <span className="font-semibold">{discount.appliedCode}</span> 코드:{" "}
-                  <span className="font-semibold text-rose-600 dark:text-rose-400">
+                  <span className="font-semibold text-coral-600 dark:text-coral-400">
                     -{fmtKrw(discount.discountAmount)}
                   </span>{" "}
                   할인 적용됨
@@ -550,9 +550,9 @@ export default function OrderForm(props: OrderFormProps) {
         </section>
 
         {/* 포인트 사용 */}
-        <section className="rounded-2xl border bg-card p-4 sm:p-5">
+        <section className="rounded-2xl border border-hairline bg-card p-4 sm:p-5 shadow-soft">
           <h2 className="flex items-center gap-1.5 text-sm font-semibold">
-            <Coins className="h-4 w-4 text-amber-500" aria-hidden />
+            <Coins className="h-4 w-4 text-star-amber" aria-hidden />
             포인트 사용
           </h2>
           <div className="mt-3 space-y-2">
@@ -562,7 +562,7 @@ export default function OrderForm(props: OrderFormProps) {
                 {points.loading ? (
                   <span className="animate-pulse">로딩 중...</span>
                 ) : (
-                  <span className="font-semibold text-amber-700 dark:text-amber-400">
+                  <span className="font-semibold text-coral dark:text-coral-400">
                     {KRW.format(points.balance)}P
                   </span>
                 )}
@@ -592,7 +592,7 @@ export default function OrderForm(props: OrderFormProps) {
               </Button>
             </div>
             {points.useAmount > 0 ? (
-              <p className="text-xs text-emerald-700 dark:text-emerald-400">
+              <p className="text-xs text-coral-600 dark:text-coral-400 font-medium">
                 {KRW.format(points.useAmount)}P 차감 예정
               </p>
             ) : points.balance === 0 && !points.loading ? (
@@ -608,7 +608,7 @@ export default function OrderForm(props: OrderFormProps) {
         </section>
 
         {/* 약관 */}
-        <section className="rounded-2xl border bg-card p-4 sm:p-5">
+        <section className="rounded-2xl border border-hairline bg-card p-4 sm:p-5 shadow-soft">
           <h2 className="text-sm font-semibold">약관 동의</h2>
           <div className="mt-3 space-y-2 text-sm">
             <Agree
@@ -632,7 +632,7 @@ export default function OrderForm(props: OrderFormProps) {
 
       {/* 우측 — 가격 요약 + CTA */}
       <aside className="space-y-3 md:sticky md:top-24 md:self-start">
-        <div className="rounded-2xl border bg-card p-4 sm:p-5">
+        <div className="rounded-2xl border border-hairline bg-card p-4 sm:p-5 shadow-soft">
           <h2 className="font-display text-lg font-semibold">결제 요약</h2>
           <dl className="mt-4 space-y-2 text-sm">
             <Row label={`기본 단가 (${props.bookSizeName})`} value={fmtKrw(breakdown.unit)} />
@@ -667,9 +667,9 @@ export default function OrderForm(props: OrderFormProps) {
               />
             ) : null}
             <hr className="my-2 border-border" />
-            <div className="flex items-baseline justify-between">
-              <dt className="text-sm font-medium">최종 결제 금액</dt>
-              <dd className="font-display text-2xl font-semibold tracking-tight">
+            <div className="flex items-baseline justify-between rounded-lg bg-coral-50 px-3 py-2 dark:bg-coral-950/20">
+              <dt className="text-sm font-semibold text-ink">최종 결제 금액</dt>
+              <dd className="font-display text-2xl font-bold tracking-tight text-coral">
                 {fmtKrw(finalAmount)}
               </dd>
             </div>
@@ -679,7 +679,7 @@ export default function OrderForm(props: OrderFormProps) {
         <Button
           type="button"
           size="lg"
-          variant="gradient"
+          variant="coral"
           className="w-full"
           onClick={() => void handleSubmit()}
           disabled={!canSubmit}
@@ -726,7 +726,7 @@ function Field(props: {
     <label className={"flex flex-col gap-1.5 " + (props.className ?? "")}>
       <span className="text-xs font-medium text-muted-foreground">
         {props.label}
-        {props.required ? <span className="text-rose-500"> *</span> : null}
+        {props.required ? <span className="text-coral"> *</span> : null}
       </span>
       {props.children}
       {props.hint ? (
@@ -747,7 +747,7 @@ function Agree(props: {
         type="checkbox"
         checked={props.checked}
         onChange={(e) => props.onChange(e.target.checked)}
-        className="h-4 w-4 rounded border-input accent-rose-500"
+        className="h-4 w-4 rounded border-hairline accent-coral"
       />
       <span>{props.label}</span>
     </label>
@@ -765,7 +765,7 @@ function Row(props: {
       <dd
         className={
           props.accent === "discount" || props.accent === "coupon"
-            ? "font-medium text-rose-600 dark:text-rose-400"
+            ? "font-semibold text-coral-600 dark:text-coral-400"
             : "text-foreground"
         }
       >

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 const StepsSection = dynamic(() => import("@/components/home/StepsSection"), {
   ssr: false,
   loading: () => (
-    <section className="py-12 md:py-20 bg-[#111111]">
+    <section className="py-12 md:py-20 bg-ink">
       <div className="container">
         <div className="mx-auto max-w-xl text-center mb-12 space-y-3">
           <div className="h-4 w-24 bg-white/10 mx-auto rounded" />
@@ -59,7 +59,7 @@ export default function LandingPage() {
         <div
           className="absolute inset-0"
           style={{
-            background: "linear-gradient(105deg, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.65) 45%, rgba(0,0,0,0.15) 100%)",
+            background: "linear-gradient(105deg, rgba(20,20,20,0.88) 0%, rgba(20,20,20,0.68) 45%, rgba(20,20,20,0.18) 100%)",
           }}
         />
 
@@ -69,34 +69,32 @@ export default function LandingPage() {
               100 Photos · 1 Book
             </p>
             <h1 className="text-4xl font-bold leading-[1.1] tracking-tight text-white sm:text-5xl md:text-6xl text-shadow-lg">
-              소중한 순간을
+              사진만 고르세요,
               <br />
-              <span className="text-amber-300">책으로 만드세요</span>
+              <span className="text-gradient-coral">포토북은 100p가</span>
+              <br />
+              <span className="text-white">만들게요.</span>
             </h1>
             <p className="mt-4 text-sm leading-relaxed text-white/70 max-w-[38ch] sm:text-base">
-              사진 100장을 업로드하면 AI가 자동으로 폴라로이드 감성
-              포토북을 완성합니다. 편집부터 인쇄 주문까지 모두 모바일에서.
+              업로드하면 AI가 자동으로 예쁘게 배치 — 3분이면 끝나요.
+              편집부터 인쇄 주문까지 모두 모바일에서.
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-white/55">
               <span className="flex items-center gap-1">
-                <CheckCircle2 className="size-3.5 text-amber-300" />
+                <CheckCircle2 className="size-3.5 text-coral-300" />
                 무료 시작
               </span>
               <span className="flex items-center gap-1">
-                <CheckCircle2 className="size-3.5 text-amber-300" />
+                <CheckCircle2 className="size-3.5 text-coral-300" />
                 300dpi 인쇄
               </span>
               <span className="flex items-center gap-1">
-                <CheckCircle2 className="size-3.5 text-amber-300" />
+                <CheckCircle2 className="size-3.5 text-coral-300" />
                 3~5일 배송
               </span>
             </div>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Button
-                asChild
-                size="lg"
-                className="bg-white text-[#111111] hover:bg-[#f5f5f5] border-0 font-semibold"
-              >
+              <Button asChild variant="coral" size="lg">
                 <Link href="/upload">
                   지금 만들기
                   <ArrowRight className="size-4" />
@@ -118,8 +116,8 @@ export default function LandingPage() {
           aria-hidden
           className="absolute right-10 top-1/2 -translate-y-1/2 hidden lg:flex flex-col gap-3 z-10"
         >
-          <div className="w-36 bg-white p-2.5 pb-7 shadow-2xl" style={{ transform: "rotate(-4deg)" }}>
-            <div className="relative h-28 w-full overflow-hidden bg-[#f5f5f5]">
+          <div className="w-36 bg-white p-2.5 pb-7 rounded-2xl shadow-soft-xl" style={{ transform: "rotate(-4deg)" }}>
+            <div className="relative h-28 w-full overflow-hidden rounded-xl bg-soft-cloud">
               <Image
                 src="https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=400&q=75"
                 alt="포토북 예시"
@@ -128,10 +126,10 @@ export default function LandingPage() {
                 sizes="144px"
               />
             </div>
-            <p className="mt-1.5 text-center text-[10px] font-medium text-[#707072]">우리의 여행 ✈️</p>
+            <p className="mt-1.5 text-center text-[10px] font-medium text-mute">우리의 여행</p>
           </div>
-          <div className="w-36 bg-white p-2.5 pb-7 shadow-2xl" style={{ transform: "rotate(3deg) translateX(10px)" }}>
-            <div className="relative h-28 w-full overflow-hidden bg-[#f5f5f5]">
+          <div className="w-36 bg-white p-2.5 pb-7 rounded-2xl shadow-soft-xl" style={{ transform: "rotate(3deg) translateX(10px)" }}>
+            <div className="relative h-28 w-full overflow-hidden rounded-xl bg-soft-cloud">
               <Image
                 src="https://images.unsplash.com/photo-1523438885200-e635ba2c371e?w=400&q=75"
                 alt="포토북 예시 2"
@@ -140,15 +138,15 @@ export default function LandingPage() {
                 sizes="144px"
               />
             </div>
-            <p className="mt-1.5 text-center text-[10px] font-medium text-[#707072]">가족의 순간 💕</p>
+            <p className="mt-1.5 text-center text-[10px] font-medium text-mute">가족의 순간</p>
           </div>
         </div>
       </section>
 
       {/* ══ 2. 신뢰 수치 바 ════════════════════════════════════════════════ */}
-      <section className="border-y border-[#dedede] bg-white">
+      <section className="border-y border-hairline bg-white">
         <div className="container">
-          <div className="grid grid-cols-2 divide-x divide-[#dedede] md:grid-cols-4">
+          <div className="grid grid-cols-2 divide-x divide-hairline md:grid-cols-4">
             {[
               { num: "5,000+", label: "제작된 포토북" },
               { num: "4.9★", label: "평균 별점" },
@@ -156,10 +154,10 @@ export default function LandingPage() {
               { num: "3~5일", label: "평균 배송일" },
             ].map(({ num, label }) => (
               <div key={label} className="py-4 px-4 text-center md:py-5">
-                <p className="font-display-num text-2xl font-bold text-[#111111] md:text-3xl">
+                <p className="font-display-num text-2xl font-bold text-ink md:text-3xl">
                   {num}
                 </p>
-                <p className="mt-0.5 text-xs text-[#707072]">{label}</p>
+                <p className="mt-0.5 text-xs text-mute">{label}</p>
               </div>
             ))}
           </div>
@@ -176,14 +174,14 @@ export default function LandingPage() {
       <StepsSection />
 
       {/* ══ 6. 갤러리 미리보기 ══════════════════════════════════════════════ */}
-      <section className="py-10 md:py-14 bg-[#f5f5f5]">
+      <section className="py-10 md:py-14 bg-soft-cloud">
         <div className="container">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6">
             <div>
-              <h2 className="text-2xl font-bold tracking-tight md:text-3xl">실제 포토북 후기</h2>
-              <p className="mt-1 text-sm text-[#707072]">100p Books로 만든 실제 고객들의 포토북입니다.</p>
+              <h2 className="text-2xl font-bold tracking-tight md:text-3xl text-ink">실제 포토북 후기</h2>
+              <p className="mt-1 text-sm text-mute">100p Books로 만든 실제 고객들의 포토북입니다.</p>
             </div>
-            <Button asChild variant="secondary" size="sm">
+            <Button asChild variant="coral-outline" size="sm">
               <Link href="/gallery">전체 보기</Link>
             </Button>
           </div>
@@ -199,7 +197,7 @@ export default function LandingPage() {
             ].map(({ src, rowSpan }, i) => (
               <div
                 key={i}
-                className={`relative overflow-hidden bg-[#dedede]${rowSpan ? " row-span-2" : ""}`}
+                className={`relative overflow-hidden rounded-2xl bg-hairline card-lift${rowSpan ? " row-span-2" : ""}`}
                 style={{ aspectRatio: rowSpan ? "3/4" : "1/1" }}
               >
                 <Image
@@ -219,25 +217,25 @@ export default function LandingPage() {
       <section className="py-10 md:py-14 bg-white">
         <div className="container">
           <div className="mx-auto max-w-xl text-center mb-8">
-            <h2 className="text-2xl font-bold tracking-tight md:text-3xl">고객들의 생생한 후기</h2>
+            <h2 className="text-2xl font-bold tracking-tight md:text-3xl text-ink">고객들의 생생한 후기</h2>
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
             {REVIEWS.map(({ name, rating, text }) => (
-              <div key={name} className="border border-[#dedede] bg-white p-5">
+              <div key={name} className="rounded-2xl border border-hairline bg-white p-5 shadow-soft card-lift">
                 <div className="flex gap-0.5 mb-3">
                   {Array.from({ length: rating }).map((_, i) => (
-                    <Star key={i} className="size-3.5 fill-amber-400 text-amber-400" />
+                    <Star key={i} className="size-3.5 fill-star-amber text-star-amber" />
                   ))}
                 </div>
-                <p className="text-sm leading-relaxed text-[#39393b] mb-4">
+                <p className="text-sm leading-relaxed text-foreground mb-4">
                   &ldquo;{text}&rdquo;
                 </p>
                 <div className="flex items-center gap-2">
-                  <div className="flex size-7 items-center justify-center rounded-full bg-[#f5f5f5] text-xs font-bold text-[#111111]">
+                  <div className="flex size-7 items-center justify-center rounded-full bg-coral-50 text-xs font-bold text-coral-700">
                     {name[0]}
                   </div>
-                  <span className="text-sm font-medium">{name}</span>
+                  <span className="text-sm font-medium text-ink">{name}</span>
                 </div>
               </div>
             ))}
@@ -246,7 +244,7 @@ export default function LandingPage() {
       </section>
 
       {/* ══ 8. 최종 CTA ═════════════════════════════════════════════════════ */}
-      <section className="relative overflow-hidden bg-[#111111] py-12 md:py-16">
+      <section className="relative overflow-hidden bg-ink py-12 md:py-16">
         <Image
           src="https://images.unsplash.com/photo-1504208434309-cb69f4fe52b0?w=1200&q=60"
           alt="CTA 배경"
@@ -256,18 +254,14 @@ export default function LandingPage() {
         />
         <div className="container relative z-10 text-center">
           <h2 className="text-3xl font-bold text-white md:text-4xl lg:text-5xl leading-tight">
-            이번 여행,{" "}
-            <span className="text-amber-300">책으로 남겨보세요.</span>
+            100장의 순간을{" "}
+            <span className="text-coral-300">한 권의 감성으로.</span>
           </h2>
           <p className="mt-3 text-sm text-white/55 max-w-[34ch] mx-auto">
             지금 사진을 올리면 3분 안에 첫 페이지가 완성됩니다. 무료로 시작할 수 있어요.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Button
-              asChild
-              size="lg"
-              className="bg-white text-[#111111] hover:bg-[#f5f5f5] border-0 font-semibold"
-            >
+            <Button asChild variant="coral" size="lg">
               <Link href="/upload">
                 무료로 만들기 <ArrowRight className="size-4" />
               </Link>

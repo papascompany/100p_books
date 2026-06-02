@@ -179,8 +179,8 @@ export default function UploadClient({
                   "rounded-xl border p-4 text-left transition-colors",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                   selected
-                    ? "border-rose-400 bg-rose-50/60 ring-1 ring-rose-300"
-                    : "border-input bg-background hover:border-rose-200 hover:bg-rose-50/30",
+                    ? "border-coral-400 bg-coral-50/60 ring-1 ring-coral-300"
+                    : "border-input bg-background hover:border-coral-200 hover:bg-coral-50/30",
                 )}
               >
                 <p className="font-display text-lg font-semibold tracking-tight">{b.name}</p>
@@ -218,7 +218,7 @@ export default function UploadClient({
           </div>
           <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full bg-gradient-to-r from-rose-500 via-orange-400 to-amber-400 transition-[width] duration-200"
+              className="h-full bg-gradient-to-r from-coral-500 via-coral-400 to-coral-300 transition-[width] duration-200"
               style={{ width: `${Math.round(overall * 100)}%` }}
               role="progressbar"
               aria-valuenow={Math.round(overall * 100)}
@@ -318,7 +318,7 @@ export default function UploadClient({
           <Button
             asChild={allDone}
             type="button"
-            variant="gradient"
+            variant="coral"
             size="lg"
             disabled={!allDone}
             aria-disabled={!allDone}

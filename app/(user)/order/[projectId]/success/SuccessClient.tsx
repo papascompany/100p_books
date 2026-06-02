@@ -72,8 +72,8 @@ export default function SuccessClient(props: SuccessClientProps) {
 
   if (phase === "confirming") {
     return (
-      <div className="mx-auto max-w-xl rounded-2xl border bg-card p-8 text-center">
-        <Loader2 className="mx-auto h-10 w-10 animate-spin text-rose-500" />
+      <div className="mx-auto max-w-xl rounded-2xl border border-hairline bg-card p-8 text-center shadow-soft">
+        <Loader2 className="mx-auto h-10 w-10 animate-spin text-coral" />
         <h1 className="mt-4 font-display text-xl font-semibold">
           결제 확정 중…
         </h1>
@@ -86,7 +86,7 @@ export default function SuccessClient(props: SuccessClientProps) {
 
   if (phase === "failed") {
     return (
-      <div className="mx-auto max-w-xl rounded-2xl border bg-card p-8 text-center">
+      <div className="mx-auto max-w-xl rounded-2xl border border-hairline bg-card p-8 text-center shadow-soft">
         <XCircle className="mx-auto h-10 w-10 text-destructive" />
         <h1 className="mt-4 font-display text-xl font-semibold">
           결제 확정 실패
@@ -101,7 +101,7 @@ export default function SuccessClient(props: SuccessClientProps) {
           <Button asChild variant="outline">
             <Link href={`/order/${props.projectId}`}>다시 시도</Link>
           </Button>
-          <Button asChild>
+          <Button asChild variant="coral">
             <Link href="/mypage/orders">주문 내역</Link>
           </Button>
         </div>
@@ -110,8 +110,8 @@ export default function SuccessClient(props: SuccessClientProps) {
   }
 
   return (
-    <div className="mx-auto max-w-xl rounded-2xl border bg-card p-8 text-center">
-      <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-500" />
+    <div className="mx-auto max-w-xl rounded-2xl border border-hairline bg-card p-8 text-center shadow-soft">
+      <CheckCircle2 className="mx-auto h-10 w-10 text-coral" />
       <h1 className="mt-4 font-display text-2xl font-semibold">
         결제가 완료되었습니다
       </h1>
@@ -119,7 +119,7 @@ export default function SuccessClient(props: SuccessClientProps) {
         주문이 접수되었습니다. 마이페이지에서 진행 상황을 확인할 수 있습니다.
       </p>
       {pdfError ? (
-        <p className="mx-auto mt-3 max-w-md rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-700">
+        <p className="mx-auto mt-3 max-w-md rounded-md border border-coral-200 bg-coral-50 p-2 text-xs text-coral-700 dark:border-coral-700 dark:bg-coral-950/30 dark:text-coral-300">
           PDF 자동 생성에 일시적인 문제가 있었습니다. 관리자가 확인 후 빠르게
           재처리합니다.
         </p>
@@ -129,7 +129,7 @@ export default function SuccessClient(props: SuccessClientProps) {
           <Link href="/">홈</Link>
         </Button>
         <GiftDialog orderId={props.orderId} />
-        <Button asChild variant="gradient">
+        <Button asChild variant="coral">
           <Link href={`/mypage/orders/${props.orderId}`}>주문 상세</Link>
         </Button>
       </div>

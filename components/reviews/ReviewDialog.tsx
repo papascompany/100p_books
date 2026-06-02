@@ -180,7 +180,7 @@ export default function ReviewDialog({ orderId, trigger, onSuccess }: ReviewDial
           {/* 별점 */}
           <div>
             <p className="mb-2 text-sm font-medium">
-              별점 <span className="text-rose-500">*</span>
+              별점 <span className="text-coral">*</span>
             </p>
             <div
               className="flex gap-1"
@@ -203,7 +203,7 @@ export default function ReviewDialog({ orderId, trigger, onSuccess }: ReviewDial
                     className={
                       "h-8 w-8 transition-colors " +
                       (n <= displayRating
-                        ? "fill-amber-400 text-amber-400"
+                        ? "fill-star-amber text-star-amber"
                         : "text-muted-foreground/40")
                     }
                     aria-hidden
@@ -296,7 +296,7 @@ export default function ReviewDialog({ orderId, trigger, onSuccess }: ReviewDial
           </Button>
           <Button
             type="button"
-            variant="gradient"
+            variant="coral"
             onClick={() => void handleSubmit()}
             disabled={rating === 0 || submitting}
           >

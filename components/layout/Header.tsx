@@ -4,8 +4,8 @@ import Link from "next/link";
 import HeaderClient from "./HeaderClient";
 
 /**
- * Nike-style primary navigation.
- * 56px height · flat white · 1px hairline bottom · no blur
+ * Modern Casual primary navigation — 코랄 포인트 디자인 시스템.
+ * 56px height · white/80 backdrop-blur · 1px hairline bottom
  */
 function readIsAuthedFromCookie(): boolean {
   try {
@@ -27,15 +27,17 @@ export default function Header() {
   const isAuthed = readIsAuthedFromCookie();
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-[#cacacb] bg-white">
+    <header className="sticky top-0 z-40 w-full border-b border-hairline bg-white/80 backdrop-blur-md">
       <div className="container flex h-14 items-center justify-between gap-4">
         {/* Logo */}
         <Link
           href="/"
-          className="flex items-center gap-1.5 text-[#111111]"
+          className="flex items-center gap-1 text-ink"
           aria-label="100p Books 홈"
         >
-          <span className="font-display-num text-2xl font-bold leading-none">100p</span>
+          <span className="font-display-num text-2xl font-bold leading-none">
+            <span>100</span><span className="text-coral">p</span>
+          </span>
           <span className="text-base font-semibold tracking-tight">Books</span>
         </Link>
         <HeaderClient isAuthed={isAuthed} />

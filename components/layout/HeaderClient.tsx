@@ -40,10 +40,10 @@ export default function HeaderClient({ isAuthed }: { isAuthed: boolean }) {
               href={item.href}
               className={cn(
                 "relative px-3 py-2 text-sm font-medium transition-colors",
-                "after:absolute after:bottom-0 after:left-3 after:right-3 after:h-0.5 after:bg-[#111111] after:transition-opacity",
+                "after:absolute after:bottom-0 after:left-3 after:right-3 after:h-0.5 after:bg-coral after:transition-opacity",
                 active
-                  ? "text-[#111111] after:opacity-100"
-                  : "text-[#707072] hover:text-[#111111] after:opacity-0",
+                  ? "text-coral after:opacity-100"
+                  : "text-mute hover:text-foreground after:opacity-0",
               )}
             >
               {item.label}
@@ -57,7 +57,7 @@ export default function HeaderClient({ isAuthed }: { isAuthed: boolean }) {
         {isAuthed ? (
           <Link
             href="/mypage"
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f5f5f5] text-[#111111] transition-colors hover:bg-[#e5e5e5]"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-soft-cloud text-ink transition-colors hover:bg-hairline"
             aria-label="내 프로필"
           >
             <UserRound className="size-4" />
@@ -77,7 +77,7 @@ export default function HeaderClient({ isAuthed }: { isAuthed: boolean }) {
           aria-expanded={open}
           aria-controls="mobile-nav"
           onClick={() => setOpen((v) => !v)}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f5f5f5] text-[#111111] transition-colors hover:bg-[#e5e5e5]"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-soft-cloud text-ink transition-colors hover:bg-hairline"
         >
           {open ? <X className="size-5" /> : <Menu className="size-5" />}
         </button>
@@ -87,7 +87,7 @@ export default function HeaderClient({ isAuthed }: { isAuthed: boolean }) {
       {open ? (
         <div
           id="mobile-nav"
-          className="absolute inset-x-0 top-14 z-50 border-b border-[#cacacb] bg-white animate-fade-in md:hidden"
+          className="absolute inset-x-0 top-14 z-50 border-b border-hairline bg-white/95 backdrop-blur-md animate-fade-in md:hidden"
         >
           <nav
             aria-label="모바일 네비게이션"
@@ -100,10 +100,10 @@ export default function HeaderClient({ isAuthed }: { isAuthed: boolean }) {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "px-3 py-4 text-base font-medium border-b border-[#e5e5e5] last:border-0",
+                    "px-3 py-4 text-base font-medium border-b border-hairline last:border-0 transition-colors",
                     active
-                      ? "text-[#111111]"
-                      : "text-[#707072] hover:text-[#111111]",
+                      ? "text-coral"
+                      : "text-mute hover:text-foreground",
                   )}
                 >
                   {item.label}
@@ -114,7 +114,7 @@ export default function HeaderClient({ isAuthed }: { isAuthed: boolean }) {
               {isAuthed ? (
                 <Link
                   href="/mypage"
-                  className="flex items-center gap-2 px-3 py-3 text-base font-medium text-[#111111]"
+                  className="flex items-center gap-2 px-3 py-3 text-base font-medium text-ink"
                 >
                   <UserRound className="size-4" />
                   내 프로필

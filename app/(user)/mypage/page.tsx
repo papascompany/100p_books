@@ -77,7 +77,7 @@ export default async function MyPage() {
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         <Link href="/mypage/orders" className="group">
-          <Card className="h-full transition-colors hover:border-[#111111]">
+          <Card className="h-full transition-all hover:-translate-y-1 hover:border-coral hover:shadow-soft-lg">
             <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
               <div>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -97,7 +97,7 @@ export default async function MyPage() {
         </Link>
 
         <Link href="/mypage/photos" className="group">
-          <Card className="h-full transition-colors hover:border-[#111111]">
+          <Card className="h-full transition-all hover:-translate-y-1 hover:border-coral hover:shadow-soft-lg">
             <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
               <div>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -118,7 +118,7 @@ export default async function MyPage() {
         </Link>
 
         <Link href="/mypage/trash" className="group">
-          <Card className="h-full transition-colors hover:border-[#111111]">
+          <Card className="h-full transition-all hover:-translate-y-1 hover:border-coral hover:shadow-soft-lg">
             <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
               <div>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -139,7 +139,7 @@ export default async function MyPage() {
         </Link>
 
         <Link href="/mypage/account" className="group">
-          <Card className="h-full transition-colors hover:border-[#111111]">
+          <Card className="h-full transition-all hover:-translate-y-1 hover:border-coral hover:shadow-soft-lg">
             <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
               <div>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -160,11 +160,11 @@ export default async function MyPage() {
         </Link>
 
         <Link href="/mypage/points" className="group">
-          <Card className="h-full transition-colors hover:border-[#111111]">
+          <Card className="h-full transition-all hover:-translate-y-1 hover:border-coral hover:shadow-soft-lg">
             <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
               <div>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <Coins className="size-5 text-amber-500" />
+                  <Coins className="size-5 text-coral" />
                   포인트 내역
                 </CardTitle>
                 <CardDescription className="mt-1.5">
@@ -180,7 +180,7 @@ export default async function MyPage() {
         </Link>
 
         <Link href="/gallery" className="group">
-          <Card className="h-full transition-colors hover:border-[#111111]">
+          <Card className="h-full transition-all hover:-translate-y-1 hover:border-coral hover:shadow-soft-lg">
             <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
               <div>
                 <CardTitle className="flex items-center gap-2 text-base">
