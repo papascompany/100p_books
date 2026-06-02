@@ -1,9 +1,31 @@
 # 100p Books — 개발 현황 및 다음 단계
 
-> 최종 업데이트: 2026-05-14
+> 최종 업데이트: 2026-05-30
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `ca42720` (perf(nav): 정적 페이지 prerender + SW SWR + mypage 단일 RPC)
+> 운영 빌드: `a1f6160` (docs(partner): Lillys 연동 명세 + 시각화)
+
+---
+
+## 🔗 플랫폼 계정 연동 상태 (2026-05-30 확인)
+
+| 플랫폼 | 연결된 계정/조직 | 식별자 | 상태 |
+|---|---|---|---|
+| **GitHub (repo)** | `papascompany/100p_books` | git remote origin | ✅ 정상 |
+| **GitHub (commit author)** | `storigehub` <storige.yohan@gmail.com> | `git config user` | ✅ 정상 |
+| **GitHub CLI (gh)** | `papascompany` (active) + `storigehub` (보조) | keyring 2계정 | ✅ 정상 |
+| **Vercel (project)** | team `team_dOpgsAqfLyl4qNlVgSiFVm6B` | `prj_TRSlQDOz5xZpfc5Bg0YlxTxGFasX` | ✅ 링크됨 |
+| **Vercel (CLI 토큰)** | — | `vercel whoami` 실패 | ⚠️ **토큰 만료 — 재로그인 필요** |
+| **Supabase (project)** | `100p_books` | ref `vprifnztvlduhpuwgdau` (Seoul) | ✅ 링크됨 |
+| **Supabase (org)** | `rpgjrckrcrxhrbrimjbv` | linked-project.json | ✅ 정상 |
+| **Supabase (CLI 로그인)** | `Storywork` 조직 (타 계정) | `supabase orgs list` | ⚠️ **다른 계정 — 100p 조직 미표시** |
+
+### 계정 연동 주의사항
+- **Vercel CLI 토큰 만료**: `vercel whoami` → "token is not valid". `vercel login` 으로 재발급 필요.
+  배포는 GitHub auto-deploy 로 정상 동작 중이라 긴급도는 낮으나, 수동 `vercel --prod` / 로그 조회는 불가.
+- **Supabase CLI 가 타 계정(Storywork)으로 로그인**: `100p_books`(rpgjrckrcrxhrbrimjbv) 조직이 안 보임.
+  → `supabase db push` 직접 적용 불가. 마이그레이션은 SQL Editor 수동 실행으로 진행 중 (0023/0024 완료).
+  papascompany 계정 운영 자동화 원하면 `supabase logout && supabase login` 재인증 필요.
 
 ---
 
@@ -138,7 +160,7 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ---
 
-## 다음 개발 우선순위 (권고) — 2026-05-14 갱신
+## 다음 개발 우선순위 (권고) — 2026-05-30 갱신
 
 ### 🔴 운영 활성화 (코드 외 — 사용자 콘솔 작업)
 
@@ -146,6 +168,17 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 2. **Kakao OAuth 콘솔 등록** — REST API Key + Client Secret → Supabase Provider Enable
 3. **Resend API Key + EMAIL_FROM Vercel 환경변수** — 가입/주문 메일 실 발송
 4. **TossPayments 운영 키** — 라이브 키 + 웹훅 secret 등록
+5. **(선택) Upstash Redis 구독 + env** — Rate limit 활성화 (미설정 시 fail-open, 보안 권장)
+
+### 🔧 로컬 개발 환경 — CLI 재인증 (운영 자동화용, 선택)
+
+| 항목 | 증상 | 조치 |
+|---|---|---|
+| Vercel CLI 토큰 만료 | `vercel whoami` 실패 | `vercel login` 재발급 — 수동 배포/로그 조회 복구 |
+| Supabase CLI 타 계정 로그인 | `Storywork` 조직만 표시, 100p 안 보임 | `supabase logout && supabase login` (papascompany 계정) |
+
+> 두 항목 모두 **운영에는 영향 없음** (배포=GitHub auto-deploy, 마이그레이션=SQL Editor 수동).
+> CLI 자동화가 필요할 때만 재인증.
 
 ### 🟡 품질 보강
 
