@@ -3,6 +3,8 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { SITE_CONTENT_DEFAULTS } from "@/lib/content/defaults";
+import type { SizeItem } from "@/lib/content/types";
 
 /**
  * 홈 페이지 §4 — "나에게 딱 맞는 사이즈" 사진 배경 카드.
@@ -14,46 +16,8 @@ import { Button } from "@/components/ui/button";
  *   - prefers-reduced-motion: globals.css 가 모든 motion 단축.
  */
 
-interface BookSizeItem {
-  name: string;
-  size: string;
-  desc: string;
-  ratio: string;
-  imageSrc: string;
-  alt: string;
-}
-
-const BOOK_SIZES: readonly BookSizeItem[] = [
-  {
-    name: "미니",
-    size: "96×128mm",
-    desc: "손에 쏙 들어오는 작은 책",
-    ratio: "3/5",
-    imageSrc:
-      "https://images.unsplash.com/photo-1495640388908-05fa85288e61?w=900&q=80",
-    alt: "손에 쏙 들어오는 작은 사진집",
-  },
-  {
-    name: "스퀘어",
-    size: "148×148mm",
-    desc: "SNS 감성 정사각형 포맷",
-    ratio: "1/1",
-    imageSrc:
-      "https://images.unsplash.com/photo-1611532736597-de2d4265fba3?w=900&q=80",
-    alt: "정사각형 포맷의 감성 사진집",
-  },
-  {
-    name: "A5",
-    size: "148×210mm",
-    desc: "일반 노트 사이즈, 넉넉한 여백",
-    ratio: "3/5",
-    imageSrc:
-      "https://images.unsplash.com/photo-1531346878377-a5be20888e57?w=900&q=80",
-    alt: "A5 사이즈의 펼쳐진 화보집",
-  },
-];
-
-export default function BookSizeCards() {
+export default function BookSizeCards({ items }: { items?: SizeItem[] }) {
+  const data = items ?? SITE_CONTENT_DEFAULTS["home.sizes"];
   return (
     <section className="bg-soft-cloud py-12 md:py-16">
       <div className="container">
@@ -77,7 +41,7 @@ export default function BookSizeCards() {
         </div>
 
         <div className="grid gap-3 sm:gap-4 sm:grid-cols-3">
-          {BOOK_SIZES.map((b, i) => (
+          {data.map((b, i) => (
             <Link
               key={b.name}
               href="/upload"
@@ -86,7 +50,7 @@ export default function BookSizeCards() {
               aria-label={`${b.name} (${b.size}) 선택하기`}
             >
               <Image
-                src={b.imageSrc}
+                src={b.image}
                 alt={b.alt}
                 fill
                 sizes="(max-width: 640px) 100vw, 33vw"

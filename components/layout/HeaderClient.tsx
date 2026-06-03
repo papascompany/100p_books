@@ -11,14 +11,21 @@ import { cn } from "@/lib/utils";
 
 type NavItem = { href: string; label: string };
 
-const NAV: NavItem[] = [
+const DEFAULT_NAV: NavItem[] = [
   { href: "/gallery", label: "갤러리" },
   { href: "/attendance", label: "출석체크" },
   { href: "/projects", label: "내 포토북" },
   { href: "/upload", label: "만들기" },
 ];
 
-export default function HeaderClient({ isAuthed }: { isAuthed: boolean }) {
+export default function HeaderClient({
+  isAuthed,
+  nav,
+}: {
+  isAuthed: boolean;
+  nav?: NavItem[];
+}) {
+  const NAV = nav ?? DEFAULT_NAV;
   const pathname = usePathname();
   const [open, setOpen] = React.useState(false);
 

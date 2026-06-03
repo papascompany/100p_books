@@ -1,5 +1,8 @@
 import Image from "next/image";
 
+import { SITE_CONTENT_DEFAULTS } from "@/lib/content/defaults";
+import type { FeatureItem } from "@/lib/content/types";
+
 /**
  * 홈 페이지 §3 — "사진만 올리면 감성 포토북 완성" 사진 배경 카드.
  *
@@ -10,42 +13,8 @@ import Image from "next/image";
  *   - prefers-reduced-motion: 전역 CSS 가 모든 animation/transition 을 0.01ms 로 단축.
  */
 
-interface FeatureItem {
-  num: string;
-  title: string;
-  desc: string;
-  imageSrc: string;
-  alt: string;
-}
-
-const FEATURES: readonly FeatureItem[] = [
-  {
-    num: "01",
-    title: "자동 레이아웃",
-    desc: "사진을 올리면 찍은 순서대로 자동 정렬. 페이지 구성까지 한 번에 완성돼요.",
-    imageSrc:
-      "https://images.unsplash.com/photo-1606159068539-43f36b99d1b2?w=900&q=80",
-    alt: "폴라로이드 사진들이 가지런히 정렬된 모습",
-  },
-  {
-    num: "02",
-    title: "감성 편집 에디터",
-    desc: "콜라주, 여백, 글씨, 스티커까지. 모바일에서도 내 취향대로 꾸밀 수 있어요.",
-    imageSrc:
-      "https://images.unsplash.com/photo-1530538987395-032d1800fdd4?w=900&q=80",
-    alt: "빈티지한 분위기로 펼쳐진 사진 앨범",
-  },
-  {
-    num: "03",
-    title: "집 앞까지 배송",
-    desc: "전문 인쇄소에서 고품질로 제작해 3~5일 안에 보내드려요.",
-    imageSrc:
-      "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=900&q=80",
-    alt: "고품질 인쇄로 펼쳐진 사진집의 디테일",
-  },
-];
-
-export default function FeatureCards() {
+export default function FeatureCards({ items }: { items?: FeatureItem[] }) {
+  const data = items ?? SITE_CONTENT_DEFAULTS["home.features"];
   return (
     <section className="bg-card py-12 md:py-16">
       <div className="container">
@@ -69,14 +38,14 @@ export default function FeatureCards() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-3 md:gap-5">
-          {FEATURES.map((f, i) => (
+          {data.map((f, i) => (
             <article
               key={f.num}
               className="group relative isolate overflow-hidden rounded-2xl aspect-[4/5] md:aspect-[3/4] cursor-default animate-fade-up motion-safe:hover:-translate-y-1 transition-transform duration-300 ease-out"
               style={{ animationDelay: `${120 + i * 120}ms` }}
             >
               <Image
-                src={f.imageSrc}
+                src={f.image}
                 alt={f.alt}
                 fill
                 sizes="(max-width: 768px) 100vw, 33vw"
@@ -101,7 +70,7 @@ export default function FeatureCards() {
 
               <div className="relative z-10 flex h-full flex-col justify-between p-6 text-white">
                 <span className="font-display-num text-xs tracking-[0.3em] text-white/70">
-                  {f.num} / 03
+                  {f.num} / {String(data.length).padStart(2, "0")}
                 </span>
                 <div className="transition-transform duration-500 ease-out group-hover:-translate-y-1">
                   <h3 className="text-xl font-bold leading-tight md:text-2xl">

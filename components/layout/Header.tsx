@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
 
+import { getSiteContent } from "@/lib/content/get";
+
 import HeaderClient from "./HeaderClient";
 
 /**
@@ -23,8 +25,9 @@ function readIsAuthedFromCookie(): boolean {
   }
 }
 
-export default function Header() {
+export default async function Header() {
   const isAuthed = readIsAuthedFromCookie();
+  const headerContent = await getSiteContent("header");
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-hairline bg-card/80 backdrop-blur-md">
@@ -38,9 +41,11 @@ export default function Header() {
           <span className="font-display-num text-2xl font-bold leading-none">
             <span>100</span><span className="text-coral">p</span>
           </span>
-          <span className="text-base font-semibold tracking-tight">Books</span>
+          <span className="text-base font-semibold tracking-tight">
+            {headerContent.brand}
+          </span>
         </Link>
-        <HeaderClient isAuthed={isAuthed} />
+        <HeaderClient isAuthed={isAuthed} nav={headerContent.nav} />
       </div>
     </header>
   );

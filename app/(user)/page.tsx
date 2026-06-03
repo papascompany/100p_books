@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import BookSizeCards from "@/components/home/BookSizeCards";
 import FeatureCards from "@/components/home/FeatureCards";
 import { Button } from "@/components/ui/button";
+import { getSiteContentMany } from "@/lib/content/get";
 
 // StepsSection 만 ssr:false 유지 — 기존 동작 호환을 위해.
 const StepsSection = dynamic(() => import("@/components/home/StepsSection"), {
@@ -31,25 +32,35 @@ const StepsSection = dynamic(() => import("@/components/home/StepsSection"), {
   ),
 });
 
-// ─── 데이터 ────────────────────────────────────────────────────────────────
-// FEATURES / BOOK_SIZES 는 각각 FeatureCards / BookSizeCards 컴포넌트로 이전됨.
-
-const REVIEWS = [
-  { name: "김지현", rating: 5, text: "결혼기념일 선물로 주문했는데 너무 예쁘게 나왔어요! 남편이 감동받았습니다." },
-  { name: "박서준", rating: 5, text: "여행 사진 100장으로 포토북 만들었는데 퀄리티가 정말 좋네요. 다음 여행도 꼭 만들 것 같아요." },
-  { name: "이수아", rating: 5, text: "아기 첫돌 기념으로 제작했어요. 인쇄 색감이 선명하고 종이 질도 두껍고 좋아요!" },
-] as const;
-
 // ─── 컴포넌트 ──────────────────────────────────────────────────────────────
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const content = await getSiteContentMany([
+    "home.hero",
+    "home.stats",
+    "home.features",
+    "home.sizes",
+    "home.gallery",
+    "home.reviews",
+    "home.cta",
+  ]);
+  const { hero, stats, features, sizes, gallery, reviews, cta } = {
+    hero: content["home.hero"],
+    stats: content["home.stats"],
+    features: content["home.features"],
+    sizes: content["home.sizes"],
+    gallery: content["home.gallery"],
+    reviews: content["home.reviews"],
+    cta: content["home.cta"],
+  };
+
   return (
     <div className="overflow-x-hidden">
 
       {/* ══ 1. 캠페인 히어로 ════════════════════════════════════════════════ */}
       <section className="relative min-h-[75vh] flex items-center overflow-hidden">
         <Image
-          src="https://images.unsplash.com/photo-1530538987395-032d1800fdd4?w=1920&q=80"
+          src={hero.bgImage}
           alt="펼쳐진 감성 사진 앨범"
           fill
           className="object-cover object-center"
@@ -66,37 +77,30 @@ export default function LandingPage() {
         <div className="container relative z-10 py-12 md:py-20">
           <div className="max-w-xl">
             <p className="text-xs font-medium uppercase tracking-[0.25em] text-white/50 mb-3">
-              100 Photos · 1 Book
+              {hero.kicker}
             </p>
             <h1 className="text-4xl font-bold leading-[1.1] tracking-tight text-white sm:text-5xl md:text-6xl text-shadow-lg">
-              사진만 고르세요,
+              {hero.titleLine1}
               <br />
-              <span className="text-gradient-coral">포토북은 100p가</span>
+              <span className="text-gradient-coral">{hero.titleAccent}</span>
               <br />
-              <span className="text-white">만들게요.</span>
+              <span className="text-white">{hero.titleLine2}</span>
             </h1>
             <p className="mt-4 text-sm leading-relaxed text-white/70 max-w-[38ch] sm:text-base">
-              업로드하면 AI가 자동으로 예쁘게 배치 — 3분이면 끝나요.
-              편집부터 인쇄 주문까지 모두 모바일에서.
+              {hero.sub}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-white/55">
-              <span className="flex items-center gap-1">
-                <CheckCircle2 className="size-3.5 text-coral-300" />
-                무료 시작
-              </span>
-              <span className="flex items-center gap-1">
-                <CheckCircle2 className="size-3.5 text-coral-300" />
-                300dpi 인쇄
-              </span>
-              <span className="flex items-center gap-1">
-                <CheckCircle2 className="size-3.5 text-coral-300" />
-                3~5일 배송
-              </span>
+              {hero.badges.map((badge) => (
+                <span key={badge} className="flex items-center gap-1">
+                  <CheckCircle2 className="size-3.5 text-coral-300" />
+                  {badge}
+                </span>
+              ))}
             </div>
             <div className="mt-6 flex flex-wrap gap-3">
               <Button asChild variant="coral" size="lg">
-                <Link href="/upload">
-                  지금 만들기
+                <Link href={hero.ctaPrimaryHref}>
+                  {hero.ctaPrimaryLabel}
                   <ArrowRight className="size-4" />
                 </Link>
               </Button>
@@ -105,7 +109,7 @@ export default function LandingPage() {
                 size="lg"
                 className="bg-transparent text-white border border-white/35 hover:bg-white/10 hover:border-white/55"
               >
-                <Link href="/gallery">후기 갤러리</Link>
+                <Link href={hero.ctaSecondaryHref}>{hero.ctaSecondaryLabel}</Link>
               </Button>
             </div>
           </div>
@@ -116,30 +120,24 @@ export default function LandingPage() {
           aria-hidden
           className="absolute right-10 top-1/2 -translate-y-1/2 hidden lg:flex flex-col gap-3 z-10"
         >
-          <div className="w-36 bg-white p-2.5 pb-7 rounded-2xl shadow-soft-xl" style={{ transform: "rotate(-4deg)" }}>
-            <div className="relative h-28 w-full overflow-hidden rounded-xl bg-soft-cloud">
-              <Image
-                src="https://images.unsplash.com/photo-1606159068539-43f36b99d1b2?w=400&q=75"
-                alt="포토북 예시 — 폴라로이드"
-                fill
-                className="object-cover"
-                sizes="144px"
-              />
+          {hero.floating.map((card, i) => (
+            <div
+              key={i}
+              className="w-36 bg-white p-2.5 pb-7 rounded-2xl shadow-soft-xl"
+              style={{ transform: i === 0 ? "rotate(-4deg)" : "rotate(3deg) translateX(10px)" }}
+            >
+              <div className="relative h-28 w-full overflow-hidden rounded-xl bg-soft-cloud">
+                <Image
+                  src={card.image}
+                  alt={`포토북 예시 — ${card.caption}`}
+                  fill
+                  className="object-cover"
+                  sizes="144px"
+                />
+              </div>
+              <p className="mt-1.5 text-center text-[10px] font-medium text-mute">{card.caption}</p>
             </div>
-            <p className="mt-1.5 text-center text-[10px] font-medium text-mute">우리의 여행</p>
-          </div>
-          <div className="w-36 bg-white p-2.5 pb-7 rounded-2xl shadow-soft-xl" style={{ transform: "rotate(3deg) translateX(10px)" }}>
-            <div className="relative h-28 w-full overflow-hidden rounded-xl bg-soft-cloud">
-              <Image
-                src="https://images.unsplash.com/photo-1495640388908-05fa85288e61?w=400&q=75"
-                alt="포토북 예시 — 사진집"
-                fill
-                className="object-cover"
-                sizes="144px"
-              />
-            </div>
-            <p className="mt-1.5 text-center text-[10px] font-medium text-mute">가족의 순간</p>
-          </div>
+          ))}
         </div>
       </section>
 
@@ -147,12 +145,7 @@ export default function LandingPage() {
       <section className="border-y border-hairline bg-card">
         <div className="container">
           <div className="grid grid-cols-2 divide-x divide-hairline md:grid-cols-4">
-            {[
-              { num: "5,000+", label: "제작된 포토북" },
-              { num: "4.9★", label: "평균 별점" },
-              { num: "300dpi", label: "인쇄 해상도" },
-              { num: "3~5일", label: "평균 배송일" },
-            ].map(({ num, label }) => (
+            {stats.map(({ num, label }) => (
               <div key={label} className="py-4 px-4 text-center md:py-5">
                 <p className="font-display-num text-2xl font-bold text-ink md:text-3xl">
                   {num}
@@ -165,10 +158,10 @@ export default function LandingPage() {
       </section>
 
       {/* ══ 3. 특징 3-컬럼 (사진 배경 + framer-motion) ═════════════════════ */}
-      <FeatureCards />
+      <FeatureCards items={features} />
 
       {/* ══ 4. 북 사이즈 쇼케이스 (사진 배경 + framer-motion) ══════════════ */}
-      <BookSizeCards />
+      <BookSizeCards items={sizes} />
 
       {/* ══ 5. 사용 방법 3스텝 ══════════════════════════════════════════════ */}
       <StepsSection />
@@ -178,8 +171,8 @@ export default function LandingPage() {
         <div className="container">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6">
             <div>
-              <h2 className="text-2xl font-bold tracking-tight md:text-3xl text-ink">실제 포토북 후기</h2>
-              <p className="mt-1 text-sm text-mute">100p Books로 만든 실제 고객들의 포토북입니다.</p>
+              <h2 className="text-2xl font-bold tracking-tight md:text-3xl text-ink">{gallery.heading}</h2>
+              <p className="mt-1 text-sm text-mute">{gallery.sub}</p>
             </div>
             <Button asChild variant="coral-outline" size="sm">
               <Link href="/gallery">전체 보기</Link>
@@ -187,14 +180,7 @@ export default function LandingPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {[
-              { src: "https://images.unsplash.com/photo-1606159068539-43f36b99d1b2?w=600&q=75", rowSpan: true },
-              { src: "https://images.unsplash.com/photo-1495640388908-05fa85288e61?w=600&q=75" },
-              { src: "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=600&q=75" },
-              { src: "https://images.unsplash.com/photo-1611532736597-de2d4265fba3?w=600&q=75", rowSpan: true },
-              { src: "https://images.unsplash.com/photo-1530538987395-032d1800fdd4?w=600&q=75" },
-              { src: "https://images.unsplash.com/photo-1531346878377-a5be20888e57?w=600&q=75" },
-            ].map(({ src, rowSpan }, i) => (
+            {gallery.images.map(({ src, rowSpan }, i) => (
               <div
                 key={i}
                 className={`relative overflow-hidden rounded-2xl bg-hairline card-lift${rowSpan ? " row-span-2" : ""}`}
@@ -221,7 +207,7 @@ export default function LandingPage() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
-            {REVIEWS.map(({ name, rating, text }) => (
+            {reviews.map(({ name, rating, text }) => (
               <div key={name} className="rounded-2xl border border-hairline bg-card p-5 shadow-soft card-lift">
                 <div className="flex gap-0.5 mb-3">
                   {Array.from({ length: rating }).map((_, i) => (
@@ -246,7 +232,7 @@ export default function LandingPage() {
       {/* ══ 8. 최종 CTA ═════════════════════════════════════════════════════ */}
       <section className="relative overflow-hidden bg-night py-12 md:py-16">
         <Image
-          src="https://images.unsplash.com/photo-1532012197267-da84d127e765?w=1200&q=60"
+          src={cta.image}
           alt="CTA 배경 — 사진집"
           fill
           className="object-cover opacity-20"
@@ -254,16 +240,16 @@ export default function LandingPage() {
         />
         <div className="container relative z-10 text-center">
           <h2 className="text-3xl font-bold text-white md:text-4xl lg:text-5xl leading-tight">
-            100장의 순간을{" "}
-            <span className="text-coral-300">한 권의 감성으로.</span>
+            {cta.title}{" "}
+            <span className="text-coral-300">{cta.accent}</span>
           </h2>
           <p className="mt-3 text-sm text-white/55 max-w-[34ch] mx-auto">
-            지금 사진을 올리면 3분 안에 첫 페이지가 완성됩니다. 무료로 시작할 수 있어요.
+            {cta.sub}
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Button asChild variant="coral" size="lg">
-              <Link href="/upload">
-                무료로 만들기 <ArrowRight className="size-4" />
+              <Link href={cta.primaryHref}>
+                {cta.primaryLabel} <ArrowRight className="size-4" />
               </Link>
             </Button>
             <Button

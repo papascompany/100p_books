@@ -408,6 +408,26 @@ export interface Database {
           Partial<Pick<PointLedger, "id" | "created_at">>;
         Update: Partial<PointLedger>;
       };
+      site_content: {
+        Row: {
+          key: string;
+          value: unknown;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          key: string;
+          value: unknown;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          key?: string;
+          value?: unknown;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+      };
     };
     Views: Record<string, never>;
     Functions: {
