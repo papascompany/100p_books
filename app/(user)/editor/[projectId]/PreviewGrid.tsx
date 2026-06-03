@@ -344,7 +344,7 @@ export default function PreviewGrid({
               aria-label={`페이지 ${p.pageNo}, ${p.layoutMode === "polaroid" ? "폴라로이드" : "콜라주"}`}
               aria-grabbed={isDragging}
             >
-              <div className="absolute inset-0 overflow-hidden rounded-md bg-white shadow-soft ring-1 ring-black/5">
+              <div className="absolute inset-0 overflow-hidden rounded-md bg-card shadow-soft ring-1 ring-black/5">
                 {doc ? (
                   <PagePreview
                     doc={doc}
@@ -429,7 +429,7 @@ export default function PreviewGrid({
                   )}
                   aria-label={`페이지 ${p.pageNo} 편집`}
                 >
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white/90 px-2 py-1 text-xs font-medium text-foreground shadow-soft">
+                  <span className="inline-flex items-center gap-1 rounded-md bg-card/90 px-2 py-1 text-xs font-medium text-foreground shadow-soft">
                     <Pencil className="size-3" aria-hidden /> 편집
                   </span>
                 </Link>

@@ -178,7 +178,7 @@ export default function LoginForm() {
             aria-live="polite"
             className="rounded-2xl border border-hairline bg-soft-cloud p-5 text-center"
           >
-            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-white border border-hairline">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-card border border-hairline">
               <Mail className="size-6 text-ink" aria-hidden />
             </div>
             <p className="mt-3 text-base font-medium">이메일을 확인해주세요</p>

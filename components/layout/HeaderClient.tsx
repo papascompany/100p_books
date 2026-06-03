@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import * as React from "react";
 
+import ThemeToggle from "@/components/theme/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -54,6 +55,7 @@ export default function HeaderClient({ isAuthed }: { isAuthed: boolean }) {
 
       {/* Desktop right cluster */}
       <div className="hidden items-center gap-2 md:flex">
+        <ThemeToggle />
         {isAuthed ? (
           <Link
             href="/mypage"
@@ -87,7 +89,7 @@ export default function HeaderClient({ isAuthed }: { isAuthed: boolean }) {
       {open ? (
         <div
           id="mobile-nav"
-          className="absolute inset-x-0 top-14 z-50 border-b border-hairline bg-white/95 backdrop-blur-md animate-fade-in md:hidden"
+          className="absolute inset-x-0 top-14 z-50 border-b border-hairline bg-card/95 backdrop-blur-md animate-fade-in md:hidden"
         >
           <nav
             aria-label="모바일 네비게이션"

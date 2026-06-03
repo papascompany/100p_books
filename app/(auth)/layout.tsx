@@ -7,7 +7,7 @@ export default function AuthLayout({
 }) {
   return (
     <main className="flex flex-1 flex-col bg-soft-cloud">
-      <header className="container flex h-14 items-center border-b border-hairline bg-white">
+      <header className="container flex h-14 items-center border-b border-hairline bg-card">
         <Link
           href="/"
           className="flex items-center gap-1.5 text-ink"

@@ -47,7 +47,7 @@ const FEATURES: readonly FeatureItem[] = [
 
 export default function FeatureCards() {
   return (
-    <section className="bg-white py-12 md:py-16">
+    <section className="bg-card py-12 md:py-16">
       <div className="container">
         <div className="mx-auto max-w-xl text-center mb-10 animate-fade-up">
           <p className="text-xs font-medium uppercase tracking-[0.25em] text-mute mb-2">

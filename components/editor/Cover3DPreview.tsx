@@ -91,7 +91,7 @@ export default function Cover3DPreview({
       >
         {/* 앞표지 — 정면 (z = +spinePx/2) */}
         <div
-          className="absolute inset-0 rounded-r-[2px] bg-white shadow-[0_8px_20px_rgba(0,0,0,0.18)]"
+          className="absolute inset-0 rounded-r-[2px] bg-card shadow-[0_8px_20px_rgba(0,0,0,0.18)]"
           style={{
             transform: `translateZ(${spinePx / 2}px)`,
             backgroundColor: bgFallback,
@@ -104,7 +104,7 @@ export default function Cover3DPreview({
 
         {/* 뒷표지 — 뒷면 (z = -spinePx/2, 180도 뒤집힘) */}
         <div
-          className="absolute inset-0 rounded-l-[2px] bg-white"
+          className="absolute inset-0 rounded-l-[2px] bg-card"
           style={{
             transform: `translateZ(-${spinePx / 2}px) rotateY(180deg)`,
             backgroundColor: bgFallback,
@@ -118,7 +118,7 @@ export default function Cover3DPreview({
 
         {/* 책등 — 좌측 면 (앞표지 좌단에 직각으로 붙임) */}
         <div
-          className="absolute top-0 bottom-0 bg-white"
+          className="absolute top-0 bottom-0 bg-card"
           style={{
             left: 0,
             width: spinePx,
@@ -177,7 +177,7 @@ export default function Cover3DPreview({
       />
 
       {/* 메타 정보 */}
-      <div className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+      <div className="pointer-events-none absolute bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-card/80 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
         책등 {spineMm.toFixed(2)}mm · {pageCount}p
       </div>
     </div>

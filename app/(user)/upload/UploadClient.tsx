@@ -201,7 +201,7 @@ export default function UploadClient({
       {/* Sticky 진행률 */}
       {started && items.length > 0 ? (
         <div
-          className="sticky top-2 z-10 rounded-xl border bg-white/90 p-3 shadow-soft backdrop-blur"
+          className="sticky top-2 z-10 rounded-xl border bg-card/90 p-3 shadow-soft backdrop-blur"
           role="region"
           aria-label="업로드 진행 상황"
         >

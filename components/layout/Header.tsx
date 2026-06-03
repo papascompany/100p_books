@@ -27,7 +27,7 @@ export default function Header() {
   const isAuthed = readIsAuthedFromCookie();
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-hairline bg-white/80 backdrop-blur-md">
+    <header className="sticky top-0 z-40 w-full border-b border-hairline bg-card/80 backdrop-blur-md">
       <div className="container flex h-14 items-center justify-between gap-4">
         {/* Logo */}
         <Link

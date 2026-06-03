@@ -242,7 +242,7 @@ export default function PhotoLibraryClient({ photos, projects }: Props) {
       </section>
 
       {/* 액션 바 */}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border bg-white/60 p-3 dark:bg-card/40">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border bg-white/60 p-3 dark:bg-white/40">
         <div className="flex items-center gap-2 text-sm">
           <Button
             type="button"
@@ -284,7 +284,7 @@ export default function PhotoLibraryClient({ photos, projects }: Props) {
 
       {/* 그리드 */}
       {filtered.length === 0 ? (
-        <div className="mt-10 rounded-xl border border-dashed bg-white/40 p-10 text-center text-sm text-muted-foreground dark:bg-card/40">
+        <div className="mt-10 rounded-xl border border-dashed bg-white/40 p-10 text-center text-sm text-muted-foreground dark:bg-white/40">
           {photos.length === 0
             ? "아직 업로드된 사진이 없어요."
             : "조건에 맞는 사진이 없어요."}

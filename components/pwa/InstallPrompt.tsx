@@ -106,7 +106,7 @@ export default function InstallPrompt() {
       aria-modal="false"
       aria-label="앱 설치 안내"
     >
-      <div className="mb-4 rounded-2xl bg-white dark:bg-neutral-900 shadow-[0_4px_32px_rgba(0,0,0,0.12)] border border-neutral-100 dark:border-neutral-800 p-5">
+      <div className="mb-4 rounded-2xl bg-card dark:bg-neutral-900 shadow-[0_4px_32px_rgba(0,0,0,0.12)] border border-neutral-100 dark:border-neutral-800 p-5">
         {/* 헤더 */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2.5">

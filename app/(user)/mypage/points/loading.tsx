@@ -6,7 +6,7 @@ export default function PointsLoading() {
         <div className="h-8 w-36 bg-hairline" />
         <div className="h-3 w-72 bg-hairline" />
       </div>
-      <div className="rounded-2xl border border-hairline bg-white p-5">
+      <div className="rounded-2xl border border-hairline bg-card p-5">
         <div className="mb-4 grid grid-cols-3 gap-2 rounded-xl border border-hairline bg-soft-cloud p-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="space-y-1.5 text-center">

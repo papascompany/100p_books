@@ -37,7 +37,7 @@ export default function AdminSidebar({ email }: { email?: string | null }) {
   };
 
   return (
-    <aside className="hidden border-r bg-card/60 md:flex md:w-60 md:shrink-0 md:flex-col">
+    <aside className="hidden border-r bg-white/60 md:flex md:w-60 md:shrink-0 md:flex-col">
       <div className="border-b px-5 py-5">
         <Link
           href="/admin"

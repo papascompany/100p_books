@@ -59,11 +59,11 @@ function relativeTime(iso: string): string {
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   draft: {
     label: "편집중",
-    className: "bg-white text-mute border border-hairline",
+    className: "bg-card text-mute border border-hairline",
   },
   ordered: {
     label: "완성",
-    className: "bg-ink text-white border border-ink",
+    className: "bg-night text-white border border-night",
   },
 };
 
@@ -172,7 +172,7 @@ function ProjectCard({ project, onDeleted }: ProjectCardProps) {
   const thumbSrc = extractCoverThumb(project.cover_json);
 
   return (
-    <article className="group relative flex flex-col overflow-hidden rounded-2xl border border-hairline bg-white shadow-soft transition-all hover:-translate-y-1 hover:border-coral hover:shadow-soft-lg">
+    <article className="group relative flex flex-col overflow-hidden rounded-2xl border border-hairline bg-card shadow-soft transition-all hover:-translate-y-1 hover:border-coral hover:shadow-soft-lg">
       {/* 썸네일 */}
       <button
         type="button"
@@ -251,7 +251,7 @@ export default function ProjectsClient({ projects: initialProjects }: Props) {
       {projects.length === 0 ? (
         /* 빈 상태 */
         <div className="flex flex-col items-center justify-center rounded-2xl border border-hairline bg-soft-cloud px-6 py-16 text-center">
-          <div className="mb-4 flex size-16 items-center justify-center rounded-2xl bg-white shadow-soft">
+          <div className="mb-4 flex size-16 items-center justify-center rounded-2xl bg-card shadow-soft">
             <BookOpen className="size-8 text-hairline" aria-hidden />
           </div>
           <p className="text-base font-semibold text-foreground">

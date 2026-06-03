@@ -99,7 +99,7 @@ export default function FileGridItem({
             "pointer-events-none absolute right-2 top-2 z-20 inline-flex size-7 items-center justify-center rounded-full border text-xs font-semibold shadow",
             selected
               ? "bg-rose-500 text-white border-rose-500"
-              : "bg-white/85 text-foreground border-white/85 backdrop-blur",
+              : "bg-card/85 text-foreground border-white/85 backdrop-blur",
           )}
         >
           {selected ? "✓" : ""}
@@ -149,7 +149,7 @@ export default function FileGridItem({
               item.status === "done" && "bg-emerald-500/90 text-white",
               item.status === "error" && "bg-rose-500/90 text-white",
               item.status === "cancelled" && "bg-slate-500/90 text-white",
-              isWorking && "bg-white/85 text-foreground",
+              isWorking && "bg-card/85 text-foreground",
             )}
           >
             {item.status === "done" && <Check className="size-3" aria-hidden />}

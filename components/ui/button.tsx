@@ -17,18 +17,18 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        /* 기본: 잉크 모노 pill */
+        /* 기본: 모노 pill (전경/배경 시맨틱 — 다크 자동 반전) */
         default:
-          "bg-ink text-white shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]",
+          "bg-foreground text-background shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]",
         /* 포인트 CTA: 코랄 pill (주요 행동 유도) */
         coral:
           "bg-coral text-white shadow-soft hover:bg-coral-600 hover:shadow-coral-glow hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]",
         /* 보조: soft pill */
         secondary:
           "bg-soft-cloud text-ink hover:bg-[#e7e7ea] active:scale-[0.98]",
-        /* 사진 위 아웃라인 (흰 배경) */
+        /* 아웃라인 (표면 배경) */
         outline:
-          "bg-white text-ink border border-hairline shadow-soft hover:border-ink hover:shadow-soft-lg active:scale-[0.98]",
+          "bg-card text-ink border border-hairline shadow-soft hover:border-ink hover:shadow-soft-lg active:scale-[0.98]",
         /* 코랄 아웃라인 — 가벼운 강조 */
         "coral-outline":
           "bg-coral-50 text-coral-700 border border-coral-200 hover:bg-coral-100 hover:border-coral-300 active:scale-[0.98]",

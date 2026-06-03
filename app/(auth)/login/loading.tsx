@@ -6,7 +6,7 @@ export default function LoginLoading() {
           <div className="mx-auto h-8 w-48 bg-hairline" />
           <div className="mx-auto h-3 w-72 bg-hairline" />
         </div>
-        <div className="rounded-2xl border border-hairline bg-white p-6 space-y-4">
+        <div className="rounded-2xl border border-hairline bg-card p-6 space-y-4">
           <div className="h-4 w-12 bg-hairline" />
           <div className="h-11 w-full bg-hairline" />
           <div className="flex items-center gap-2">

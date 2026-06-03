@@ -141,7 +141,7 @@ export default function TrashClient({ items, purgeAfterDays }: Props) {
         </p>
       </header>
 
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-md border bg-white/60 p-3 dark:bg-card/40">
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-md border bg-white/60 p-3 dark:bg-white/40">
         <div className="flex items-center gap-2 text-sm">
           <Button
             type="button"
@@ -182,7 +182,7 @@ export default function TrashClient({ items, purgeAfterDays }: Props) {
       </div>
 
       {items.length === 0 ? (
-        <div className="mt-10 rounded-xl border border-dashed bg-white/40 p-10 text-center text-sm text-muted-foreground dark:bg-card/40">
+        <div className="mt-10 rounded-xl border border-dashed bg-white/40 p-10 text-center text-sm text-muted-foreground dark:bg-white/40">
           휴지통이 비어 있어요.
         </div>
       ) : (

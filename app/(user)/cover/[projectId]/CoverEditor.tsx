@@ -646,7 +646,7 @@ export default function CoverEditor({
               <li key={p.id}>
                 <button
                   type="button"
-                  className="block aspect-square w-full overflow-hidden rounded-md border border-border bg-white"
+                  className="block aspect-square w-full overflow-hidden rounded-md border border-border bg-card"
                   onClick={() => void addProjectPhoto(p.id)}
                   aria-label={p.filename ?? p.id}
                 >

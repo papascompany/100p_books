@@ -308,7 +308,7 @@ export default function GenerateControls({
           aria-describedby="regen-desc"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
         >
-          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-soft-lg">
+          <div className="w-full max-w-md rounded-xl bg-card p-5 shadow-soft-lg">
             <h3
               id="regen-title"
               className="font-display text-lg font-semibold tracking-tight"

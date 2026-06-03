@@ -145,7 +145,7 @@ export default function ResourcePalette({
               <li key={it.id}>
                 <button
                   type="button"
-                  className="w-full rounded-md border border-border bg-white p-3 text-left transition-colors hover:bg-accent/40"
+                  className="w-full rounded-md border border-border bg-card p-3 text-left transition-colors hover:bg-accent/40"
                   onClick={async () => {
                     try {
                       await ensureFontLoaded({
@@ -174,7 +174,7 @@ export default function ResourcePalette({
               <li key={it.id}>
                 <button
                   type="button"
-                  className="block aspect-square w-full overflow-hidden rounded-md border border-border bg-white transition-transform hover:scale-[1.02]"
+                  className="block aspect-square w-full overflow-hidden rounded-md border border-border bg-card transition-transform hover:scale-[1.02]"
                   onClick={() =>
                     tab === "clipart"
                       ? onPickClipart(it.url, it.id)

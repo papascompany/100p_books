@@ -43,7 +43,7 @@ export default function CoverSpineGuide({
         className="absolute top-2 flex items-center justify-center text-[10px] font-medium uppercase tracking-widest text-coral/70"
         style={{ left: 0, width: `${backPct}%` }}
       >
-        <span className="rounded-full bg-white/80 px-2 py-0.5">뒤표지</span>
+        <span className="rounded-full bg-card/80 px-2 py-0.5">뒤표지</span>
       </div>
 
       {/* 책등 — 점선 박스 + 라벨 */}
@@ -67,7 +67,7 @@ export default function CoverSpineGuide({
               className={
                 dims.spineMm < SPINE_TEXT_MIN_MM
                   ? "whitespace-nowrap rounded-full bg-red-50/95 px-2 py-0.5 text-red-600 ring-1 ring-red-300/60"
-                  : "whitespace-nowrap rounded-full bg-white/80 px-2 py-0.5"
+                  : "whitespace-nowrap rounded-full bg-card/80 px-2 py-0.5"
               }
               title={
                 dims.spineMm < SPINE_TEXT_MIN_MM
@@ -87,7 +87,7 @@ export default function CoverSpineGuide({
         className="absolute top-2 flex items-center justify-center text-[10px] font-medium uppercase tracking-widest text-rose-600/70"
         style={{ left: `${backPct + spinePct}%`, width: `${frontPct}%` }}
       >
-        <span className="rounded-full bg-white/80 px-2 py-0.5">앞표지</span>
+        <span className="rounded-full bg-card/80 px-2 py-0.5">앞표지</span>
       </div>
     </div>
   );

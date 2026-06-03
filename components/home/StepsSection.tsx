@@ -85,7 +85,7 @@ export default function StepsSection() {
   return (
     <section
       ref={sectionRef}
-      className="relative py-12 md:py-20 bg-ink overflow-hidden"
+      className="relative py-12 md:py-20 bg-night overflow-hidden"
     >
       {/* 배경 텍스처 그라디언트 */}
       <div

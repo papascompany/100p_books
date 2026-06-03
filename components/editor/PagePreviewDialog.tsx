@@ -164,7 +164,7 @@ export default function PagePreviewDialog({
                 <img
                   src={pngDataUrl}
                   alt={`페이지 ${pageNo} 미리보기`}
-                  className="max-h-[72vh] max-w-full rounded-md bg-white shadow-soft ring-1 ring-black/5"
+                  className="max-h-[72vh] max-w-full rounded-md bg-card shadow-soft ring-1 ring-black/5"
                 />
                 {showBleed ? (
                   <div

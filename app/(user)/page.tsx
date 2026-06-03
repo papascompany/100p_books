@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 const StepsSection = dynamic(() => import("@/components/home/StepsSection"), {
   ssr: false,
   loading: () => (
-    <section className="py-12 md:py-20 bg-ink">
+    <section className="py-12 md:py-20 bg-night">
       <div className="container">
         <div className="mx-auto max-w-xl text-center mb-12 space-y-3">
           <div className="h-4 w-24 bg-white/10 mx-auto rounded" />
@@ -144,7 +144,7 @@ export default function LandingPage() {
       </section>
 
       {/* ══ 2. 신뢰 수치 바 ════════════════════════════════════════════════ */}
-      <section className="border-y border-hairline bg-white">
+      <section className="border-y border-hairline bg-card">
         <div className="container">
           <div className="grid grid-cols-2 divide-x divide-hairline md:grid-cols-4">
             {[
@@ -214,7 +214,7 @@ export default function LandingPage() {
       </section>
 
       {/* ══ 7. 고객 리뷰 ════════════════════════════════════════════════════ */}
-      <section className="py-10 md:py-14 bg-white">
+      <section className="py-10 md:py-14 bg-card">
         <div className="container">
           <div className="mx-auto max-w-xl text-center mb-8">
             <h2 className="text-2xl font-bold tracking-tight md:text-3xl text-ink">고객들의 생생한 후기</h2>
@@ -222,7 +222,7 @@ export default function LandingPage() {
 
           <div className="grid gap-4 md:grid-cols-3">
             {REVIEWS.map(({ name, rating, text }) => (
-              <div key={name} className="rounded-2xl border border-hairline bg-white p-5 shadow-soft card-lift">
+              <div key={name} className="rounded-2xl border border-hairline bg-card p-5 shadow-soft card-lift">
                 <div className="flex gap-0.5 mb-3">
                   {Array.from({ length: rating }).map((_, i) => (
                     <Star key={i} className="size-3.5 fill-star-amber text-star-amber" />
@@ -244,7 +244,7 @@ export default function LandingPage() {
       </section>
 
       {/* ══ 8. 최종 CTA ═════════════════════════════════════════════════════ */}
-      <section className="relative overflow-hidden bg-ink py-12 md:py-16">
+      <section className="relative overflow-hidden bg-night py-12 md:py-16">
         <Image
           src="https://images.unsplash.com/photo-1532012197267-da84d127e765?w=1200&q=60"
           alt="CTA 배경 — 사진집"

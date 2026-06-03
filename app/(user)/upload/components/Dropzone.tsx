@@ -95,7 +95,7 @@ export default function Dropzone({ onFiles, disabled = false, hint }: DropzonePr
           disabled && "cursor-not-allowed opacity-60",
         )}
       >
-        <div className="flex size-14 items-center justify-center rounded-full bg-white border border-hairline">
+        <div className="flex size-14 items-center justify-center rounded-full bg-card border border-hairline">
           {isOver ? (
             <Upload className="size-6 text-coral" aria-hidden />
           ) : (
