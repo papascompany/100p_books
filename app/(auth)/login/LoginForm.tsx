@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyRound, Loader2, Mail } from "lucide-react";
+import { KeyRound, Loader2, Mail, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -18,11 +18,15 @@ import { Input } from "@/components/ui/input";
 import { getBrowserSupabase } from "@/lib/db/browser";
 import { cn } from "@/lib/utils";
 
+/** 로그인 폼 모드. */
+type Mode = "signin" | "signup" | "forgot";
+
 type Status =
   | { kind: "idle" }
   | { kind: "submitting" }
   | { kind: "oauth"; provider: string }
-  | { kind: "sent"; email: string }
+  | { kind: "signup-sent"; email: string } // 가입 확인 메일 발송됨
+  | { kind: "reset-sent"; email: string } // 비번 재설정 메일 발송됨
   | { kind: "error"; message: string };
 
 function sanitizeNext(next: string | null): string {
@@ -32,14 +36,34 @@ function sanitizeNext(next: string | null): string {
   return "/";
 }
 
+/** Supabase 에러 메시지를 사용자 친화적으로 변환. */
+function friendlyAuthError(message: string, mode: Mode): string {
+  const m = message.toLowerCase();
+  if (m.includes("invalid login credentials")) {
+    return "이메일 또는 비밀번호가 올바르지 않습니다. 비밀번호를 잊으셨다면 아래 비밀번호 찾기를 이용하세요.";
+  }
+  if (m.includes("email not confirmed")) {
+    return "이메일 인증이 완료되지 않았어요. 받은 편지함의 확인 메일을 먼저 클릭해주세요.";
+  }
+  if (m.includes("user already registered") || m.includes("already registered")) {
+    return "이미 가입된 이메일이에요. 로그인하거나 비밀번호 찾기를 이용하세요.";
+  }
+  if (m.includes("password should be at least")) {
+    return "비밀번호는 최소 6자 이상이어야 합니다.";
+  }
+  if (mode === "signup") return message || "회원가입에 실패했습니다.";
+  if (mode === "forgot") return message || "재설정 메일 전송에 실패했습니다.";
+  return message || "로그인에 실패했습니다.";
+}
+
 export default function LoginForm() {
   const searchParams = useSearchParams();
   const next = sanitizeNext(searchParams.get("next"));
   const errorParam = searchParams.get("error");
 
+  const [mode, setMode] = React.useState<Mode>("signin");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [usePassword, setUsePassword] = React.useState(false);
   const [agreed, setAgreed] = React.useState(false);
   const [status, setStatus] = React.useState<Status>(
     errorParam ? { kind: "error", message: errorParam } : { kind: "idle" },
@@ -47,7 +71,13 @@ export default function LoginForm() {
 
   const isSubmitting = status.kind === "submitting" || status.kind === "oauth";
   const isOauth = status.kind === "oauth";
-  const isSent = status.kind === "sent";
+  const isSent = status.kind === "signup-sent" || status.kind === "reset-sent";
+
+  function switchMode(nextMode: Mode) {
+    setMode(nextMode);
+    setStatus({ kind: "idle" });
+    setPassword("");
+  }
 
   async function onKakaoLogin() {
     if (isSubmitting) return;
@@ -67,8 +97,6 @@ export default function LoginForm() {
         provider: "kakao",
         options: {
           redirectTo,
-          // Kakao 프로필 정보 (닉네임, 프로필 이미지) 요청.
-          // 실제 동의 항목은 Kakao Developers 콘솔에서도 활성화되어 있어야 한다.
           scopes: "profile_nickname profile_image",
         },
       });
@@ -79,14 +107,12 @@ export default function LoginForm() {
         });
         return;
       }
-      // signInWithOAuth 는 redirect 를 트리거하므로 이후 코드는 실행되지 않음.
+      // signInWithOAuth 는 redirect 를 트리거 → 이후 코드 미실행.
     } catch (err) {
       setStatus({
         kind: "error",
         message:
-          err instanceof Error
-            ? err.message
-            : "카카오 로그인 중 오류가 발생했습니다.",
+          err instanceof Error ? err.message : "카카오 로그인 중 오류가 발생했습니다.",
       });
     }
   }
@@ -100,55 +126,78 @@ export default function LoginForm() {
       setStatus({ kind: "error", message: "이메일을 입력해주세요." });
       return;
     }
-    if (!agreed) {
-      setStatus({
-        kind: "error",
-        message: "이용약관과 개인정보 처리방침에 동의해주세요.",
-      });
-      return;
-    }
-    if (usePassword && !password) {
-      setStatus({ kind: "error", message: "비밀번호를 입력해주세요." });
-      return;
+    // 가입/로그인은 약관 동의 + 비밀번호 필요. 비번찾기는 이메일만.
+    if (mode !== "forgot") {
+      if (!agreed) {
+        setStatus({
+          kind: "error",
+          message: "이용약관과 개인정보 처리방침에 동의해주세요.",
+        });
+        return;
+      }
+      if (!password) {
+        setStatus({ kind: "error", message: "비밀번호를 입력해주세요." });
+        return;
+      }
+      if (mode === "signup" && password.length < 6) {
+        setStatus({ kind: "error", message: "비밀번호는 최소 6자 이상이어야 합니다." });
+        return;
+      }
     }
 
     setStatus({ kind: "submitting" });
 
     try {
       const supabase = getBrowserSupabase();
+      const origin = window.location.origin;
 
-      if (usePassword) {
-        // 비밀번호 로그인 (이메일 전송 한도 초과 시 폴백)
+      // ── 로그인 ──────────────────────────────────────────────
+      if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({
           email: trimmed,
           password,
         });
         if (error) {
-          setStatus({
-            kind: "error",
-            message: error.message || "로그인에 실패했습니다.",
-          });
+          setStatus({ kind: "error", message: friendlyAuthError(error.message, mode) });
           return;
         }
-        // 세션 쿠키가 설정되면 next 경로로 이동
         window.location.assign(next);
         return;
       }
 
-      const origin = window.location.origin;
-      const redirectTo = `${origin}/api/auth/callback?next=${encodeURIComponent(next)}`;
-      const { error } = await supabase.auth.signInWithOtp({
-        email: trimmed,
-        options: { emailRedirectTo: redirectTo },
-      });
-      if (error) {
-        setStatus({
-          kind: "error",
-          message: error.message || "로그인 메일 전송에 실패했습니다.",
+      // ── 회원가입 ────────────────────────────────────────────
+      if (mode === "signup") {
+        const { data, error } = await supabase.auth.signUp({
+          email: trimmed,
+          password,
+          options: {
+            // 이메일 확인이 켜져 있으면 이 링크로 확인 메일 발송됨.
+            emailRedirectTo: `${origin}/api/auth/callback?next=${encodeURIComponent(next)}`,
+          },
         });
+        if (error) {
+          setStatus({ kind: "error", message: friendlyAuthError(error.message, mode) });
+          return;
+        }
+        // 이메일 확인 OFF → 즉시 세션 발급 → 바로 로그인.
+        if (data.session) {
+          window.location.assign(next);
+          return;
+        }
+        // 이메일 확인 ON → 확인 메일 안내.
+        setStatus({ kind: "signup-sent", email: trimmed });
         return;
       }
-      setStatus({ kind: "sent", email: trimmed });
+
+      // ── 비밀번호 찾기 ────────────────────────────────────────
+      const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
+        redirectTo: `${origin}/api/auth/callback?next=/reset-password`,
+      });
+      if (error) {
+        setStatus({ kind: "error", message: friendlyAuthError(error.message, mode) });
+        return;
+      }
+      setStatus({ kind: "reset-sent", email: trimmed });
     } catch (err) {
       setStatus({
         kind: "error",
@@ -158,21 +207,30 @@ export default function LoginForm() {
     }
   }
 
+  const heading =
+    mode === "signin"
+      ? "다시 만나 반가워요"
+      : mode === "signup"
+        ? "100p Books 시작하기"
+        : "비밀번호 찾기";
+  const subhead =
+    mode === "signin"
+      ? "이메일과 비밀번호로 로그인해주세요."
+      : mode === "signup"
+        ? "이메일과 비밀번호로 간편하게 가입하세요."
+        : "가입한 이메일로 재설정 링크를 보내드려요.";
+
   return (
     <Card className="w-full max-w-md rounded-2xl shadow-soft">
       <CardHeader className="text-center">
         <CardTitle className="text-3xl font-semibold tracking-tight">
-          다시 만나 반가워요
+          {heading}
         </CardTitle>
-        <CardDescription className="mt-2 text-[15px]">
-          {usePassword
-            ? "이메일과 비밀번호로 로그인해주세요."
-            : "이메일로 매직링크를 보내드릴게요. 비밀번호가 필요 없어요."}
-        </CardDescription>
+        <CardDescription className="mt-2 text-[15px]">{subhead}</CardDescription>
       </CardHeader>
 
       <CardContent>
-        {isSent ? (
+        {status.kind === "signup-sent" || status.kind === "reset-sent" ? (
           <div
             role="status"
             aria-live="polite"
@@ -183,27 +241,23 @@ export default function LoginForm() {
             </div>
             <p className="mt-3 text-base font-medium">이메일을 확인해주세요</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">
-                {status.email}
-              </span>
-              로 로그인 링크를 보냈어요. 메일이 보이지 않는다면 스팸함을
-              확인해주세요.
+              <span className="font-medium text-foreground">{status.email}</span>
+              {status.kind === "signup-sent"
+                ? " 로 인증 메일을 보냈어요. 메일의 링크를 클릭하면 가입이 완료됩니다."
+                : " 로 비밀번호 재설정 링크를 보냈어요. 메일이 보이지 않으면 스팸함을 확인해주세요."}
             </p>
             <button
               type="button"
-              onClick={() => setStatus({ kind: "idle" })}
+              onClick={() => switchMode("signin")}
               className="mt-4 text-sm font-medium text-coral underline-offset-4 hover:underline"
             >
-              다른 이메일로 다시 보내기
+              로그인으로 돌아가기
             </button>
           </div>
         ) : (
           <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
             <div className="flex flex-col gap-1.5">
-              <label
-                htmlFor="email"
-                className="text-sm font-medium text-foreground"
-              >
+              <label htmlFor="email" className="text-sm font-medium text-foreground">
                 이메일
               </label>
               <Input
@@ -220,18 +274,32 @@ export default function LoginForm() {
               />
             </div>
 
-            {usePassword ? (
+            {mode !== "forgot" ? (
               <div className="flex flex-col gap-1.5">
-                <label
-                  htmlFor="password"
-                  className="text-sm font-medium text-foreground"
-                >
-                  비밀번호
-                </label>
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="password"
+                    className="text-sm font-medium text-foreground"
+                  >
+                    비밀번호
+                  </label>
+                  {mode === "signin" ? (
+                    <button
+                      type="button"
+                      onClick={() => switchMode("forgot")}
+                      className="text-xs text-muted-foreground underline-offset-4 hover:text-coral hover:underline"
+                    >
+                      비밀번호 찾기
+                    </button>
+                  ) : null}
+                </div>
                 <Input
                   id="password"
                   type="password"
-                  autoComplete="current-password"
+                  autoComplete={
+                    mode === "signup" ? "new-password" : "current-password"
+                  }
+                  placeholder={mode === "signup" ? "6자 이상" : undefined}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -240,35 +308,37 @@ export default function LoginForm() {
               </div>
             ) : null}
 
-            <label className="flex items-start gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
-                className="mt-0.5 size-4 cursor-pointer rounded border-input"
-                checked={agreed}
-                onChange={(e) => setAgreed(e.target.checked)}
-                disabled={isSubmitting}
-                aria-describedby="agree-desc"
-                required
-              />
-              <span id="agree-desc">
-                <Link
-                  href="/terms"
-                  target="_blank"
-                  className="font-medium text-foreground underline-offset-2 hover:underline"
-                >
-                  이용약관
-                </Link>{" "}
-                및{" "}
-                <Link
-                  href="/privacy"
-                  target="_blank"
-                  className="font-medium text-foreground underline-offset-2 hover:underline"
-                >
-                  개인정보 처리방침
-                </Link>
-                에 동의합니다. (필수)
-              </span>
-            </label>
+            {mode !== "forgot" ? (
+              <label className="flex items-start gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-4 cursor-pointer rounded border-input"
+                  checked={agreed}
+                  onChange={(e) => setAgreed(e.target.checked)}
+                  disabled={isSubmitting}
+                  aria-describedby="agree-desc"
+                  required
+                />
+                <span id="agree-desc">
+                  <Link
+                    href="/terms"
+                    target="_blank"
+                    className="font-medium text-foreground underline-offset-2 hover:underline"
+                  >
+                    이용약관
+                  </Link>{" "}
+                  및{" "}
+                  <Link
+                    href="/privacy"
+                    target="_blank"
+                    className="font-medium text-foreground underline-offset-2 hover:underline"
+                  >
+                    개인정보 처리방침
+                  </Link>
+                  에 동의합니다. (필수)
+                </span>
+              </label>
+            ) : null}
 
             {status.kind === "error" ? (
               <p
@@ -284,40 +354,59 @@ export default function LoginForm() {
               size="lg"
               variant="coral"
               className={cn("mt-1 w-full", isSubmitting && "opacity-90")}
-              disabled={isSubmitting || !agreed}
+              disabled={isSubmitting || (mode !== "forgot" && !agreed)}
             >
-              {isSubmitting ? (
+              {status.kind === "submitting" ? (
                 <>
                   <Loader2 className="animate-spin" aria-hidden />
-                  {usePassword ? " 로그인 중..." : " 전송 중..."}
+                  {mode === "signin"
+                    ? " 로그인 중..."
+                    : mode === "signup"
+                      ? " 가입 중..."
+                      : " 전송 중..."}
                 </>
-              ) : usePassword ? (
+              ) : mode === "signin" ? (
                 <>
-                  <KeyRound aria-hidden /> 비밀번호로 로그인
+                  <KeyRound aria-hidden /> 로그인
+                </>
+              ) : mode === "signup" ? (
+                <>
+                  <UserPlus aria-hidden /> 회원가입
                 </>
               ) : (
                 <>
-                  <Mail aria-hidden /> 로그인 링크 받기
+                  <Mail aria-hidden /> 재설정 링크 받기
                 </>
               )}
             </Button>
 
-            <button
-              type="button"
-              onClick={() => {
-                setUsePassword((v) => !v);
-                setStatus({ kind: "idle" });
-              }}
-              className="text-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-            >
-              {usePassword
-                ? "← 매직링크로 로그인"
-                : "비밀번호로 로그인 (이메일 한도 초과 시)"}
-            </button>
+            {/* 모드 전환 */}
+            <div className="text-center text-sm text-muted-foreground">
+              {mode === "signin" ? (
+                <>
+                  계정이 없으신가요?{" "}
+                  <button
+                    type="button"
+                    onClick={() => switchMode("signup")}
+                    className="font-medium text-coral underline-offset-4 hover:underline"
+                  >
+                    회원가입
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => switchMode("signin")}
+                  className="underline-offset-4 hover:text-foreground hover:underline"
+                >
+                  ← 로그인으로 돌아가기
+                </button>
+              )}
+            </div>
           </form>
         )}
 
-        {!isSent ? (
+        {!isSent && mode !== "forgot" ? (
           <>
             <div className="relative my-5" aria-hidden>
               <div className="absolute inset-0 flex items-center">
@@ -338,12 +427,10 @@ export default function LoginForm() {
             >
               {isOauth ? (
                 <>
-                  <Loader2 className="animate-spin" aria-hidden /> 카카오 연결
-                  중...
+                  <Loader2 className="animate-spin" aria-hidden /> 카카오 연결 중...
                 </>
               ) : (
                 <>
-                  {/* 카카오 말풍선 SVG (인라인) */}
                   <svg
                     className="size-4"
                     viewBox="0 0 18 18"
