@@ -117,6 +117,8 @@ const PRESETS = {
   "photo-upload": { limit: 30, window: "1 m", prefix: "photo-upload" },
   "review-upload": { limit: 20, window: "1 h", prefix: "review-upload" },
   "account-delete": { limit: 5, window: "1 h", prefix: "account-delete" },
+  // 회원가입 — IP 당 시간당 10회 (가입 남용/스팸 계정 차단)
+  signup: { limit: 10, window: "1 h", prefix: "signup" },
 } as const satisfies Record<string, LimiterOptions>;
 
 /**

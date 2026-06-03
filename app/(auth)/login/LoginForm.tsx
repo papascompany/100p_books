@@ -167,25 +167,37 @@ export default function LoginForm() {
 
       // ── 회원가입 ────────────────────────────────────────────
       if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({
+        // 서버에서 즉시 확인된 계정 생성 (이메일 인증 없이 바로 가입).
+        const res = await fetch("/api/auth/signup", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email: trimmed, password }),
+        });
+        const json = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: { message?: string };
+        };
+        if (!res.ok || !json.ok) {
+          setStatus({
+            kind: "error",
+            message: json.error?.message ?? "회원가입에 실패했습니다.",
+          });
+          return;
+        }
+        // 가입 완료 → 바로 로그인하여 세션 발급.
+        const { error: signinError } = await supabase.auth.signInWithPassword({
           email: trimmed,
           password,
-          options: {
-            // 이메일 확인이 켜져 있으면 이 링크로 확인 메일 발송됨.
-            emailRedirectTo: `${origin}/api/auth/callback?next=${encodeURIComponent(next)}`,
-          },
         });
-        if (error) {
-          setStatus({ kind: "error", message: friendlyAuthError(error.message, mode) });
+        if (signinError) {
+          // 가입은 됐으나 자동 로그인 실패 → 로그인 화면으로 안내.
+          setStatus({
+            kind: "error",
+            message: "가입은 완료됐어요. 로그인해주세요.",
+          });
           return;
         }
-        // 이메일 확인 OFF → 즉시 세션 발급 → 바로 로그인.
-        if (data.session) {
-          window.location.assign(next);
-          return;
-        }
-        // 이메일 확인 ON → 확인 메일 안내.
-        setStatus({ kind: "signup-sent", email: trimmed });
+        window.location.assign(next);
         return;
       }
 
