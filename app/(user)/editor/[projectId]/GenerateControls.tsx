@@ -157,8 +157,8 @@ export default function GenerateControls({
                   "flex min-h-[44px] cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm transition-colors",
                   "focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
                   selected
-                    ? "border-rose-400 bg-rose-50/60 ring-1 ring-rose-300"
-                    : "border-input hover:border-rose-200 hover:bg-rose-50/20",
+                    ? "border-coral-400 bg-coral-50/60 ring-1 ring-coral-300"
+                    : "border-input hover:border-coral-200 hover:bg-coral-50/20",
                 )}
               >
                 <input
@@ -167,7 +167,7 @@ export default function GenerateControls({
                   value={opt.id}
                   checked={selected}
                   onChange={() => setSortMode(opt.id)}
-                  className="mt-0.5 size-4 shrink-0 accent-rose-500"
+                  className="mt-0.5 size-4 shrink-0 accent-coral"
                 />
                 <span className="min-w-0">
                   <span className="block font-medium">{opt.label}</span>
@@ -198,8 +198,8 @@ export default function GenerateControls({
                   "flex min-h-[44px] cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm transition-colors",
                   "focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
                   selected
-                    ? "border-rose-400 bg-rose-50/60 ring-1 ring-rose-300"
-                    : "border-input hover:border-rose-200 hover:bg-rose-50/20",
+                    ? "border-coral-400 bg-coral-50/60 ring-1 ring-coral-300"
+                    : "border-input hover:border-coral-200 hover:bg-coral-50/20",
                 )}
               >
                 <input
@@ -208,7 +208,7 @@ export default function GenerateControls({
                   value={opt.id}
                   checked={selected}
                   onChange={() => setLayoutMode(opt.id)}
-                  className="mt-0.5 size-4 shrink-0 accent-rose-500"
+                  className="mt-0.5 size-4 shrink-0 accent-coral"
                 />
                 <span className="min-w-0">
                   <span className="block font-medium">{opt.label}</span>

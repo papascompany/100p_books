@@ -196,7 +196,7 @@ export default function PdfActions({ projectId, pageCount }: PdfActionsProps) {
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full bg-rose-500 transition-[width] duration-200"
+              className="h-full bg-coral transition-[width] duration-200"
               style={{ width: `${pct}%` }}
             />
           </div>

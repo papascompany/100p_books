@@ -37,18 +37,17 @@ function readStoredTheme(): Theme {
   return "system";
 }
 
-function systemPrefersDark(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
-
 function applyTheme(theme: Theme): "light" | "dark" {
-  const resolved: "light" | "dark" =
-    theme === "system" ? (systemPrefersDark() ? "dark" : "light") : theme;
+  // ⚠️ 다크모드 임시 비활성 — 라이트 고정.
+  //   현재 다수 화면이 고정색(ink/soft-cloud/hairline/bg-white)을 직접 사용해
+  //   .dark 가 붙으면 일부만 반전되어 화면이 깨지고, ThemeToggle 도 헤더에
+  //   마운트되지 않아 되돌릴 수단이 없다. 깨짐 원천 차단을 위해 항상 라이트 적용.
+  //   (globals.css 의 .dark 토큰은 보존 — 추후 고정색 토큰화 후 강제만 풀면 재활성.)
+  void theme;
   const root = document.documentElement;
-  root.classList.toggle("dark", resolved === "dark");
-  root.style.colorScheme = resolved;
-  return resolved;
+  root.classList.remove("dark");
+  root.style.colorScheme = "light";
+  return "light";
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -116,4 +115,6 @@ export function useTheme(): ThemeContextValue {
  * `<head>` 에 inline 으로 주입할 스크립트 — hydration 전에 즉시 클래스 적용해
  * FOUC(깜빡임)를 방지한다. localStorage / matchMedia 동기 호출 외 부수효과 없음.
  */
-export const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("theme");if(t!=="light"&&t!=="dark"&&t!=="system")t="system";var d=t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;if(d)r.classList.add("dark");r.style.colorScheme=d?"dark":"light";}catch(e){}})();`;
+// ⚠️ 다크모드 임시 비활성 — 라이트 고정 (ThemeProvider.applyTheme 주석 참조).
+//   .dark 가 붙지 않도록 항상 라이트로 초기화해 FOUC + 다크 깨짐을 동시에 차단.
+export const THEME_INIT_SCRIPT = `(function(){try{var r=document.documentElement;r.classList.remove("dark");r.style.colorScheme="light";}catch(e){}})();`;

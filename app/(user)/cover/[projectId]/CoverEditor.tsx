@@ -16,8 +16,8 @@ import ResourcePalette from "@/components/editor/ResourcePalette";
 const FabricStage = dynamic(() => import("@/components/editor/FabricStage"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-64 w-full items-center justify-center bg-[#f5f5f5]">
-      <div className="size-10 animate-spin rounded-full border-4 border-[#dedede] border-t-[#111111]" />
+    <div className="flex h-64 w-full items-center justify-center bg-soft-cloud">
+      <div className="size-10 animate-spin rounded-full border-4 border-hairline border-t-ink" />
     </div>
   ),
 });
@@ -334,7 +334,7 @@ export default function CoverEditor({
         <Button asChild variant="ghost" size="sm">
           <Link href={`/editor/${projectId}`}>← 내지 편집</Link>
         </Button>
-        <span className="text-xs uppercase tracking-widest text-rose-500/90">
+        <span className="text-xs uppercase tracking-widest text-coral/90">
           step 3 of 4 · 표지 편집
         </span>
 
@@ -392,7 +392,7 @@ export default function CoverEditor({
             <Save className="size-4" aria-hidden />
             {saving ? "저장 중…" : dirty ? "저장" : "저장됨"}
           </Button>
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="coral" size="sm">
             <Link href={`/order/${projectId}`} aria-label="다음: 주문">
               다음: 주문
             </Link>
@@ -724,7 +724,7 @@ export default function CoverEditor({
               </button>
             </div>
 
-            <div className="flex min-h-[360px] items-center justify-center rounded-lg bg-gradient-to-br from-rose-50/40 via-amber-50/30 to-sky-50/40 dark:from-rose-950/20 dark:via-amber-950/20 dark:to-sky-950/20">
+            <div className="flex min-h-[360px] items-center justify-center rounded-lg bg-gradient-to-br from-coral-50/40 via-amber-50/30 to-sky-50/40 dark:from-coral-950/20 dark:via-amber-950/20 dark:to-sky-950/20">
               {previewLoading ? (
                 <div className="text-sm text-muted-foreground" role="status">
                   미리보기를 그리는 중…

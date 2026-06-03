@@ -2,14 +2,14 @@ export default function EditorLoading() {
   return (
     <div className="flex h-[calc(100dvh-4rem)] animate-pulse flex-col">
       {/* 에디터 탑바 */}
-      <div className="flex h-14 items-center justify-between border-b border-[#e5e5e5] bg-white px-4">
+      <div className="flex h-14 items-center justify-between border-b border-hairline bg-background px-4">
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 bg-[#e5e5e5]" />
-          <div className="h-5 w-32 bg-[#e5e5e5]" />
+          <div className="h-8 w-8 bg-hairline rounded" />
+          <div className="h-5 w-32 bg-hairline rounded" />
         </div>
         <div className="flex gap-2">
-          <div className="h-10 w-20 bg-[#e5e5e5]" />
-          <div className="h-10 w-20 bg-[#e5e5e5]" />
+          <div className="h-10 w-20 bg-hairline rounded-full" />
+          <div className="h-10 w-20 bg-hairline rounded-full" />
         </div>
       </div>
       {/* 페이지 그리드 */}
@@ -18,7 +18,7 @@ export default function EditorLoading() {
           {Array.from({ length: 8 }).map((_, i) => (
             <div
               key={i}
-              className="aspect-[3/4] border border-[#e5e5e5] bg-[#f5f5f5]"
+              className="aspect-[3/4] border border-hairline bg-soft-cloud rounded-xl"
             />
           ))}
         </div>

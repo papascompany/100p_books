@@ -40,7 +40,7 @@ export default function CoverSpineGuide({
     >
       {/* 뒤표지 라벨 */}
       <div
-        className="absolute top-2 flex items-center justify-center text-[10px] font-medium uppercase tracking-widest text-rose-600/70"
+        className="absolute top-2 flex items-center justify-center text-[10px] font-medium uppercase tracking-widest text-coral/70"
         style={{ left: 0, width: `${backPct}%` }}
       >
         <span className="rounded-full bg-white/80 px-2 py-0.5">뒤표지</span>
@@ -50,14 +50,14 @@ export default function CoverSpineGuide({
       {spinePct > 0 ? (
         <>
           <div
-            className="absolute top-0 bottom-0 border-l border-r border-dashed border-rose-500/40"
+            className="absolute top-0 bottom-0 border-l border-r border-dashed border-coral/40"
             style={{
               left: `${backPct}%`,
               width: `${spinePct}%`,
             }}
           />
           <div
-            className="absolute bottom-2 flex items-center justify-center text-[10px] font-medium text-rose-600/80"
+            className="absolute bottom-2 flex items-center justify-center text-[10px] font-medium text-coral/80"
             style={{
               left: `${backPct}%`,
               width: `${spinePct}%`,

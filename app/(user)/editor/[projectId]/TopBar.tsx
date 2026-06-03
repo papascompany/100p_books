@@ -68,7 +68,7 @@ export default function TopBar({
   return (
     <header className="flex flex-col gap-4 border-b pb-5 md:flex-row md:items-end md:justify-between">
       <div className="min-w-0">
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-rose-500/90">
+        <p className="text-xs font-medium uppercase tracking-[0.18em] text-coral/90">
           step 2 of 4 · 내지 편집
         </p>
         <label htmlFor="project-title" className="sr-only">

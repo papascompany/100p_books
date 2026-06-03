@@ -64,7 +64,7 @@ export default function MobileToolbar({
                 "py-2 text-[11px] font-medium transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                 isActive
-                  ? "text-rose-500"
+                  ? "text-coral"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >

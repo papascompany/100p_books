@@ -12,8 +12,8 @@ import type { FabricStageHandle } from "@/components/editor/FabricStage";
 const FabricStage = dynamic(() => import("@/components/editor/FabricStage"), {
   ssr: false,
   loading: () => (
-    <div className="flex flex-1 items-center justify-center bg-[#f5f5f5]">
-      <div className="size-10 animate-spin rounded-full border-4 border-[#dedede] border-t-[#111111]" />
+    <div className="flex flex-1 items-center justify-center bg-soft-cloud">
+      <div className="size-10 animate-spin rounded-full border-4 border-hairline border-t-ink" />
     </div>
   ),
 });
@@ -734,7 +734,7 @@ export default function PageEditor({
                 "flex min-h-[64px] flex-col items-center justify-center gap-1.5",
                 "rounded-xl border border-border bg-background p-3",
                 "text-sm font-medium transition-colors",
-                "hover:border-rose-300 hover:bg-rose-50/40",
+                "hover:border-coral-300 hover:bg-coral-50/40",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 "active:scale-[0.97]",
               )}
@@ -798,7 +798,7 @@ export default function PageEditor({
                 "flex min-h-[64px] flex-col items-center justify-center gap-1.5",
                 "rounded-xl border border-border bg-background p-3",
                 "text-sm font-medium transition-colors",
-                "hover:border-amber-300 hover:bg-amber-50/40",
+                "hover:border-coral-300 hover:bg-coral-50/40",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 "active:scale-[0.97]",
               )}

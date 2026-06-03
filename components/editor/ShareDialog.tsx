@@ -195,7 +195,7 @@ export default function ShareDialog({ open, onOpenChange, projectId }: ShareDial
           <div className="flex items-start justify-between gap-3">
             <div>
               <DialogPrimitive.Title className="flex items-center gap-2 text-base font-semibold">
-                <Link2 className="size-4 text-rose-500" aria-hidden />
+                <Link2 className="size-4 text-coral" aria-hidden />
                 공유 링크
               </DialogPrimitive.Title>
               <DialogPrimitive.Description
@@ -235,7 +235,7 @@ export default function ShareDialog({ open, onOpenChange, projectId }: ShareDial
                     "flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                     expiry === opt.value
-                      ? "border-rose-400 bg-rose-50 text-rose-700 ring-1 ring-rose-300 dark:bg-rose-950/30 dark:text-rose-300"
+                      ? "border-coral-400 bg-coral-50 text-coral-700 ring-1 ring-coral-300 dark:bg-coral-950/30 dark:text-coral-300"
                       : "border-input bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                   )}
                 >
@@ -318,7 +318,7 @@ export default function ShareDialog({ open, onOpenChange, projectId }: ShareDial
                               )}
                             >
                               {isCopied ? (
-                                <Check className="size-3.5 text-emerald-500" aria-hidden />
+                                <Check className="size-3.5 text-coral" aria-hidden />
                               ) : (
                                 <Copy className="size-3.5" aria-hidden />
                               )}

@@ -49,8 +49,8 @@ export default function LandingPage() {
       {/* ══ 1. 캠페인 히어로 ════════════════════════════════════════════════ */}
       <section className="relative min-h-[75vh] flex items-center overflow-hidden">
         <Image
-          src="https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=1920&q=80"
-          alt="포토북 배경"
+          src="https://images.unsplash.com/photo-1530538987395-032d1800fdd4?w=1920&q=80"
+          alt="펼쳐진 감성 사진 앨범"
           fill
           className="object-cover object-center"
           priority
@@ -119,8 +119,8 @@ export default function LandingPage() {
           <div className="w-36 bg-white p-2.5 pb-7 rounded-2xl shadow-soft-xl" style={{ transform: "rotate(-4deg)" }}>
             <div className="relative h-28 w-full overflow-hidden rounded-xl bg-soft-cloud">
               <Image
-                src="https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=400&q=75"
-                alt="포토북 예시"
+                src="https://images.unsplash.com/photo-1606159068539-43f36b99d1b2?w=400&q=75"
+                alt="포토북 예시 — 폴라로이드"
                 fill
                 className="object-cover"
                 sizes="144px"
@@ -131,8 +131,8 @@ export default function LandingPage() {
           <div className="w-36 bg-white p-2.5 pb-7 rounded-2xl shadow-soft-xl" style={{ transform: "rotate(3deg) translateX(10px)" }}>
             <div className="relative h-28 w-full overflow-hidden rounded-xl bg-soft-cloud">
               <Image
-                src="https://images.unsplash.com/photo-1523438885200-e635ba2c371e?w=400&q=75"
-                alt="포토북 예시 2"
+                src="https://images.unsplash.com/photo-1495640388908-05fa85288e61?w=400&q=75"
+                alt="포토북 예시 — 사진집"
                 fill
                 className="object-cover"
                 sizes="144px"
@@ -188,12 +188,12 @@ export default function LandingPage() {
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[
-              { src: "https://images.unsplash.com/photo-1523438885200-e635ba2c371e?w=600&q=75", rowSpan: true },
-              { src: "https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d?w=600&q=75" },
-              { src: "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&q=75" },
-              { src: "https://images.unsplash.com/photo-1542038784456-1ea8e935640e?w=600&q=75", rowSpan: true },
-              { src: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=600&q=75" },
-              { src: "https://images.unsplash.com/photo-1504208434309-cb69f4fe52b0?w=600&q=75" },
+              { src: "https://images.unsplash.com/photo-1606159068539-43f36b99d1b2?w=600&q=75", rowSpan: true },
+              { src: "https://images.unsplash.com/photo-1495640388908-05fa85288e61?w=600&q=75" },
+              { src: "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=600&q=75" },
+              { src: "https://images.unsplash.com/photo-1611532736597-de2d4265fba3?w=600&q=75", rowSpan: true },
+              { src: "https://images.unsplash.com/photo-1530538987395-032d1800fdd4?w=600&q=75" },
+              { src: "https://images.unsplash.com/photo-1531346878377-a5be20888e57?w=600&q=75" },
             ].map(({ src, rowSpan }, i) => (
               <div
                 key={i}
@@ -246,8 +246,8 @@ export default function LandingPage() {
       {/* ══ 8. 최종 CTA ═════════════════════════════════════════════════════ */}
       <section className="relative overflow-hidden bg-ink py-12 md:py-16">
         <Image
-          src="https://images.unsplash.com/photo-1504208434309-cb69f4fe52b0?w=1200&q=60"
-          alt="CTA 배경"
+          src="https://images.unsplash.com/photo-1532012197267-da84d127e765?w=1200&q=60"
+          alt="CTA 배경 — 사진집"
           fill
           className="object-cover opacity-20"
           sizes="100vw"
