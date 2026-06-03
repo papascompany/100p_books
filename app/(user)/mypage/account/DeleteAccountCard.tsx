@@ -233,7 +233,7 @@ export default function DeleteAccountCard({
                 />
                 {confirmText && !textMatches ? (
                   <p id="confirm-text-help" className="text-xs text-destructive">
-                    문구가 정확히 일치하지 않습니다. ('{CONFIRM_PHRASE}')
+                    문구가 정확히 일치하지 않습니다. (&lsquo;{CONFIRM_PHRASE}&rsquo;)
                   </p>
                 ) : null}
               </div>

@@ -6,6 +6,13 @@ const supabaseHost =
 const nextConfig = {
   reactStrictMode: true,
 
+  // ESLint 스타일 룰(react/no-unescaped-entities 등)로 production 빌드가
+  // 막히지 않게 함 — 타입 안전성은 tsc(typecheck)가 별도 보장하고,
+  // 코드 스타일은 `pnpm lint` / CI 에서 점검한다.
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+
   images: {
     // 모바일 최적화: WebP/AVIF 자동 변환
     formats: ["image/avif", "image/webp"],
