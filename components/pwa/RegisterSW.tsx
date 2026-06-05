@@ -8,6 +8,19 @@ import { useEffect } from "react";
  */
 export default function RegisterSW() {
   useEffect(() => {
+    // 개발 모드에서는 SW 를 등록하지 않는다.
+    //   - dev 는 청크가 매번 바뀌어 SW 캐시가 옛 번들을 서빙 → 빈 화면/불일치 유발.
+    //   - 이전에 등록된 dev SW 가 있으면 정리한다.
+    if (process.env.NODE_ENV !== "production") {
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker
+          .getRegistrations()
+          .then((regs) => regs.forEach((r) => void r.unregister()))
+          .catch(() => undefined);
+      }
+      return;
+    }
+
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker
         .register("/sw.js", { scope: "/" })

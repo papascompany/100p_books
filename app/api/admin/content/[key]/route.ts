@@ -1,12 +1,12 @@
 import "server-only";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 
 import { fail, ok } from "@/app/api/_lib/response";
 import { withAdmin } from "@/lib/admin/auth";
 import { SITE_CONTENT_DEFAULTS } from "@/lib/content/defaults";
-import { getSiteContent } from "@/lib/content/get";
+import { getSiteContent, SITE_CONTENT_TAG } from "@/lib/content/get";
 import type { SiteContentKey } from "@/lib/content/types";
 import { createAdminSupabase } from "@/lib/db/admin";
 
@@ -116,7 +116,8 @@ export const PUT = withAdmin<{ key: string }>(async (req, ctx, user) => {
     );
   }
 
-  // 랜딩 페이지 + 레이아웃(헤더/푸터) 캐시 무효화.
+  // getSiteContent unstable_cache 무효화 + 랜딩/레이아웃 재생성.
+  revalidateTag(SITE_CONTENT_TAG);
   revalidatePath("/");
   revalidatePath("/", "layout");
 

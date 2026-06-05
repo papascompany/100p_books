@@ -7,6 +7,7 @@ import * as React from "react";
 
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import { Button } from "@/components/ui/button";
+import { getBrowserSupabase } from "@/lib/db/browser";
 import { cn } from "@/lib/utils";
 
 type NavItem = { href: string; label: string };
@@ -18,16 +19,48 @@ const DEFAULT_NAV: NavItem[] = [
   { href: "/upload", label: "만들기" },
 ];
 
-export default function HeaderClient({
-  isAuthed,
-  nav,
-}: {
-  isAuthed: boolean;
-  nav?: NavItem[];
-}) {
+/**
+ * 로그인 여부를 localStorage 의 Supabase 세션 토큰 존재로 즉시 추정한다.
+ * (hydration 시점에 동기적으로 읽어 헤더 깜빡임 최소화. 정확한 검증은 아래 effect.)
+ */
+function guessAuthedSync(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const ref =
+      process.env.NEXT_PUBLIC_SUPABASE_URL?.match(/\/\/([^.]+)/)?.[1] ?? "";
+    if (!ref) return false;
+    return Boolean(window.localStorage.getItem(`sb-${ref}-auth-token`));
+  } catch {
+    return false;
+  }
+}
+
+export default function HeaderClient({ nav }: { nav?: NavItem[] }) {
   const NAV = nav ?? DEFAULT_NAV;
   const pathname = usePathname();
   const [open, setOpen] = React.useState(false);
+  const [isAuthed, setIsAuthed] = React.useState(false);
+
+  // 클라이언트 세션으로 로그인 여부 판단 (Header 를 정적 렌더 가능하게).
+  // env 누락(로컬 worktree 등) 시 getBrowserSupabase 가 throw 하더라도
+  // 헤더/페이지 전체가 죽지 않도록 방어 — guess 결과만 사용.
+  React.useEffect(() => {
+    setIsAuthed(guessAuthedSync());
+    let supabase;
+    try {
+      supabase = getBrowserSupabase();
+    } catch {
+      return;
+    }
+    supabase.auth
+      .getSession()
+      .then(({ data }) => setIsAuthed(Boolean(data.session)))
+      .catch(() => undefined);
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setIsAuthed(Boolean(session));
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
   React.useEffect(() => {
     setOpen(false);

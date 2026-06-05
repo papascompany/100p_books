@@ -8,6 +8,12 @@ import FeatureCards from "@/components/home/FeatureCards";
 import { Button } from "@/components/ui/button";
 import { getSiteContentMany } from "@/lib/content/get";
 
+// ⚡ ISR — 랜딩은 CMS 콘텐츠 기반이지만 자주 안 바뀌므로 5분 캐시.
+//   getSiteContent 도 unstable_cache 라 매 요청 DB 왕복 없음.
+//   CMS 저장 시 revalidateTag/revalidatePath 로 즉시 갱신.
+//   Header 가 cookies() 를 안 쓰게 바뀌어 이 페이지가 진짜 정적/ISR 로 빌드됨.
+export const revalidate = 300;
+
 // StepsSection 만 ssr:false 유지 — 기존 동작 호환을 위해.
 const StepsSection = dynamic(() => import("@/components/home/StepsSection"), {
   ssr: false,

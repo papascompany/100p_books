@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import Link from "next/link";
 
 import { getSiteContent } from "@/lib/content/get";
@@ -8,25 +7,12 @@ import HeaderClient from "./HeaderClient";
 /**
  * Modern Casual primary navigation — 코랄 포인트 디자인 시스템.
  * 56px height · white/80 backdrop-blur · 1px hairline bottom
+ *
+ * ⚡ 성능: cookies() 등 동적 API 를 쓰지 않아 이 헤더(및 layout)가 정적/ISR
+ *   가능. 로그인 여부는 HeaderClient 가 클라이언트 세션으로 판단한다.
+ *   → 공개 페이지(랜딩 등)가 매 요청 서버 렌더 없이 CDN 으로 즉시 응답.
  */
-function readIsAuthedFromCookie(): boolean {
-  try {
-    const cookieStore = cookies();
-    const projectRef =
-      process.env.NEXT_PUBLIC_SUPABASE_URL?.match(/\/\/([^.]+)/)?.[1] ?? "";
-    if (!projectRef) return false;
-    const base = `sb-${projectRef}-auth-token`;
-    return (
-      Boolean(cookieStore.get(base)?.value) ||
-      Boolean(cookieStore.get(`${base}.0`)?.value)
-    );
-  } catch {
-    return false;
-  }
-}
-
 export default async function Header() {
-  const isAuthed = readIsAuthedFromCookie();
   const headerContent = await getSiteContent("header");
 
   return (
@@ -45,7 +31,7 @@ export default async function Header() {
             {headerContent.brand}
           </span>
         </Link>
-        <HeaderClient isAuthed={isAuthed} nav={headerContent.nav} />
+        <HeaderClient nav={headerContent.nav} />
       </div>
     </header>
   );
