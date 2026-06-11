@@ -3,6 +3,7 @@ import "server-only";
 import {
   createCanvas,
   loadImage,
+  type Canvas,
   type SKRSContext2D,
   type Image,
 } from "@napi-rs/canvas";
@@ -18,7 +19,7 @@ import type {
   TextObject,
 } from "@/lib/layout/types";
 
-import { mmToPx, ptToPx, PRINT_DPI } from "./constants";
+import { mmToPx, ptToPx, PAGE_JPEG_QUALITY, PRINT_DPI } from "./constants";
 import { wrapMixedText } from "./text-wrap";
 
 /**
@@ -61,6 +62,30 @@ export async function renderPageToPng(
   doc: PageDoc,
   ctx: RenderContext,
 ): Promise<Buffer> {
+  const canvas = await renderPageToCanvas(doc, ctx);
+  return canvas.toBuffer("image/png");
+}
+
+/**
+ * PageDoc → 300dpi JPEG 버퍼 (인쇄 PDF 임베드용).
+ *
+ *   - 페이지는 항상 backgroundColor 로 전면 도색되므로 알파 손실 없음.
+ *   - PNG(무손실) 대비 ~1/5 크기 — 100p 사진북 PDF 578MB → ~106MB (실측).
+ *   - pdf-lib embedJpg 는 바이트를 그대로 DCTDecode 로 임베드 (재인코딩 없음).
+ */
+export async function renderPageToJpeg(
+  doc: PageDoc,
+  ctx: RenderContext,
+  quality: number = PAGE_JPEG_QUALITY,
+): Promise<Buffer> {
+  const canvas = await renderPageToCanvas(doc, ctx);
+  return canvas.toBuffer("image/jpeg", quality);
+}
+
+async function renderPageToCanvas(
+  doc: PageDoc,
+  ctx: RenderContext,
+): Promise<Canvas> {
   const dpi = ctx.dpi ?? PRINT_DPI;
   const bleedMm = doc.bleedMm; // 항상 2 (PageDoc 규약)
 
@@ -132,7 +157,7 @@ export async function renderPageToPng(
 
   cx.restore();
 
-  return canvas.toBuffer("image/png");
+  return canvas;
 }
 
 // =====================================================================

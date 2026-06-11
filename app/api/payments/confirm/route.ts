@@ -1,5 +1,6 @@
 import "server-only";
 
+import { waitUntil } from "@vercel/functions";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
@@ -9,12 +10,13 @@ import { createServerSupabase } from "@/lib/db/server";
 import { enqueueEmail } from "@/lib/email/queue";
 import { assertTransition } from "@/lib/orders/state";
 import { confirmTossPayment, TossError } from "@/lib/payments/toss";
-import { enqueueAndRunPdfJob } from "@/lib/pdf/job-runner";
+import { enqueuePdfJob, runPdfJob } from "@/lib/pdf/job-runner";
 import { REFERRAL_REWARD } from "@/lib/referrals/code";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-// 결제 확정 → PDF 빌드 인라인 처리. 큰 책(100p)은 60s 초과 가능 → 300s.
+// PDF 빌드는 waitUntil 백그라운드로 분리 — 응답은 즉시, 함수 수명은 빌드가 끝날 때까지
+// (최대 300s) 유지된다. 100p 사진북 빌드 시간 확보용.
 export const maxDuration = 300;
 
 const BodySchema = z.object({
@@ -32,9 +34,10 @@ const BodySchema = z.object({
  *   1. requireActiveUser + orders 소유권 + status === "pending" + 자체 amount 일치.
  *   2. 토스 confirm API 호출 (Authorization Basic).
  *   3. 토스 응답 amount 도 검증 → orders UPDATE: status='paid', toss_payment_key, paid_at=now().
- *   4. PDF 빌드 잡 (인라인) — `pdfs/${userId}/${orderId}/cover.pdf`, `interior.pdf`.
+ *   4. PDF 빌드 잡 — enqueue 후 waitUntil 백그라운드 실행 (응답 비블로킹).
+ *      산출: `pdfs/${userId}/${orderId}/cover.pdf`, `interior.pdf`.
  *      성공 시 orders UPDATE: cover_pdf_key, interior_pdf_key.
- *      실패 시 status='paid' 유지하고 에러를 응답에 별도 표기 (재시도는 사용자/관리자가).
+ *      실패 시 status='paid' 유지 — pdf_build_jobs 행 기준 관리자 재시도.
  *   5. 응답: { orderId, status, redirectUrl }.
  *
  * 멱등성:
@@ -270,34 +273,47 @@ export async function POST(req: Request) {
       }
     }
 
-    // 5) PDF 빌드 잡 — 영속 큐(pdf_build_jobs) 에 등록 후 즉시 실행.
-    //    실패해도 결제는 살려둠. 잡 행이 남아있어 관리자가 재시도 가능.
-    const buildResult = await enqueueAndRunPdfJob(
-      {
+    // 5) PDF 빌드 잡 — 영속 큐(pdf_build_jobs) 등록 후 **백그라운드 실행**.
+    //    - 등록만 동기로 하고 runPdfJob 은 waitUntil 로 분리 → confirm 응답은
+    //      빌드를 기다리지 않는다 (100p 사진북 빌드 수 분 → 기존 인라인 await 는
+    //      클라 타임아웃 + UX 블로킹 유발).
+    //    - 실패해도 결제는 살려둠. pdf_build_jobs 행이 남아 관리자가 재시도 가능
+    //      (admin orders 의 retry-pdf / rebuild-pdf).
+    let pdfJobId: string | null = null;
+    try {
+      const { jobId } = await enqueuePdfJob({
         orderId: order.id,
         projectId: order.project_id,
         userId: order.user_id,
         target: "all",
-      },
-      {
-        signUrls: false,
-        uploadPath: (key) => `${order.user_id}/${order.id}/${key}`,
-        meta: { author: "100p_books" },
-        onSuccess: async ({ coverKey, interiorKey }) => {
-          if (!coverKey && !interiorKey) return;
-          const patch: Record<string, unknown> = {};
-          if (coverKey) patch.cover_pdf_key = coverKey;
-          if (interiorKey) patch.interior_pdf_key = interiorKey;
-          await admin.from("orders").update(patch).eq("id", order.id);
-        },
-      },
-    );
-
-    if (!buildResult.ok) {
+      });
+      pdfJobId = jobId;
+      waitUntil(
+        runPdfJob(jobId, {
+          signUrls: false,
+          uploadPath: (key) => `${order.user_id}/${order.id}/${key}`,
+          meta: { author: "100p_books" },
+          onSuccess: async ({ coverKey, interiorKey }) => {
+            if (!coverKey && !interiorKey) return;
+            const patch: Record<string, unknown> = {};
+            if (coverKey) patch.cover_pdf_key = coverKey;
+            if (interiorKey) patch.interior_pdf_key = interiorKey;
+            await admin.from("orders").update(patch).eq("id", order.id);
+          },
+        }).catch((e) => {
+          console.error(
+            "[payments/confirm] background PDF build failed for order",
+            order.id,
+            e instanceof Error ? e.message : String(e),
+          );
+        }),
+      );
+    } catch (e) {
+      // enqueue 자체 실패 — 결제는 유지, 관리자 rebuild-pdf 로 복구.
       console.error(
-        "[payments/confirm] PDF build failed for order",
+        "[payments/confirm] PDF job enqueue failed for order",
         order.id,
-        buildResult.error,
+        e instanceof Error ? e.message : String(e),
       );
     }
 
@@ -365,8 +381,10 @@ export async function POST(req: Request) {
       orderId: order.id,
       status: "paid" as const,
       redirectUrl: `/order/${order.id}/success`,
-      pdfError: buildResult.ok ? null : buildResult.error ?? "PDF 빌드 실패",
-      pdfJobId: buildResult.jobId || null,
+      // PDF 는 백그라운드 빌드 — 응답 시점엔 결과를 모른다.
+      // enqueue 실패 시에만 pdfError 로 안내 (관리자 재처리 대상).
+      pdfError: pdfJobId ? null : "PDF 작업 등록 실패",
+      pdfJobId,
     });
   } catch (err) {
     return failFromError(err);
