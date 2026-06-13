@@ -210,6 +210,27 @@ export interface Gift {
   created_at: string;
 }
 
+/**
+ * Storige 인쇄 검증(CMYK/재단선/해상도) 단건 결과 — worker-job 폴링 산출.
+ * 단일 진실원본은 PageDoc(DB) 이고 PDF/검증은 파생물이므로 캐시 성격.
+ */
+export interface StorigeValidationResult {
+  /** worker-job status: COMPLETED | FIXABLE | FAILED | PROCESSING | ERROR 등. */
+  status: string;
+  jobId?: string;
+  issues?: unknown[];
+  warnings?: unknown[];
+  /** 원본 응답 일부(디버그용). */
+  raw?: unknown;
+}
+
+/** orders.storige_validation 컬럼 캐시 — 표지/내지 각각의 검증 결과. */
+export interface StorigeValidationCache {
+  cover?: StorigeValidationResult;
+  interior?: StorigeValidationResult;
+  validatedAt?: string;
+}
+
 export interface Order {
   id: string;
   project_id: string;
@@ -220,8 +241,17 @@ export interface Order {
   status: OrderStatus;
   toss_payment_key: string | null;
   toss_order_id: string | null;
+  /**
+   * 레거시 Supabase `pdfs` 버킷 storage path (전환 이전 주문).
+   * 신규 주문은 storige_*_file_id 를 사용하며 이 컬럼은 마이그레이션 기간 동안만 유지.
+   */
   cover_pdf_key: string | null;
   interior_pdf_key: string | null;
+  /** Storige 파일 ID — 신규 주문 PDF 저장처(POST /files/upload/external 의 id). */
+  storige_cover_file_id: string | null;
+  storige_interior_file_id: string | null;
+  /** Storige 인쇄 검증 결과 캐시 (표지/내지). */
+  storige_validation: StorigeValidationCache | null;
   paid_at: string | null;
   tracking_no: string | null;
   tracking_carrier: string | null;

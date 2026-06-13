@@ -5,8 +5,10 @@ import type { BookSize } from "@/lib/db/types";
 import { buildDefaultCoverDoc } from "@/lib/layout/cover";
 import { isPageDoc, type PageDoc } from "@/lib/layout/types";
 
+import type { StorigeValidationResult } from "@/lib/db/types";
+import { uploadPdf, validatePdf, STORIGE_ENABLED } from "@/lib/storige/client";
+
 import { buildCoverPdf, buildInteriorPdf, type BuildProgress } from "./build";
-import { PDFS_BUCKET, PDF_SIGNED_TTL_SEC } from "./constants";
 import { collectFontFamilies, registerProjectFonts } from "./fonts";
 import { createJob, updateJob, type PdfJob } from "./jobs";
 import { createPhotoResolver } from "./photos";
@@ -18,9 +20,12 @@ import { createResourceResolver } from "./resources";
  * 양쪽에서 공유하는 빌드 헬퍼.
  *
  *   - DB 에서 project + book_size + pages + cover_json 을 로드.
- *   - PNG 렌더 → pdf-lib 합성.
- *   - Storage 에 업로드 (key 는 호출자가 결정).
- *   - signed URL 은 옵션 — 결제 confirm 케이스는 굳이 필요 없음.
+ *   - 렌더 → pdf-lib 합성 (자체 렌더러 — 변경 없음).
+ *   - **Storige 인쇄 백엔드에 업로드** (POST /files/upload/external → fileId).
+ *   - (권장) Storige 인쇄 검증(CMYK/재단선/해상도) 호출 → 결과 캐시.
+ *
+ * 저장처는 Supabase `pdfs` 버킷 → Storige 로 일원화됨. 다운로드는 서버 프록시
+ * (/api/orders/[id]/download/[kind]) 가 fileId 로 Storige 에서 스트리밍한다.
  *
  * 호출자는 인증/소유권 검사를 미리 끝낸 뒤 본 함수를 호출한다.
  * (RLS 우회 admin client 를 사용하므로 프로젝트 ID 만으로 데이터에 접근.)
@@ -34,14 +39,14 @@ export interface RunProjectPdfBuildArgs {
   userId: string;
   target: BuildTarget;
   /**
-   * Storage path 빌더. key 는 "cover.pdf" | "interior.pdf" 중 하나.
-   * 기본 — `${userId}/${projectId}/${key}`.
+   * 논리 파일명 빌더 (Storige multipart filename + 감사 로그용). key 는
+   * "cover.pdf" | "interior.pdf". 기본 — `${userId}/${projectId}/${key}`.
    *
-   * 결제 confirm 케이스에서는 `pdfs/${userId}/${orderId}/${key}` 로 저장하기 위해
-   * 호출자가 path 를 명시한다.
+   * Storige 는 저장 경로를 받지 않으므로(파일 식별은 fileId) 이 값은 더 이상
+   * 저장 위치를 결정하지 않는다. 호환을 위해 시그니처는 유지한다.
    */
   uploadPath?: (key: "cover.pdf" | "interior.pdf") => string;
-  /** signedUrl 발급 여부 (default true). */
+  /** (레거시) signedUrl 발급 플래그 — Storige 전환 후 미사용. 호환 위해 유지. */
   signUrls?: boolean;
   /** 사용자 친화적 다운로드 파일명 prefix. 기본은 project.title 슬러그. */
   downloadPrefix?: string;
@@ -53,11 +58,12 @@ export interface RunProjectPdfBuildArgs {
 
 export interface RunProjectPdfBuildResult {
   jobId: string;
-  /** Storage 키 (signedUrl 과 별개로 DB 저장용). */
+  /** Storige 파일 ID (orders.storige_cover_file_id / pdf_build_jobs 추적용). */
   coverKey?: string;
   interiorKey?: string;
-  coverUrl?: string;
-  interiorUrl?: string;
+  /** Storige 인쇄 검증 결과 (best-effort). */
+  coverValidation?: StorigeValidationResult;
+  interiorValidation?: StorigeValidationResult;
   durationMs: number;
 }
 
@@ -176,19 +182,31 @@ export async function runProjectPdfBuild(
   });
   const resourceResolver = createResourceResolver();
 
-  // 7) 빌드 + 업로드
+  // 7) 빌드 + 업로드 (Storige)
   const result: {
     coverKey?: string;
     interiorKey?: string;
-    coverUrl?: string;
-    interiorUrl?: string;
+    coverValidation?: StorigeValidationResult;
+    interiorValidation?: StorigeValidationResult;
   } = {};
   let cumulativeDone = 0;
-  const signUrls = args.signUrls ?? true;
   const uploadPath =
     args.uploadPath ??
     ((key) => `${args.userId}/${args.projectId}/${key}`);
   const downloadPrefix = args.downloadPrefix ?? slug(project.title ?? "book");
+  // STORIGE_VALIDATE=false 로 인쇄 검증 비활성 가능 (기본 활성).
+  const doValidate = process.env.STORIGE_VALIDATE !== "false";
+
+  // Storige 미설정이면 빌드 잡을 실패로 남겨(throw) 재시도 가능하게 한다.
+  //   - 결제는 이미 살아있고(confirm), pdf_build_jobs 행이 남아 admin 이 재시도.
+  //   - fail-open(무시)하면 결제 주문에 PDF 가 영영 없게 되므로 금지.
+  if (!STORIGE_ENABLED) {
+    updateJob(job.id, {
+      status: "failed",
+      error: "STORIGE_API_KEY 미설정 — PDF 업로드 불가",
+    });
+    throw new PdfBuildError("STORIGE_API_KEY 가 설정되지 않았습니다.");
+  }
 
   const reportProgress = (p: BuildProgress) => {
     if (p.phase !== "render") return;
@@ -214,28 +232,30 @@ export async function runProjectPdfBuild(
       });
       cumulativeDone += pageDocs.length;
 
-      const interiorKey = uploadPath("interior.pdf");
-      const { error: upErr } = await admin.storage
-        .from(PDFS_BUCKET)
-        .upload(interiorKey, interiorBuf, {
-          contentType: "application/pdf",
-          upsert: true,
-        });
-      if (upErr) throw new PdfBuildError(`interior upload: ${upErr.message}`);
-      result.interiorKey = interiorKey;
+      // Storige 업로드 (내지 = content)
+      const up = await uploadPdf(interiorBuf, {
+        type: "content",
+        filename: `${downloadPrefix}-interior.pdf`,
+      }).catch((e) => {
+        throw new PdfBuildError(
+          `interior upload (Storige): ${e instanceof Error ? e.message : String(e)}`,
+        );
+      });
+      result.interiorKey = up.id;
+      void uploadPath; // 호환 시그니처 — Storige 는 경로를 받지 않음
 
-      if (signUrls) {
-        const { data: signed, error: signErr } = await admin.storage
-          .from(PDFS_BUCKET)
-          .createSignedUrl(interiorKey, PDF_SIGNED_TTL_SEC, {
-            download: `${downloadPrefix}-interior.pdf`,
-          });
-        if (signErr || !signed?.signedUrl) {
-          throw new PdfBuildError(
-            `interior sign: ${signErr?.message ?? "no url"}`,
-          );
-        }
-        result.interiorUrl = signed.signedUrl;
+      // 인쇄 검증 (best-effort — 실패해도 빌드/주문을 막지 않음)
+      if (doValidate) {
+        result.interiorValidation = await validatePdf({
+          fileId: up.id,
+          fileType: "content",
+          orderOptions: {
+            size: { width: bookSize.width_mm, height: bookSize.height_mm },
+            pages: pageDocs.length,
+            binding: "perfect",
+            bleed: 2,
+          },
+        });
       }
     }
 
@@ -255,43 +275,42 @@ export async function runProjectPdfBuild(
       });
       cumulativeDone += 1;
 
-      const coverKey = uploadPath("cover.pdf");
-      const { error: upErr } = await admin.storage
-        .from(PDFS_BUCKET)
-        .upload(coverKey, coverBuf, {
-          contentType: "application/pdf",
-          upsert: true,
-        });
-      if (upErr) throw new PdfBuildError(`cover upload: ${upErr.message}`);
-      result.coverKey = coverKey;
+      // Storige 업로드 (표지 = cover)
+      const up = await uploadPdf(coverBuf, {
+        type: "cover",
+        filename: `${downloadPrefix}-cover.pdf`,
+      }).catch((e) => {
+        throw new PdfBuildError(
+          `cover upload (Storige): ${e instanceof Error ? e.message : String(e)}`,
+        );
+      });
+      result.coverKey = up.id;
 
-      if (signUrls) {
-        const { data: signed, error: signErr } = await admin.storage
-          .from(PDFS_BUCKET)
-          .createSignedUrl(coverKey, PDF_SIGNED_TTL_SEC, {
-            download: `${downloadPrefix}-cover.pdf`,
-          });
-        if (signErr || !signed?.signedUrl) {
-          throw new PdfBuildError(
-            `cover sign: ${signErr?.message ?? "no url"}`,
-          );
-        }
-        result.coverUrl = signed.signedUrl;
+      if (doValidate) {
+        result.coverValidation = await validatePdf({
+          fileId: up.id,
+          fileType: "cover",
+          orderOptions: {
+            size: { width: coverDoc.widthMm, height: coverDoc.heightMm },
+            pages: interiorPageCount,
+            binding: "perfect",
+            bleed: coverDoc.bleedMm ?? 2,
+          },
+        });
       }
     }
 
     updateJob(job.id, {
       status: "done",
       progress: { done: totalSteps, total: totalSteps, phase: "compose" },
-      result: { coverUrl: result.coverUrl, interiorUrl: result.interiorUrl },
     });
 
     return {
       jobId: job.id,
       coverKey: result.coverKey,
       interiorKey: result.interiorKey,
-      coverUrl: result.coverUrl,
-      interiorUrl: result.interiorUrl,
+      coverValidation: result.coverValidation,
+      interiorValidation: result.interiorValidation,
       durationMs: Date.now() - start,
     };
   } catch (e) {

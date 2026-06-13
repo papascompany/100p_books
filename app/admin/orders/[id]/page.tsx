@@ -5,7 +5,6 @@ import StatusBadge from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { createAdminSupabase } from "@/lib/db/admin";
 import type { OrderAddress, OrderStatus } from "@/lib/db/types";
-import { PDFS_BUCKET, PDF_SIGNED_TTL_SEC } from "@/lib/pdf/constants";
 
 import OrderActions from "./OrderActions";
 
@@ -33,6 +32,8 @@ interface OrderRow {
   toss_order_id: string | null;
   cover_pdf_key: string | null;
   interior_pdf_key: string | null;
+  storige_cover_file_id: string | null;
+  storige_interior_file_id: string | null;
   paid_at: string | null;
   shipped_at: string | null;
   delivered_at: string | null;
@@ -57,7 +58,7 @@ export default async function AdminOrderDetailPage({
   const { data, error } = await admin
     .from("orders")
     .select(
-      "id, project_id, user_id, qty, amount, address, status, toss_payment_key, toss_order_id, cover_pdf_key, interior_pdf_key, paid_at, shipped_at, delivered_at, tracking_no, tracking_carrier, created_at, updated_at, projects(id, title, book_sizes(id, name, width_mm, height_mm)), profiles(id, email, display_name)",
+      "id, project_id, user_id, qty, amount, address, status, toss_payment_key, toss_order_id, cover_pdf_key, interior_pdf_key, storige_cover_file_id, storige_interior_file_id, paid_at, shipped_at, delivered_at, tracking_no, tracking_carrier, created_at, updated_at, projects(id, title, book_sizes(id, name, width_mm, height_mm)), profiles(id, email, display_name)",
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -106,25 +107,15 @@ export default async function AdminOrderDetailPage({
     .limit(1)
     .maybeSingle();
 
-  // PDF signed URL (있을 때만)
-  let coverUrl: string | null = null;
-  let interiorUrl: string | null = null;
-  if (o.cover_pdf_key) {
-    const { data: signed } = await admin.storage
-      .from(PDFS_BUCKET)
-      .createSignedUrl(o.cover_pdf_key, PDF_SIGNED_TTL_SEC, {
-        download: `${o.projects?.title ?? "book"}-cover.pdf`,
-      });
-    coverUrl = signed?.signedUrl ?? null;
-  }
-  if (o.interior_pdf_key) {
-    const { data: signed } = await admin.storage
-      .from(PDFS_BUCKET)
-      .createSignedUrl(o.interior_pdf_key, PDF_SIGNED_TTL_SEC, {
-        download: `${o.projects?.title ?? "book"}-interior.pdf`,
-      });
-    interiorUrl = signed?.signedUrl ?? null;
-  }
+  // PDF 다운로드 — 서버 프록시 경유 (admin 은 상태 무관 다운로드 가능).
+  const coverUrl =
+    o.storige_cover_file_id || o.cover_pdf_key
+      ? `/api/orders/${o.id}/download/cover`
+      : null;
+  const interiorUrl =
+    o.storige_interior_file_id || o.interior_pdf_key
+      ? `/api/orders/${o.id}/download/interior`
+      : null;
 
   return (
     <div className="space-y-5">

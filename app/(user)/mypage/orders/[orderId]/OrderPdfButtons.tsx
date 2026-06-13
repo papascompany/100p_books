@@ -10,8 +10,9 @@ export interface OrderPdfButtonsProps {
 }
 
 /**
- * 주문 상세에서 PDF 다운로드 버튼 — 서버에서 미리 발급한 signedUrl 을 바로 사용.
- * URL TTL 이 지난 경우(1시간 이상 페이지 머무를 때) 페이지 새로고침을 안내.
+ * 주문 상세 PDF 다운로드 버튼.
+ * href 는 서버 프록시 경로(/api/orders/:id/download/:kind) — 요청 시점에 서버가
+ * 인증 후 Storige(또는 레거시 Supabase)에서 스트리밍하므로 TTL 만료가 없다.
  */
 export default function OrderPdfButtons(props: OrderPdfButtonsProps) {
   const hasAny = !!(props.initialCoverUrl || props.initialInteriorUrl);

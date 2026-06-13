@@ -30,11 +30,18 @@ export function ptToPx(pt: number, dpi: number = PRINT_DPI): number {
   return (pt * dpi) / PT_PER_INCH;
 }
 
-/** PDF 산출 Storage 버킷. */
+/**
+ * (레거시) PDF 산출 Supabase Storage 버킷.
+ * 저장처는 Storige 로 일원화됨 — 이 버킷은 전환 이전 주문의 다운로드 fallback +
+ * 일회성 마이그레이션 스크립트(scripts/migrate-pdfs-to-storige.ts)에서만 사용.
+ */
 export const PDFS_BUCKET = "pdfs";
 
-/** PDF 다운로드 signed URL TTL (1시간). */
+/** (레거시) Supabase signed URL TTL (1시간) — fallback 다운로드용. */
 export const PDF_SIGNED_TTL_SEC = 3600;
+
+/** 배송 완료 후 Storige PDF 보존 일수 (env STORIGE_RETENTION_DAYS override). */
+export const STORIGE_RETENTION_DAYS_DEFAULT = 90;
 
 /** PNG 렌더 동시성 (메모리 보호). */
 export const RENDER_CONCURRENCY = 4;

@@ -5,6 +5,7 @@ import { withAdmin } from "@/lib/admin/auth";
 import { logAdminAction } from "@/lib/admin/audit";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { retryFailedJob } from "@/lib/pdf/job-runner";
+import { storigeOrderPatch } from "@/lib/storige/order-fields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -90,12 +91,16 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
       signUrls: false,
       uploadPath: (key) => `${order.user_id}/${order.id}/${key}`,
       meta: { author: "100p_books" },
-      onSuccess: async ({ coverKey, interiorKey }) => {
-        if (!coverKey && !interiorKey) return;
-        const patch: Record<string, unknown> = {};
-        if (coverKey) patch.cover_pdf_key = coverKey;
-        if (interiorKey) patch.interior_pdf_key = interiorKey;
-        await admin.from("orders").update(patch).eq("id", order.id);
+      onSuccess: async (r) => {
+        const patch = storigeOrderPatch(r, new Date().toISOString());
+        if (Object.keys(patch).length === 0) return;
+        const { error: upErr } = await admin
+          .from("orders")
+          .update(patch)
+          .eq("id", order.id);
+        if (upErr) {
+          throw new Error(`orders storige update failed: ${upErr.message}`);
+        }
       },
     });
 

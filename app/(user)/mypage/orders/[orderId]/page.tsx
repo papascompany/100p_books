@@ -6,7 +6,6 @@ import { GiftDialog } from "@/components/orders/GiftDialog";
 import ReviewDialog from "@/components/reviews/ReviewDialog";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
-import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { OrderAddress, OrderStatus } from "@/lib/db/types";
 import {
@@ -14,7 +13,6 @@ import {
   ORDER_STATUS_BADGE,
   ORDER_STATUS_LABEL,
 } from "@/lib/orders/state";
-import { PDFS_BUCKET, PDF_SIGNED_TTL_SEC } from "@/lib/pdf/constants";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -43,6 +41,8 @@ interface OrderDetailRow {
   toss_order_id: string | null;
   cover_pdf_key: string | null;
   interior_pdf_key: string | null;
+  storige_cover_file_id: string | null;
+  storige_interior_file_id: string | null;
   paid_at: string | null;
   created_at: string;
   projects: {
@@ -65,7 +65,7 @@ export default async function OrderDetailPage({ params }: PageProps) {
   const { data: row, error } = await supabase
     .from("orders")
     .select(
-      "id, project_id, qty, amount, address, status, toss_payment_key, toss_order_id, cover_pdf_key, interior_pdf_key, paid_at, created_at, projects(id, title, book_sizes(name)), reviews(id)",
+      "id, project_id, qty, amount, address, status, toss_payment_key, toss_order_id, cover_pdf_key, interior_pdf_key, storige_cover_file_id, storige_interior_file_id, paid_at, created_at, projects(id, title, book_sizes(name)), reviews(id)",
     )
     .eq("id", params.orderId)
     .maybeSingle();
@@ -88,28 +88,21 @@ export default async function OrderDetailPage({ params }: PageProps) {
     order.status === "shipped" || order.status === "delivered";
   const hasReview = (order.reviews?.length ?? 0) > 0;
 
-  // PDF signedUrl 발급 (paid 이상일 때만)
-  let coverUrl: string | null = null;
-  let interiorUrl: string | null = null;
-  if (canDownloadPdfs(order.status)) {
-    const admin = createAdminSupabase();
-    if (order.cover_pdf_key) {
-      const { data: signed } = await admin.storage
-        .from(PDFS_BUCKET)
-        .createSignedUrl(order.cover_pdf_key, PDF_SIGNED_TTL_SEC, {
-          download: `${order.projects?.title ?? "book"}-cover.pdf`,
-        });
-      coverUrl = signed?.signedUrl ?? null;
-    }
-    if (order.interior_pdf_key) {
-      const { data: signed } = await admin.storage
-        .from(PDFS_BUCKET)
-        .createSignedUrl(order.interior_pdf_key, PDF_SIGNED_TTL_SEC, {
-          download: `${order.projects?.title ?? "book"}-interior.pdf`,
-        });
-      interiorUrl = signed?.signedUrl ?? null;
-    }
-  }
+  // PDF 다운로드 — 서버 프록시 경유 (Storige fileId 또는 레거시 키 존재 시).
+  // 실제 인증/스트리밍은 /api/orders/:id/download/:kind 에서 수행.
+  const canDownload = canDownloadPdfs(order.status);
+  const hasCover = !!(order.storige_cover_file_id || order.cover_pdf_key);
+  const hasInterior = !!(
+    order.storige_interior_file_id || order.interior_pdf_key
+  );
+  const coverUrl =
+    canDownload && hasCover
+      ? `/api/orders/${order.id}/download/cover`
+      : null;
+  const interiorUrl =
+    canDownload && hasInterior
+      ? `/api/orders/${order.id}/download/interior`
+      : null;
 
   return (
     <div className="container py-6 md:py-10">

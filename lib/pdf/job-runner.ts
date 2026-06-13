@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createAdminSupabase } from "@/lib/db/admin";
+import type { StorigeValidationResult } from "@/lib/db/types";
 
 import { runProjectPdfBuild, PdfBuildError, type BuildTarget } from "./build-job";
 
@@ -43,16 +44,21 @@ export interface PdfBuildJobRow {
 }
 
 interface RunOptions {
-  /** 결제 confirm 등에서 결과 키를 orders 에 반영하기 위한 콜백. */
+  /**
+   * 결제 confirm/admin 등에서 결과를 orders 에 반영하기 위한 콜백.
+   * coverKey/interiorKey 는 Storige 파일 ID. *Validation 은 인쇄 검증 결과.
+   */
   onSuccess?: (result: {
     coverKey?: string;
     interiorKey?: string;
+    coverValidation?: StorigeValidationResult;
+    interiorValidation?: StorigeValidationResult;
   }) => Promise<void>;
   /** PDF 메타. */
   meta?: { title?: string; author?: string };
   /** uploadPath 빌더. */
   uploadPath?: (key: "cover.pdf" | "interior.pdf") => string;
-  /** signed URL 발급 여부 (기본 false — 빌드 잡은 키만 보존). */
+  /** (레거시) signed URL 플래그 — Storige 전환 후 미사용. 호환 위해 유지. */
   signUrls?: boolean;
 }
 
@@ -180,6 +186,20 @@ export async function runPdfJob(
       meta: opts.meta,
     });
 
+    // onSuccess 를 **success 마킹 전에** 실행한다.
+    //   - orders.storige_*_file_id 반영이 실패하면(throw) 아래 success 패치에
+    //     도달하지 못하고 outer catch 가 잡을 'failed' 로 마킹 → admin 재시도 가능.
+    //   - 그렇지 않으면 PDF 는 Storige 에 올라갔는데 주문엔 fileId 가 없는
+    //     불일치 상태로 'success' 가 박혀 복구가 막힌다.
+    if (opts.onSuccess) {
+      await opts.onSuccess({
+        coverKey: result.coverKey,
+        interiorKey: result.interiorKey,
+        coverValidation: result.coverValidation,
+        interiorValidation: result.interiorValidation,
+      });
+    }
+
     // success 갱신
     const patch: Record<string, unknown> = {
       status: "success",
@@ -198,20 +218,6 @@ export async function runPdfJob(
       .from("pdf_build_jobs")
       .update(patch)
       .eq("id", jobId);
-
-    if (opts.onSuccess) {
-      try {
-        await opts.onSuccess({
-          coverKey: result.coverKey,
-          interiorKey: result.interiorKey,
-        });
-      } catch (e) {
-        console.warn(
-          "[pdf/job-runner] onSuccess callback failed:",
-          e instanceof Error ? e.message : String(e),
-        );
-      }
-    }
 
     const updated = await getPdfJob(jobId);
     return updated ?? job;

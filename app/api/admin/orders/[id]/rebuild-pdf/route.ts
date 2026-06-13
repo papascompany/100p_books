@@ -7,6 +7,7 @@ import { withAdmin } from "@/lib/admin/auth";
 import { logAdminAction } from "@/lib/admin/audit";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { runProjectPdfBuild } from "@/lib/pdf/build-job";
+import { storigeOrderPatch } from "@/lib/storige/order-fields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,9 +22,8 @@ const BodySchema = z
 /**
  * POST /api/admin/orders/:id/rebuild-pdf
  *
- *   - 주문에 연결된 프로젝트의 표지/내지 PDF 를 재생성.
- *   - 기존 cover_pdf_key/interior_pdf_key 와 동일 path 로 덮어쓰기 (upsert).
- *   - 새 키 / 사이즈는 변하지 않으므로 DB 갱신은 키가 비어 있을 때만 수행.
+ *   - 주문에 연결된 프로젝트의 표지/내지 PDF 를 재생성 → Storige 업로드.
+ *   - 재빌드는 새 fileId 를 낳으므로 orders.storige_*_file_id 를 항상 갱신.
  */
 export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
   const raw = (await req.json().catch(() => ({}))) as unknown;
@@ -50,9 +50,9 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
   if (getErr) return fail("ORDER_QUERY_FAILED", getErr.message, 500);
   if (!order) return fail("NOT_FOUND", "주문을 찾을 수 없습니다.", 404);
 
-  // 기존 키 path 와 동일 위치에 덮어쓰기. 기존 키가 없으면 표준 경로 사용.
   const orderId = order.id;
   const userId = order.user_id;
+  // Storige 는 저장 경로를 받지 않음 — uploadPath 는 파일명 컨텍스트로만 쓰인다.
   const standardPath = (k: "cover.pdf" | "interior.pdf") =>
     `${userId}/${orderId}/${k}`;
 
@@ -60,25 +60,19 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
     projectId: order.project_id,
     userId: order.user_id,
     target,
-    uploadPath: (k) => {
-      if (k === "cover.pdf" && order.cover_pdf_key) return order.cover_pdf_key;
-      if (k === "interior.pdf" && order.interior_pdf_key)
-        return order.interior_pdf_key;
-      return standardPath(k);
-    },
-    signUrls: false,
+    uploadPath: standardPath,
   });
 
-  // 키가 비어 있던 경우에만 DB 갱신
-  const update: Record<string, string> = {};
-  if (!order.cover_pdf_key && result.coverKey) {
-    update.cover_pdf_key = result.coverKey;
-  }
-  if (!order.interior_pdf_key && result.interiorKey) {
-    update.interior_pdf_key = result.interiorKey;
-  }
-  if (Object.keys(update).length > 0) {
-    await admin.from("orders").update(update).eq("id", orderId);
+  // 재빌드는 새 fileId 를 낳으므로 storige 컬럼을 항상 갱신.
+  const patch = storigeOrderPatch(result, new Date().toISOString());
+  if (Object.keys(patch).length > 0) {
+    const { error: upErr } = await admin
+      .from("orders")
+      .update(patch)
+      .eq("id", orderId);
+    if (upErr) {
+      return fail("ORDER_UPDATE_FAILED", upErr.message, 500);
+    }
   }
 
   await logAdminAction({

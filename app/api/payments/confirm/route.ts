@@ -12,6 +12,7 @@ import { assertTransition } from "@/lib/orders/state";
 import { confirmTossPayment, TossError } from "@/lib/payments/toss";
 import { enqueuePdfJob, runPdfJob } from "@/lib/pdf/job-runner";
 import { REFERRAL_REWARD } from "@/lib/referrals/code";
+import { storigeOrderPatch } from "@/lib/storige/order-fields";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -293,12 +294,17 @@ export async function POST(req: Request) {
           signUrls: false,
           uploadPath: (key) => `${order.user_id}/${order.id}/${key}`,
           meta: { author: "100p_books" },
-          onSuccess: async ({ coverKey, interiorKey }) => {
-            if (!coverKey && !interiorKey) return;
-            const patch: Record<string, unknown> = {};
-            if (coverKey) patch.cover_pdf_key = coverKey;
-            if (interiorKey) patch.interior_pdf_key = interiorKey;
-            await admin.from("orders").update(patch).eq("id", order.id);
+          onSuccess: async (r) => {
+            const patch = storigeOrderPatch(r, new Date().toISOString());
+            if (Object.keys(patch).length === 0) return;
+            // 실패 시 throw — job-runner 가 잡을 failed 로 남겨 재시도 가능하게.
+            const { error: upErr } = await admin
+              .from("orders")
+              .update(patch)
+              .eq("id", order.id);
+            if (upErr) {
+              throw new Error(`orders storige update failed: ${upErr.message}`);
+            }
           },
         }).catch((e) => {
           console.error(
