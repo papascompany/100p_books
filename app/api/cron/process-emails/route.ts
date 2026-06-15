@@ -18,20 +18,19 @@ export const maxDuration = 60;
  */
 export async function GET(req: Request) {
   try {
+    // CRON_SECRET 이 설정되면 항상 Bearer 검증을 강제한다 (x-vercel-cron 헤더
+    // 단독 신뢰 회피 — 방어 심화). Vercel Cron 은 CRON_SECRET 존재 시
+    // Authorization: Bearer 를 자동 부여하므로 실제 cron 은 그대로 통과.
+    // CRON_SECRET 미설정 시에만 x-vercel-cron 으로 fallback (수동 호출 차단).
     const auth = req.headers.get("authorization") ?? "";
-    const expected = `Bearer ${process.env.CRON_SECRET ?? ""}`;
+    const secret = process.env.CRON_SECRET;
     const isVercelCron = req.headers.get("x-vercel-cron") === "1";
-
-    // CRON_SECRET 미설정이면 외부 호출 거부 (Vercel Cron 만 통과).
-    if (!process.env.CRON_SECRET && !isVercelCron) {
-      return fail(
-        "CRON_NOT_CONFIGURED",
-        "CRON_SECRET 이 설정되지 않았습니다.",
-        500,
-      );
-    }
-    if (!isVercelCron && process.env.CRON_SECRET && auth !== expected) {
-      return fail("UNAUTHORIZED", "인증 헤더가 올바르지 않습니다.", 401);
+    if (secret) {
+      if (auth !== `Bearer ${secret}`) {
+        return fail("UNAUTHORIZED", "인증 헤더가 올바르지 않습니다.", 401);
+      }
+    } else if (!isVercelCron) {
+      return fail("CRON_NOT_CONFIGURED", "CRON_SECRET 이 설정되지 않았습니다.", 500);
     }
 
     const start = Date.now();
