@@ -9,8 +9,12 @@ import type { StorigeValidationResult } from "@/lib/db/types";
  * 유일한 외부 API 경계. 모든 호출은 서버(Next API route/빌드 잡)에서만 일어나며
  * 인증 헤더는 `X-API-Key`.
  *
+ * 인증 키 (2종 — Storige 가 계열별로 분리 발급):
+ *   - STORIGE_API_KEY        : "편집기" 키 — /files/* (업로드·다운로드·삭제)
+ *   - STORIGE_WORKER_API_KEY : "워커" 키   — /worker-jobs/* (인쇄 검증)
+ *
  * 보안:
- *   - STORIGE_API_KEY 는 서버 env 전용 — 절대 NEXT_PUBLIC / 브라우저 노출 금지.
+ *   - 두 키 모두 서버 env 전용 — 절대 NEXT_PUBLIC / 브라우저 노출 금지.
  *   - fileId 는 추측 불가하지만, 다운로드는 항상 서버 프록시 경유(클라 노출 최소화).
  *
  * 설계 메모:
@@ -22,10 +26,15 @@ const DEFAULT_BASE = "https://api.papascompany.co.kr/api";
 
 /** 끝 슬래시 제거한 base URL. env 미설정 시 고정 상수 사용. */
 const BASE = (process.env.STORIGE_API_URL ?? DEFAULT_BASE).replace(/\/+$/, "");
-const KEY = process.env.STORIGE_API_KEY ?? "";
+/** 편집기 키 — /files/* (업로드/다운로드/삭제). */
+const EDITOR_KEY = process.env.STORIGE_API_KEY ?? "";
+/** 워커 키 — /worker-jobs/* (인쇄 검증). */
+const WORKER_KEY = process.env.STORIGE_WORKER_API_KEY ?? "";
 
-/** 업로드/검증/다운로드가 가능한 상태인지 (API 키 존재 여부). */
-export const STORIGE_ENABLED = KEY.length > 0;
+/** 파일 업로드/다운로드(편집기 키)가 가능한 상태인지. PDF 저장의 핵심. */
+export const STORIGE_ENABLED = EDITOR_KEY.length > 0;
+/** 인쇄 검증(워커 키)이 가능한 상태인지. 없으면 검증은 건너뛴다(주문은 진행). */
+export const STORIGE_VALIDATION_ENABLED = WORKER_KEY.length > 0;
 
 /**
  * Storige 업로드 최대 크기 (계약상 기본 100MB). 초과 시 업로드 전 차단.
@@ -47,17 +56,21 @@ export class StorigeError extends Error {
   }
 }
 
-function assertEnabled(): void {
+function assertEditorEnabled(): void {
   if (!STORIGE_ENABLED) {
     throw new StorigeError(
-      "STORIGE_API_KEY 가 설정되지 않았습니다. (Storige 비활성)",
+      "STORIGE_API_KEY(편집기 키) 가 설정되지 않았습니다. (Storige 비활성)",
       503,
     );
   }
 }
 
-function authHeaders(extra?: Record<string, string>): Record<string, string> {
-  return { "X-API-Key": KEY, ...(extra ?? {}) };
+/** X-API-Key 헤더 — 호출 계열에 맞는 키를 넣는다. */
+function authHeaders(
+  key: string,
+  extra?: Record<string, string>,
+): Record<string, string> {
+  return { "X-API-Key": key, ...(extra ?? {}) };
 }
 
 // =====================================================================
@@ -93,7 +106,7 @@ export async function uploadPdf(
   buf: Buffer,
   opts: UploadPdfOpts,
 ): Promise<StorigeUploadResult> {
-  assertEnabled();
+  assertEditorEnabled();
 
   if (buf.byteLength > STORIGE_MAX_UPLOAD_BYTES) {
     // 계약상 100MB 초과 — 업로드가 413 으로 거부될 가능성이 높음. 명확한 에러로 표면화.
@@ -119,7 +132,7 @@ export async function uploadPdf(
   try {
     resp = await fetch(`${BASE}/files/upload/external`, {
       method: "POST",
-      headers: authHeaders(), // Content-Type 은 FormData 가 boundary 와 함께 자동 설정
+      headers: authHeaders(EDITOR_KEY), // Content-Type 은 FormData 가 boundary 와 함께 자동 설정
       body: form,
     });
   } catch (e) {
@@ -165,12 +178,14 @@ export interface ValidateOpts {
   };
 }
 
-/** POST {BASE}/worker-jobs/validate/external → 201 { id: jobId } */
+/** POST {BASE}/worker-jobs/validate/external → 201 { id: jobId } (워커 키) */
 export async function requestValidation(opts: ValidateOpts): Promise<string> {
-  assertEnabled();
+  if (!STORIGE_VALIDATION_ENABLED) {
+    throw new StorigeError("STORIGE_WORKER_API_KEY(워커 키) 미설정.", 503);
+  }
   const resp = await fetch(`${BASE}/worker-jobs/validate/external`, {
     method: "POST",
-    headers: authHeaders({ "Content-Type": "application/json" }),
+    headers: authHeaders(WORKER_KEY, { "Content-Type": "application/json" }),
     body: JSON.stringify(opts),
   });
   if (!resp.ok) {
@@ -191,12 +206,14 @@ interface WorkerJob {
   result?: { issues?: unknown[]; warnings?: unknown[] } & Record<string, unknown>;
 }
 
-/** GET {BASE}/worker-jobs/{jobId} */
+/** GET {BASE}/worker-jobs/{jobId} (워커 키) */
 export async function getWorkerJob(jobId: string): Promise<WorkerJob> {
-  assertEnabled();
+  if (!STORIGE_VALIDATION_ENABLED) {
+    throw new StorigeError("STORIGE_WORKER_API_KEY(워커 키) 미설정.", 503);
+  }
   const resp = await fetch(`${BASE}/worker-jobs/${encodeURIComponent(jobId)}`, {
     method: "GET",
-    headers: authHeaders(),
+    headers: authHeaders(WORKER_KEY),
     cache: "no-store",
   });
   if (!resp.ok) {
@@ -223,6 +240,11 @@ export async function validatePdf(
   opts: ValidateOpts,
   poll: { intervalMs?: number; maxMs?: number } = {},
 ): Promise<StorigeValidationResult> {
+  // 워커 키 없으면 검증 생략 (주문/빌드는 그대로 진행).
+  if (!STORIGE_VALIDATION_ENABLED) {
+    return { status: "SKIPPED", raw: { reason: "STORIGE_WORKER_API_KEY 미설정" } };
+  }
+
   const intervalMs = poll.intervalMs ?? 2500;
   const maxMs = poll.maxMs ?? 15000;
 
@@ -267,10 +289,10 @@ export async function validatePdf(
  * 스트리밍 위해 원본 fetch Response 를 그대로 반환 (호출자가 body 를 파이프).
  */
 export async function downloadFile(fileId: string): Promise<Response> {
-  assertEnabled();
+  assertEditorEnabled();
   const resp = await fetch(
     `${BASE}/files/${encodeURIComponent(fileId)}/download/external`,
-    { method: "GET", headers: authHeaders(), cache: "no-store" },
+    { method: "GET", headers: authHeaders(EDITOR_KEY), cache: "no-store" },
   );
   if (!resp.ok) {
     const body = await safeText(resp);
@@ -314,7 +336,7 @@ export async function deleteFile(fileId: string): Promise<DeleteResult> {
   try {
     resp = await fetch(
       `${BASE}/files/${encodeURIComponent(fileId)}/external`,
-      { method: "DELETE", headers: authHeaders() },
+      { method: "DELETE", headers: authHeaders(EDITOR_KEY) },
     );
   } catch {
     return { ok: false, status: 0, supported: true };
