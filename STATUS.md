@@ -243,3 +243,5 @@ pnpm verify:pdf             # PDF 파이프라인 런타임 1페이지 검증
 pnpm e2e                    # Playwright E2E (자동 dev 서버)
 PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e   # 운영 대상 스모크
 ```
+
+<!-- 2026-06-20: Storige 인쇄 백엔드 일원화 라이브 (PDF 저장/검증/다운로드 프록시/보존정책). -->
