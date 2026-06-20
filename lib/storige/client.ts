@@ -68,6 +68,20 @@ export const STORIGE_MAX_UPLOAD_BYTES =
  */
 export const STORIGE_MULTIPART_THRESHOLD_BYTES = 90 * 1024 * 1024;
 
+/**
+ * presigned uploadUrl 허용 호스트 suffix (SSRF 방지).
+ * presign 응답의 uploadUrl 로 PDF 바이트를 PUT 하므로, 호스트가 신뢰 스토리지
+ * (R2/S3)인지 검증해 presign 변조/하이재킹 시 임의 서버 전송을 차단한다.
+ * STORIGE_UPLOAD_HOST_ALLOW(comma-separated)로 override. 기본 = R2 + S3.
+ */
+const UPLOAD_HOST_ALLOW = (
+  process.env.STORIGE_UPLOAD_HOST_ALLOW ??
+  "r2.cloudflarestorage.com,amazonaws.com"
+)
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
 export class StorigeError extends Error {
   status: number;
   code = "STORIGE_ERROR";
@@ -105,6 +119,31 @@ function authHeaders(
   extra?: Record<string, string>,
 ): Record<string, string> {
   return { "X-API-Key": key, ...(extra ?? {}) };
+}
+
+/**
+ * presign uploadUrl 검증 (SSRF 방지) — https + 허용 호스트만.
+ * 변조된 presign 응답으로 PDF(최대 2GB)가 임의 서버로 PUT 되는 것을 차단.
+ */
+function assertAllowedUploadUrl(raw: string): void {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    throw new StorigeError("presign uploadUrl 형식이 올바르지 않습니다.");
+  }
+  if (u.protocol !== "https:") {
+    throw new StorigeError(`presign uploadUrl 비-HTTPS 거부: ${u.protocol}`);
+  }
+  const host = u.hostname.toLowerCase();
+  const ok = UPLOAD_HOST_ALLOW.some(
+    (sfx) => host === sfx || host.endsWith("." + sfx),
+  );
+  if (!ok) {
+    throw new StorigeError(
+      `presign uploadUrl 호스트 비허용(SSRF 방지): ${host}`,
+    );
+  }
 }
 
 // =====================================================================
@@ -302,13 +341,18 @@ export async function uploadPdfPresigned(
     throw new StorigeError("presign 응답이 불완전합니다 (fileId/uploadUrl/uploadToken).");
   }
   const { fileId, uploadUrl, uploadToken } = presign;
+  // SSRF 방지 — uploadUrl 이 신뢰 스토리지 호스트(R2/S3)인지 검증 후 PUT.
+  assertAllowedUploadUrl(uploadUrl);
 
   // ---- 2) PUT R2 직결 (Content-Type 은 서명 type 과 일치해야 함) ----
   let putResp: Response;
   try {
     putResp = await fetch(uploadUrl, {
       method: "PUT",
-      headers: { "Content-Type": "application/pdf" },
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Length": String(buf.byteLength),
+      },
       body: new Uint8Array(buf),
     });
   } catch (e) {
