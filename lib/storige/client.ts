@@ -37,14 +37,36 @@ export const STORIGE_ENABLED = EDITOR_KEY.length > 0;
 export const STORIGE_VALIDATION_ENABLED = WORKER_KEY.length > 0;
 
 /**
- * Storige 업로드 최대 크기 (계약상 기본 100MB). 초과 시 업로드 전 차단.
- * STORIGE_MAX_UPLOAD_MB 로 override 가능 — Storige 가 한도를 올리면 코드 변경 없이 반영.
- * ⚠️ 100p 사진북(q90) PDF 는 ~100MB 를 넘길 수 있어 이 한도에 걸릴 수 있다.
+ * Storige 업로드 최대 크기 (전체 상한). 초과 시 업로드 전 차단.
+ *
+ * 업로드 경로는 두 가지:
+ *   - ≤90MB: 기존 multipart `POST /files/upload/external` (X-API-Key, multer 100MB 캡).
+ *   - >90MB: presigned 직결 `POST /files/presigned-upload-public` → PUT R2 → complete
+ *            (서버 Buffer 단일 PUT, R2 단일 객체 5GB 까지). 워커 검증은 프로덕션에서
+ *            2GB 까지 지원 확인됨.
+ *
+ * 따라서 이 상한은 워커 검증 한도에 맞춰 기본 2048MB(2GB). STORIGE_MAX_UPLOAD_MB 로
+ * override 가능하나 무한대 금지 — 하드 상한 5120MB(R2 단일 PUT 한도)로 클램프.
+ *
+ * ⚠️ 100p 사진북(q90) PDF 는 ~100MB 를 넘길 수 있어 presigned 경로로 처리된다.
  */
+const STORIGE_HARD_MAX_MB = 5120; // R2 단일 객체 PUT 한도 (5GB)
+const STORIGE_DEFAULT_MAX_MB = 2048; // 워커 검증 확인 한도 (2GB)
 export const STORIGE_MAX_UPLOAD_BYTES =
-  (Number.parseInt(process.env.STORIGE_MAX_UPLOAD_MB ?? "", 10) || 100) *
+  Math.min(
+    Number.parseInt(process.env.STORIGE_MAX_UPLOAD_MB ?? "", 10) ||
+      STORIGE_DEFAULT_MAX_MB,
+    STORIGE_HARD_MAX_MB,
+  ) *
   1024 *
   1024;
+
+/**
+ * multipart(`/files/upload/external`) 경로를 쓰는 임계값 (90MB).
+ * 이하면 기존 X-API-Key multipart, 초과면 presigned 직결.
+ * 100MB multer 캡 아래로 마진을 둔 값.
+ */
+export const STORIGE_MULTIPART_THRESHOLD_BYTES = 90 * 1024 * 1024;
 
 export class StorigeError extends Error {
   status: number;
@@ -53,6 +75,18 @@ export class StorigeError extends Error {
     super(message);
     this.name = "StorigeError";
     this.status = status;
+  }
+}
+
+/**
+ * presigned 엔드포인트가 driver=local 로 503 { code:'STORIGE_NOT_S3' } 를 반환.
+ * uploadPdf 가 잡아 기존 multipart 경로로 폴백할 수 있게 별도 타입으로 구분.
+ */
+export class StorigeNotS3Error extends StorigeError {
+  override code = "STORIGE_NOT_S3";
+  constructor() {
+    super("Storige presigned 업로드 미지원 (driver=local)", 503);
+    this.name = "StorigeNotS3Error";
   }
 }
 
@@ -109,11 +143,32 @@ export async function uploadPdf(
   assertEditorEnabled();
 
   if (buf.byteLength > STORIGE_MAX_UPLOAD_BYTES) {
-    // 계약상 100MB 초과 — 업로드가 413 으로 거부될 가능성이 높음. 명확한 에러로 표면화.
+    // 전체 상한 초과 — 워커 검증 한도를 넘김. 명확한 에러로 표면화.
     throw new StorigeError(
-      `PDF 크기 ${(buf.byteLength / 1024 / 1024).toFixed(1)}MB 가 Storige 업로드 한도(100MB)를 초과합니다.`,
+      `PDF 크기 ${(buf.byteLength / 1024 / 1024).toFixed(1)}MB 가 Storige 업로드 한도(${(STORIGE_MAX_UPLOAD_BYTES / 1024 / 1024).toFixed(0)}MB)를 초과합니다.`,
       413,
     );
+  }
+
+  // 90MB 초과 — multer 100MB 캡에 걸리므로 presigned 직결(R2 단일 PUT)로 라우팅.
+  if (buf.byteLength > STORIGE_MULTIPART_THRESHOLD_BYTES) {
+    try {
+      return await uploadPdfPresigned(buf, {
+        type: opts.type,
+        filename: opts.filename,
+      });
+    } catch (e) {
+      // driver=local(STORIGE_NOT_S3) 이면 기존 multipart 로 폴백.
+      // 단, multer 100MB 캡을 넘으면 폴백해도 거부되므로 명확한 에러로 표면화.
+      if (!(e instanceof StorigeNotS3Error)) throw e;
+      if (buf.byteLength > 100 * 1024 * 1024) {
+        throw new StorigeError(
+          `PDF 크기 ${(buf.byteLength / 1024 / 1024).toFixed(1)}MB — Storige 가 presigned 미지원(driver=local)이고 multipart 한도(100MB)도 초과합니다. STORAGE_DRIVER=s3 프로비저닝이 필요합니다.`,
+          413,
+        );
+      }
+      // 90~100MB 이고 driver=local — multipart 폴백 진행.
+    }
   }
 
   const form = new FormData();
@@ -160,6 +215,148 @@ export async function uploadPdf(
     fileName: json.fileName,
     fileUrl: json.fileUrl,
     fileSize: json.fileSize,
+  };
+}
+
+// =====================================================================
+// 3.1b presigned 직결 업로드 (>100MB — multer 캡 우회)
+// =====================================================================
+
+export interface PresignedUploadOpts {
+  type: StorigeFileType;
+  /** 원본 파일명 (presign originalName + 응답 fileName). */
+  filename: string;
+}
+
+/** presign 응답 — fileId/uploadUrl/uploadToken. */
+interface PresignResponse {
+  fileId?: string;
+  uploadUrl?: string;
+  uploadToken?: string;
+}
+
+/**
+ * presigned 직결 업로드 (3단계). multipart 100MB multer 캡을 우회하기 위한 경로.
+ * R2 단일 객체 PUT(최대 5GB)로 PDF 원본 바이트를 직접 올린다.
+ *
+ *   1) POST {BASE}/files/presigned-upload-public  (@Public — X-API-Key 없음)
+ *        body { type, expectedSize, originalName, contentType:'application/pdf' }
+ *        → { fileId, uploadUrl, uploadToken }
+ *        driver=local 이면 503 { code:'STORIGE_NOT_S3' } → 기존 multipart 경로로 폴백.
+ *   2) PUT <uploadUrl>  (API 미경유 — R2 직결)
+ *        헤더 Content-Type: application/pdf (서명 type 일치 필수).
+ *   3) POST {BASE}/files/{fileId}/complete  body { uploadToken }
+ *        → FileResponseDto (status ready). 400 SIZE_MISMATCH if expectedSize≠실제.
+ *
+ * 반환은 기존 uploadPdf 와 동일 shape ({ id: fileId, ... }).
+ */
+export async function uploadPdfPresigned(
+  buf: Buffer,
+  opts: PresignedUploadOpts,
+): Promise<StorigeUploadResult> {
+  assertEditorEnabled();
+
+  const expectedSize = buf.byteLength;
+  if (expectedSize > STORIGE_MAX_UPLOAD_BYTES) {
+    throw new StorigeError(
+      `PDF 크기 ${(expectedSize / 1024 / 1024).toFixed(1)}MB 가 Storige 업로드 한도(${(STORIGE_MAX_UPLOAD_BYTES / 1024 / 1024).toFixed(0)}MB)를 초과합니다.`,
+      413,
+    );
+  }
+
+  // ---- 1) presign (@Public — X-API-Key 없이 호출) ----
+  let presignResp: Response;
+  try {
+    presignResp = await fetch(`${BASE}/files/presigned-upload-public`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: opts.type,
+        expectedSize,
+        originalName: opts.filename,
+        contentType: "application/pdf",
+      }),
+    });
+  } catch (e) {
+    throw new StorigeError(
+      `presign 네트워크 오류: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+
+  if (!presignResp.ok) {
+    const body = await safeText(presignResp);
+    // driver=local — presigned 미지원. 호출자(uploadPdf)가 처리할 수 있게 명확한 503.
+    if (presignResp.status === 503 && body.includes("STORIGE_NOT_S3")) {
+      throw new StorigeNotS3Error();
+    }
+    throw new StorigeError(
+      `presign 실패 (${presignResp.status}): ${body.slice(0, 300)}`,
+      presignResp.status,
+    );
+  }
+
+  const presign = (await presignResp.json().catch(() => null)) as
+    | PresignResponse
+    | null;
+  if (!presign?.fileId || !presign.uploadUrl || !presign.uploadToken) {
+    throw new StorigeError("presign 응답이 불완전합니다 (fileId/uploadUrl/uploadToken).");
+  }
+  const { fileId, uploadUrl, uploadToken } = presign;
+
+  // ---- 2) PUT R2 직결 (Content-Type 은 서명 type 과 일치해야 함) ----
+  let putResp: Response;
+  try {
+    putResp = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/pdf" },
+      body: new Uint8Array(buf),
+    });
+  } catch (e) {
+    throw new StorigeError(
+      `R2 PUT 네트워크 오류: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+  if (!putResp.ok) {
+    const body = await safeText(putResp);
+    throw new StorigeError(
+      `R2 PUT 실패 (${putResp.status}): ${body.slice(0, 300)}`,
+      502,
+    );
+  }
+
+  // ---- 3) complete (SIZE_MISMATCH → 400) ----
+  let completeResp: Response;
+  try {
+    completeResp = await fetch(
+      `${BASE}/files/${encodeURIComponent(fileId)}/complete`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uploadToken }),
+      },
+    );
+  } catch (e) {
+    throw new StorigeError(
+      `complete 네트워크 오류: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+  if (!completeResp.ok) {
+    const body = await safeText(completeResp);
+    throw new StorigeError(
+      `complete 실패 (${completeResp.status}): ${body.slice(0, 300)}`,
+      completeResp.status,
+    );
+  }
+
+  const json = (await completeResp.json().catch(() => null)) as
+    | (Partial<StorigeUploadResult> & { id?: string; fileName?: string })
+    | null;
+  // FileResponseDto 의 id 가 fileId 와 동일하나, 응답 우선·없으면 presign fileId.
+  return {
+    id: String(json?.id ?? fileId),
+    fileName: json?.fileName ?? opts.filename,
+    fileUrl: json?.fileUrl,
+    fileSize: json?.fileSize ?? expectedSize,
   };
 }
 
