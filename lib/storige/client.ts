@@ -331,7 +331,8 @@ export async function uploadPdfPresigned(
       `${BASE}/files/${encodeURIComponent(fileId)}/complete`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // /files/* 계열 — 편집기 키로 인증 (uploadToken 외 방어 심화).
+        headers: authHeaders(EDITOR_KEY, { "Content-Type": "application/json" }),
         body: JSON.stringify({ uploadToken }),
       },
     );
@@ -351,12 +352,16 @@ export async function uploadPdfPresigned(
   const json = (await completeResp.json().catch(() => null)) as
     | (Partial<StorigeUploadResult> & { id?: string; fileName?: string })
     | null;
-  // FileResponseDto 의 id 가 fileId 와 동일하나, 응답 우선·없으면 presign fileId.
+  // 2xx 인데 id 가 없으면 백엔드 이상 — presign fileId 로 silent fallback 하지 않고
+  // 명확히 실패시킨다(불완전 업로드가 orders 에 커밋되는 것 방지).
+  if (!json?.id) {
+    throw new StorigeError("complete 응답에 파일 id 가 없습니다 (백엔드 이상).");
+  }
   return {
-    id: String(json?.id ?? fileId),
-    fileName: json?.fileName ?? opts.filename,
-    fileUrl: json?.fileUrl,
-    fileSize: json?.fileSize ?? expectedSize,
+    id: String(json.id),
+    fileName: json.fileName ?? opts.filename,
+    fileUrl: json.fileUrl,
+    fileSize: json.fileSize ?? expectedSize,
   };
 }
 
