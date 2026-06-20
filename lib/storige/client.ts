@@ -206,12 +206,12 @@ interface WorkerJob {
   result?: { issues?: unknown[]; warnings?: unknown[] } & Record<string, unknown>;
 }
 
-/** GET {BASE}/worker-jobs/{jobId} (워커 키) */
+/** GET {BASE}/worker-jobs/external/{jobId} (워커 키 — 외부 파트너 폴링 라우트) */
 export async function getWorkerJob(jobId: string): Promise<WorkerJob> {
   if (!STORIGE_VALIDATION_ENABLED) {
     throw new StorigeError("STORIGE_WORKER_API_KEY(워커 키) 미설정.", 503);
   }
-  const resp = await fetch(`${BASE}/worker-jobs/${encodeURIComponent(jobId)}`, {
+  const resp = await fetch(`${BASE}/worker-jobs/external/${encodeURIComponent(jobId)}`, {
     method: "GET",
     headers: authHeaders(WORKER_KEY),
     cache: "no-store",
