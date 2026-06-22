@@ -38,27 +38,27 @@ function authError(
 /**
  * 로그인한 유저를 반환. 없으면 throw.
  *
- * 🚀 성능 — getSession() 기반(cookie only, 0 RTT).
- *   - 기존: supabase.auth.getUser() (API 왕복 1회) + profiles.deleted_at SELECT (RTT 2회)
- *   - 변경: supabase.auth.getSession() (cookie 만, 0 RTT)
- *   - 매 페이지 진입에서 50~400ms 단축. RLS 가 위조 토큰을 차단하므로 페이지 라우트
- *     에서는 cookie session 만으로 충분 (DB 쿼리는 모두 RLS 통과 필요).
+ * 🔒 보안 — getUser() 기반(Auth 서버 왕복으로 JWT 서명 검증).
+ *   - getSession() 은 쿠키 JSON 을 그대로 신뢰해 서명을 검증하지 않는다. service_role
+ *     (RLS 우회) 클라이언트를 requireUser().id 로 쓰는 라우트(attendance/points/gifts/
+ *     orders/photos/account 등)에서는 위조 쿠키로 임의 user.id 를 주입할 수 있어
+ *     계정탈취/IDOR 가 가능했다. getUser() 는 GoTrue 가 토큰을 검증하므로 위조 차단.
+ *   - 비용: 요청당 GoTrue 왕복 1회(React cache 로 요청 내 1회로 축소). 보안상 불가피.
  *
  * 🔒 탈퇴 가드가 필요한 곳(account 삭제·민감 액션)은 `requireActiveUser()` 명시 호출.
- *
  * 🛂 cookie 갱신은 middleware 의 createServerClient 가 매 요청마다 수행.
  */
 export const requireUser = cache(async (): Promise<User> => {
   const supabase = createServerSupabase();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session?.user) {
+  if (!user) {
     authError("로그인이 필요합니다.", 401, "UNAUTHORIZED");
   }
 
-  return session.user;
+  return user;
 });
 
 /**
@@ -71,7 +71,7 @@ export const requireUser = cache(async (): Promise<User> => {
  * 사용하지 않는 곳:
  *   - 단순 페이지 진입 / 조회 라우트 (RLS 가 deleted_at 검증된 행만 노출)
  *
- * RTT: getSession (0) + profiles.deleted_at SELECT (1) = 1회.
+ * RTT: getUser (1) + profiles.deleted_at SELECT (1) = 2회.
  */
 export const requireActiveUser = cache(async (): Promise<User> => {
   const user = await requireUser();

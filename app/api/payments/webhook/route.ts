@@ -120,43 +120,38 @@ export async function POST(req: Request) {
       return ok({ received: true, unknown: true });
     }
 
-    // 이중 검증 — 토스 측 정보를 직접 조회
-    if (paymentKey) {
-      try {
-        const tossRes = await fetchTossPayment(paymentKey);
-        if (tossRes.totalAmount !== order.amount) {
-          return fail(
-            "AMOUNT_MISMATCH",
-            "웹훅 검증 — 결제 금액 불일치",
-            400,
-          );
-        }
-        // 토스 status 가 우선
-        const mapped = mapTossStatus(tossRes.status);
-        if (mapped && canTransition(order.status, mapped)) {
-          const patch: Record<string, unknown> = { status: mapped };
-          if (mapped === "paid") {
-            patch.paid_at = new Date().toISOString();
-            patch.toss_payment_key = paymentKey;
-          }
-          await admin.from("orders").update(patch).eq("id", order.id);
-        }
-        return ok({ received: true, orderId: order.id, mapped });
-      } catch (e) {
-        console.warn("[payments/webhook] toss fetch failed", (e as Error).message);
-      }
+    // 상태 전이는 **반드시 토스 측 직접 조회로 검증된 경우에만** 수행한다.
+    //   - paymentKey 없으면 검증 불가 → 상태 변경 없이 ack (위조 페이로드로 상태 위조 차단).
+    //   - 토스 조회 실패면 상태 변경 없이 ack(retry) → 토스가 재시도.
+    //   - 페이로드의 status 문자열만으로는 절대 전이하지 않는다(미검증 fallback 제거).
+    void tossStatus;
+    if (!paymentKey) {
+      return ok({ received: true, orderId: order.id, ignored: true, reason: "no paymentKey" });
     }
 
-    // paymentKey 가 없거나 fetch 실패 시 — 페이로드 status 만으로 매핑 시도
-    const mapped = mapTossStatus(tossStatus);
+    let tossRes: Awaited<ReturnType<typeof fetchTossPayment>>;
+    try {
+      tossRes = await fetchTossPayment(paymentKey);
+    } catch (e) {
+      console.warn("[payments/webhook] toss fetch failed", (e as Error).message);
+      // 검증 실패 — 상태 변경 없이 ack. 토스 재시도 시 재검증.
+      return ok({ received: true, orderId: order.id, retry: true });
+    }
+
+    if (tossRes.totalAmount !== order.amount) {
+      return fail("AMOUNT_MISMATCH", "웹훅 검증 — 결제 금액 불일치", 400);
+    }
+
+    const mapped = mapTossStatus(tossRes.status);
     if (mapped && canTransition(order.status, mapped)) {
       const patch: Record<string, unknown> = { status: mapped };
-      if (mapped === "paid") patch.paid_at = new Date().toISOString();
+      if (mapped === "paid") {
+        patch.paid_at = new Date().toISOString();
+        patch.toss_payment_key = paymentKey;
+      }
       await admin.from("orders").update(patch).eq("id", order.id);
-      return ok({ received: true, orderId: order.id, mapped });
     }
-
-    return ok({ received: true, orderId: order.id, ignored: true });
+    return ok({ received: true, orderId: order.id, mapped });
   } catch (err) {
     return failFromError(err);
   }
