@@ -153,7 +153,36 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4) 포인트 차감 (atomic) — order.points_used > 0 인 경우에만.
+    // 4) orders 멱등 클레임 — pending → paid 를 **조건부 UPDATE** 로 선점.
+    //    동시 중복 confirm(더블클릭/재시도/탭 중복) 시 status='pending' 조건을 만족하는
+    //    단 한 요청만 행을 잡으며, 이후 포인트차감/할인마킹/추천보상/이메일 등 모든
+    //    side-effect 를 그 승자만 1회 실행한다(이중 차감/이중 보상 방지).
+    assertTransition("pending", "paid");
+    const { data: claimed, error: upErr } = await admin
+      .from("orders")
+      .update({
+        status: "paid",
+        toss_payment_key: paymentKey,
+        paid_at: new Date().toISOString(),
+      })
+      .eq("id", order.id)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
+    if (upErr) {
+      return fail("ORDER_UPDATE_FAILED", upErr.message, 500);
+    }
+    if (!claimed) {
+      // 다른 요청이 먼저 선점함 — 멱등 응답(side-effect 재실행 금지).
+      return ok({
+        orderId: order.id,
+        status: "paid" as const,
+        redirectUrl: `/order/${order.id}/success`,
+        idempotent: true,
+      });
+    }
+
+    // 5) 포인트 차감 (atomic) — 클레임 승자만 1회 실행.
     //    Toss 결제는 이미 성공했으므로 차감 실패 시에도 결제는 살린다 (관리자 보정).
     if (order.points_used && order.points_used > 0) {
       const { data: newBalance, error: dedErr } = await admin.rpc(
@@ -179,20 +208,6 @@ export async function POST(req: Request) {
           { orderId: order.id, requested: order.points_used },
         );
       }
-    }
-
-    // 5) orders UPDATE — pending → paid (상태 머신 점검)
-    assertTransition("pending", "paid");
-    const { error: upErr } = await admin
-      .from("orders")
-      .update({
-        status: "paid",
-        toss_payment_key: paymentKey,
-        paid_at: new Date().toISOString(),
-      })
-      .eq("id", order.id);
-    if (upErr) {
-      return fail("ORDER_UPDATE_FAILED", upErr.message, 500);
     }
 
     // projects.status = 'ordered' 로 마킹 (선택 — 사용자 마이페이지 표시용).

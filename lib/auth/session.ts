@@ -104,11 +104,12 @@ export async function requireAdmin(): Promise<User> {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, deleted_at")
     .eq("id", user.id)
     .single();
 
-  if (error || !profile || profile.role !== "admin") {
+  // 탈퇴/오프보딩(soft-delete)된 관리자는 role 이 admin 이어도 차단.
+  if (error || !profile || profile.role !== "admin" || profile.deleted_at) {
     authError("관리자 권한이 필요합니다.", 403, "FORBIDDEN");
   }
 

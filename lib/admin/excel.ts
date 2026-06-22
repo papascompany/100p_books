@@ -124,9 +124,17 @@ export async function buildShippingExcel(
     bottom: { style: "thin", color: { argb: "FF9CA3AF" } },
   };
 
-  // 본문
+  // 본문 — 수식/CSV 인젝션 방어: 문자열 값이 = + - @ \t \r 로 시작하면 ' 를 앞에 붙여
+  // 스프레드시트(Excel/Sheets/LibreOffice 또는 CSV 재변환)에서 수식으로 해석되지 않게 한다.
+  // 값은 고객이 입력한 OrderAddress(name/addr1/addr2/memo)에서 오므로 신뢰 불가.
+  const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
+  const sanitizeCell = (v: string | number | undefined): string | number =>
+    typeof v === "string" && FORMULA_TRIGGER.test(v) ? `'${v}` : (v ?? "");
   for (const r of rows) {
-    ws.addRow(r as unknown as Record<string, string | number>);
+    const src = r as unknown as Record<string, string | number>;
+    const safe: Record<string, string | number> = {};
+    for (const c of SHIPPING_COLUMNS) safe[c.key] = sanitizeCell(src[c.key]);
+    ws.addRow(safe);
   }
 
   // 자동 너비 — 헤더/본문 글자수(전각 보정) 최댓값 기반으로 재계산

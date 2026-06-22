@@ -5,6 +5,7 @@ import { z } from "zod";
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { createAdminSupabase } from "@/lib/db/admin";
 import type { OrderStatus } from "@/lib/db/types";
+import { restoreOrderCredits } from "@/lib/orders/refund";
 import { canTransition } from "@/lib/orders/state";
 import { fetchTossPayment } from "@/lib/payments/toss";
 
@@ -95,12 +96,15 @@ export async function POST(req: Request) {
       amount: number;
       toss_payment_key: string | null;
       toss_order_id: string | null;
+      user_id: string;
+      points_used: number;
+      discount_code_id: string | null;
     };
     let order: Row | null = null;
     if (paymentKey) {
       const { data, error: qErr } = await admin
         .from("orders")
-        .select("id, status, amount, toss_payment_key, toss_order_id")
+        .select("id, status, amount, toss_payment_key, toss_order_id, user_id, points_used, discount_code_id")
         .eq("toss_payment_key", paymentKey)
         .maybeSingle();
       if (qErr) return fail("ORDER_QUERY_FAILED", qErr.message, 500);
@@ -109,7 +113,7 @@ export async function POST(req: Request) {
     if (!order && tossOrderId) {
       const { data, error: qErr } = await admin
         .from("orders")
-        .select("id, status, amount, toss_payment_key, toss_order_id")
+        .select("id, status, amount, toss_payment_key, toss_order_id, user_id, points_used, discount_code_id")
         .eq("toss_order_id", tossOrderId)
         .maybeSingle();
       if (qErr) return fail("ORDER_QUERY_FAILED", qErr.message, 500);
@@ -149,7 +153,24 @@ export async function POST(req: Request) {
         patch.paid_at = new Date().toISOString();
         patch.toss_payment_key = paymentKey;
       }
-      await admin.from("orders").update(patch).eq("id", order.id);
+      // 조건부 클레임 — status=현재값 일 때만 전이. 동시 중복 웹훅이 같은 전이를
+      // 두 번 적용해 환불 복원이 이중 실행되는 것을 막는다.
+      const { data: claimed } = await admin
+        .from("orders")
+        .update(patch)
+        .eq("id", order.id)
+        .eq("status", order.status)
+        .select("id")
+        .maybeSingle();
+      // 환불 전이 클레임 승자만 사용 포인트 + 할인 복원 (1회).
+      if (claimed && mapped === "refunded") {
+        await restoreOrderCredits(admin, {
+          id: order.id,
+          user_id: order.user_id,
+          points_used: order.points_used,
+          discount_code_id: order.discount_code_id,
+        });
+      }
     }
     return ok({ received: true, orderId: order.id, mapped });
   } catch (err) {

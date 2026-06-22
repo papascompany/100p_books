@@ -18,6 +18,10 @@
       "maxDuration": 300,
       "memory": 1769
     },
+    "app/api/pdf/build/route.ts": {
+      "maxDuration": 300,
+      "memory": 1769
+    },
     "app/api/cron/process-emails/route.ts": {
       "maxDuration": 60
     },

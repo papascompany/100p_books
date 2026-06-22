@@ -116,20 +116,42 @@ export async function GET(req: Request) {
     const processed = userCounts.size;
 
     // 2) 20일 이상 사용자에게 보너스 지급 (best-effort).
+    //    멱등 — cron 은 at-least-once(재시도/수동 재호출) 라 이중 지급 위험이 있다.
+    //    이번 달 'attendance_bonus' 가 이미 적립된 사용자(point_ledger.memo 에 monthKey
+    //    포함)는 건너뛴다. (동시 중복 실행 edge 는 드물어 사전조회로 충분.)
+    const { data: grantedRows } = await admin
+      .from("point_ledger")
+      .select("user_id")
+      .eq("reason", "attendance_bonus")
+      .like("memo", `%${prevMonthKey}%`);
+    const alreadyGranted = new Set(
+      (grantedRows ?? []).map((g) => g.user_id as string),
+    );
+
     let rewarded = 0;
+    let skipped = 0;
     const rewardErrors: { userId: string; error: string }[] = [];
 
     for (const [userId, cnt] of userCounts.entries()) {
       if (cnt < MONTHLY_THRESHOLD) continue;
+      if (alreadyGranted.has(userId)) {
+        skipped += 1;
+        continue; // 이미 이번 달 보너스 지급됨 — 이중 지급 방지
+      }
 
       try {
-        // atomic 적립 — 동시성 안전 (0022_atomic_discount_increment.sql)
-        const { error: rpcErr } = await admin.rpc("add_user_points", {
+        // point_ledger 에 기록되는 v2 로 적립 (멱등 체크 근거 + 감사추적).
+        const { error: rpcErr } = await admin.rpc("add_user_points_v2", {
           p_user_id: userId,
           p_amount: MONTHLY_BONUS,
+          p_reason: "attendance_bonus",
+          p_ref_type: null,
+          p_ref_id: null,
+          p_memo: `${prevMonthKey} 월 출석 보너스 (20일+)`,
         });
         if (rpcErr) throw new Error(rpcErr.message);
 
+        alreadyGranted.add(userId); // 같은 run 내 중복 방지
         rewarded += 1;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -147,13 +169,14 @@ export async function GET(req: Request) {
     //    (YYYY-MM 문자열) 를 직접 넣을 수 없으므로 콘솔 요약만 남긴다.
     //    (필요 시 별도 cron_logs 테이블을 후속 마이그레이션으로 추가)
     console.info(
-      `[cron/attendance-reset] month=${prevMonthKey} processed=${processed} rewarded=${rewarded} errors=${rewardErrors.length} duration=${durationMs}ms`,
+      `[cron/attendance-reset] month=${prevMonthKey} processed=${processed} rewarded=${rewarded} skipped=${skipped} errors=${rewardErrors.length} duration=${durationMs}ms`,
     );
 
     return ok({
       monthKey: prevMonthKey,
       processed,
       rewarded,
+      skipped,
       rewardErrorCount: rewardErrors.length,
       durationMs,
     });

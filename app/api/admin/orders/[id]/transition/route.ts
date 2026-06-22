@@ -8,6 +8,7 @@ import { logAdminAction } from "@/lib/admin/audit";
 import { createAdminSupabase } from "@/lib/db/admin";
 import type { OrderStatus } from "@/lib/db/types";
 import { enqueueEmail } from "@/lib/email/queue";
+import { restoreOrderCredits } from "@/lib/orders/refund";
 import { TEMPLATE_BY_ORDER_STATUS } from "@/lib/email/templates";
 import {
   ALL_ORDER_STATUSES,
@@ -51,7 +52,7 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
 
   const { data: row, error: getErr } = await admin
     .from("orders")
-    .select("id, status")
+    .select("id, status, user_id, points_used, discount_code_id")
     .eq("id", ctx.params.id)
     .maybeSingle();
   if (getErr) return fail("ORDER_QUERY_FAILED", getErr.message, 500);
@@ -88,16 +89,33 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
     update.delivered_at = now;
   }
 
+  // 조건부 클레임 — status=from 일 때만 전이. 동시 중복(더블클릭 등) 시 한 번만 승자가
+  // 되어 환불 복원 등 side-effect 가 1회만 실행되게 한다.
   const { data: updated, error: updErr } = await admin
     .from("orders")
     .update(update)
     .eq("id", ctx.params.id)
+    .eq("status", from)
     .select(
       "id, status, tracking_no, tracking_carrier, shipped_at, delivered_at",
     )
-    .single();
-  if (updErr || !updated) {
-    return fail("ORDER_UPDATE_FAILED", updErr?.message ?? "갱신 실패", 500);
+    .maybeSingle();
+  if (updErr) {
+    return fail("ORDER_UPDATE_FAILED", updErr.message, 500);
+  }
+  if (!updated) {
+    return fail("ORDER_NOT_IN_EXPECTED_STATE", "주문 상태가 이미 변경되었습니다.", 409);
+  }
+
+  // 환불 전이 시 사용 포인트 + 할인 복원 (클레임 승자만 1회). refunded 는 종착 상태라
+  // 재진입 불가 + 위 조건부 UPDATE 로 이중 복원 방지.
+  if (target === "refunded") {
+    await restoreOrderCredits(admin, {
+      id: row.id,
+      user_id: row.user_id,
+      points_used: row.points_used,
+      discount_code_id: row.discount_code_id,
+    });
   }
 
   // 감사 로그 — 상태 전이 + tracking 메타
