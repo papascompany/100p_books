@@ -78,6 +78,8 @@ interface LoadedGift {
     expires_at: string;
     created_at: string;
   };
+  /** 연결된 원본 주문의 현재 상태 — claim 시 환불/취소 여부 재확인용. */
+  orderStatus: string;
   project: {
     id: string;
     user_id: string;
@@ -125,6 +127,7 @@ async function loadGiftFull(
       created_at,
       orders!inner (
         id,
+        status,
         project_id,
         projects!inner (
           id,
@@ -150,6 +153,7 @@ async function loadGiftFull(
 
   const order = (gift.orders as unknown) as {
     id: string;
+    status: string;
     project_id: string;
     projects: {
       id: string;
@@ -195,6 +199,7 @@ async function loadGiftFull(
       expires_at: gift.expires_at,
       created_at: gift.created_at,
     },
+    orderStatus: order.status,
     project,
     senderName,
     senderEmail: senderProfile?.email ?? null,
@@ -341,6 +346,23 @@ export async function POST(req: Request, { params }: RouteCtx) {
         );
       }
       return ok({ newProjectId: gift.claimed_project_id, alreadyClaimed: true });
+    }
+
+    // 원본 주문이 환불/취소되었으면 신규 수령 거부 — 대금이 회수된 콘텐츠가
+    //   계속 배포되는 정합성 결함 차단. (발급은 paid 이상만 허용하지만 발급 이후
+    //   refunded/cancelled 로 전이될 수 있으므로 claim 시점에 재확인.)
+    const giftableOrderStatuses = new Set([
+      "paid",
+      "in_production",
+      "shipped",
+      "delivered",
+    ]);
+    if (!giftableOrderStatuses.has(loaded.orderStatus)) {
+      return fail(
+        "GIFT_ORDER_NOT_GIFTABLE",
+        "원본 주문이 더 이상 유효하지 않아 이 선물을 받을 수 없어요.",
+        410,
+      );
     }
 
     // status === 'pending' → 클론 진행

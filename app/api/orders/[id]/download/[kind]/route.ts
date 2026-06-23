@@ -6,7 +6,7 @@ import { requireAdmin, requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import type { OrderStatus } from "@/lib/db/types";
 import { canDownloadPdfs } from "@/lib/orders/state";
-import { PDFS_BUCKET, PDF_SIGNED_TTL_SEC } from "@/lib/pdf/constants";
+import { PDFS_BUCKET } from "@/lib/pdf/constants";
 import { downloadFile } from "@/lib/storige/client";
 
 export const runtime = "nodejs";
@@ -19,9 +19,9 @@ export const dynamic = "force-dynamic";
  *   - 소유자 또는 admin 만 허용 (요청마다 서버에서 인증 — signedUrl TTL 불필요).
  *   - 비-admin 은 canDownloadPdfs(status) 통과해야 함.
  *   - 신규 주문: orders.storige_*_file_id 로 Storige 에서 바이트 스트리밍.
- *   - 레거시 주문: orders.cover/interior_pdf_key(Supabase) → signedUrl 리다이렉트.
+ *   - 레거시 주문: orders.cover/interior_pdf_key(Supabase) 도 서버에서 바이트 프록시.
  *
- * fileId 는 클라에 노출하지 않는다 (항상 이 프록시를 경유).
+ * fileId·signedUrl 은 클라에 노출하지 않는다 (항상 이 프록시를 경유).
  */
 export async function GET(
   _req: Request,
@@ -98,13 +98,22 @@ export async function GET(
     }
   }
 
-  // 레거시: Supabase signedUrl 리다이렉트.
+  // 레거시: 신규 경로와 동일하게 서버에서 바이트를 프록시 스트리밍.
+  // (signedUrl 302 리다이렉트는 TTL 동안 인증 없이 공유/유출 가능해
+  //  per-request 인가를 우회하므로 제거.)
   if (legacyKey) {
-    const { data: signed } = await admin.storage
+    const { data: blob, error: dlErr } = await admin.storage
       .from(PDFS_BUCKET)
-      .createSignedUrl(legacyKey, PDF_SIGNED_TTL_SEC, { download: filename });
-    if (signed?.signedUrl) return NextResponse.redirect(signed.signedUrl, 302);
-    return new NextResponse("not found", { status: 404 });
+      .download(legacyKey);
+    if (dlErr || !blob) return new NextResponse("not found", { status: 404 });
+    return new NextResponse(blob, {
+      status: 200,
+      headers: {
+        "content-type": "application/pdf",
+        "content-disposition": contentDisposition(filename),
+        "cache-control": "private, no-store",
+      },
+    });
   }
 
   return new NextResponse("PDF not ready", { status: 404 });

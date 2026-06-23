@@ -25,7 +25,9 @@ export const maxDuration = 60;
  * 안전장치:
  *   - delivered_at 기준 (updated_at 아님) — 이후 상태 변경이 시계를 리셋하지 않게.
  *   - Storige delete 가 일시 오류(5xx/네트워크)면 DB 를 비우지 않고 다음 run 에서 재시도.
- *   - delete 성공/이미없음(404)/미지원(405·501) 이면 DB 컬럼 NULL 처리.
+ *   - delete 성공/이미없음(404) 일 때만 DB 컬럼 NULL 처리.
+ *   - 삭제 API 미지원(405·501) 은 failedFiles 로 집계하고 DB 참조를 그대로 둔다
+ *     (참조를 지우면 R2 파일이 영구 고아가 되므로 — 운영자 협의 대상).
  */
 export async function GET(req: Request) {
   try {
@@ -84,7 +86,10 @@ export async function GET(req: Request) {
 
       if (o.storige_cover_file_id) {
         const r = await deleteFile(o.storige_cover_file_id);
-        if (r.ok || !r.supported) {
+        // 실제 삭제(2xx) 또는 이미 없음(404) 일 때만 DB 참조를 비운다.
+        // 미지원(405/501, supported=false)·일시오류는 DB 를 그대로 둬서
+        // 유일한 참조(fileId)를 잃고 R2 파일이 영구 고아가 되는 것을 막는다.
+        if (r.ok) {
           patch.storige_cover_file_id = null;
           clearedCover = true;
           deletedFiles += 1;
@@ -97,7 +102,7 @@ export async function GET(req: Request) {
 
       if (o.storige_interior_file_id) {
         const r = await deleteFile(o.storige_interior_file_id);
-        if (r.ok || !r.supported) {
+        if (r.ok) {
           patch.storige_interior_file_id = null;
           clearedInterior = true;
           deletedFiles += 1;

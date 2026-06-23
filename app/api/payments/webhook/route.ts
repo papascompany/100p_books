@@ -63,13 +63,25 @@ function mapTossStatus(s: string | undefined | null): OrderStatus | null {
  */
 export async function POST(req: Request) {
   try {
-    // (옵션) 시크릿 검증
+    // 시크릿 검증 — cron 들과 동일한 fail-closed 자세로 통일한다.
+    //   - TOSS_WEBHOOK_SECRET 설정 시: 헤더와 일치해야 통과.
+    //   - 미설정 시: 운영(production)에서는 거부(빈 값 배포로 인한 무인증 통과 차단).
+    //     비운영(개발/프리뷰)에서는 통과 — 로컬 토스 테스트 편의.
     const expectedSecret = process.env.TOSS_WEBHOOK_SECRET;
     if (expectedSecret) {
       const got = req.headers.get("x-webhook-secret") ?? req.headers.get("x-toss-webhook-secret");
       if (got !== expectedSecret) {
         return fail("WEBHOOK_UNAUTHORIZED", "웹훅 시크릿 불일치", 401);
       }
+    } else if (process.env.NODE_ENV === "production") {
+      console.error(
+        "[payments/webhook] TOSS_WEBHOOK_SECRET 미설정 — 운영 환경에서 웹훅을 거부합니다.",
+      );
+      return fail(
+        "WEBHOOK_NOT_CONFIGURED",
+        "웹훅 시크릿이 설정되지 않았습니다.",
+        500,
+      );
     }
 
     const raw = (await req.json().catch(() => ({}))) as unknown;

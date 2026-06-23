@@ -59,7 +59,14 @@ export const PATCH = withAdmin<{ id: string }>(async (req, ctx, user) => {
     action: "user.role_change",
     targetType: "user",
     targetId: ctx.params.id,
-    details: { from: fromRole, to: role },
+    // 권한 상승은 가장 민감한 액션 — 대상 식별정보를 스냅샷으로 남겨
+    // 이후 profiles 행이 변경/삭제돼도 누구를 변경했는지 추적 가능하게 한다.
+    details: {
+      from: fromRole,
+      to: role,
+      targetEmail: data.email ?? null,
+      targetDisplayName: data.display_name ?? null,
+    },
     request: req,
   });
 

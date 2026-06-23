@@ -118,7 +118,7 @@ export async function POST(req: Request) {
 
     // 4) 트랜잭션 RPC 로 update + delete + bulk insert 처리 (data loss 방지)
     const admin = createAdminSupabase();
-    const rpcRows = pages.map((doc) => ({
+    const rpcRows: Record<string, unknown>[] = pages.map((doc) => ({
       page_no: doc.pageNo,
       layout_mode: layoutMode,
       fabric_json: doc as unknown as Record<string, unknown>,
@@ -126,7 +126,7 @@ export async function POST(req: Request) {
     const { error: rpcErr } = await admin.rpc("regenerate_project_pages", {
       p_project_id: projectId,
       p_layout_mode: layoutMode,
-      p_pages: rpcRows as unknown as Record<string, unknown>[],
+      p_pages: rpcRows,
     });
     if (rpcErr) return fail("PAGES_REGEN_FAILED", rpcErr.message, 500);
 

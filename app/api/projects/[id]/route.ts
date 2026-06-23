@@ -68,7 +68,9 @@ export async function GET(_req: Request, { params }: RouteCtx) {
 /**
  * DELETE /api/projects/[id]
  *   1. 소유권 검증
- *   2. 결제 완료된 주문이 있으면 삭제 거부 (데이터 보관 필요)
+ *   2. cancelled 가 아닌 주문이 하나라도 있으면 삭제 거부 (데이터 보관 필요).
+ *      pending(결제 진행 중) 도 포함 — 삭제 직후 confirm webhook 이 도착하면
+ *      PDF 소스(pages/photos)가 사라져 인쇄 빌드가 영구 실패하는 레이스 방지.
  *   3. pages 하드 삭제 → photos 하드 삭제 → project 하드 삭제
  *
  *   Storage 파일 삭제는 비동기 클린업 잡(별도 cron)에 위임.
@@ -92,19 +94,20 @@ export async function DELETE(_req: Request, { params }: RouteCtx) {
       return fail("FORBIDDEN", "해당 프로젝트에 대한 권한이 없습니다.", 403);
     }
 
-    // 결제 완료 주문이 연결되어 있으면 삭제 거부
-    const { count: paidCount, error: ordErr } = await supabase
+    // cancelled 가 아닌 주문(pending 결제 진행 중 포함)이 연결되어 있으면 삭제 거부.
+    // pending 을 허용하면 삭제 직후 confirm webhook 이 주문을 paid 로 승격시킬 때
+    // PDF 소스(pages/photos)가 이미 사라져 인쇄 빌드가 영구 실패한다.
+    const { count: liveCount, error: ordErr } = await supabase
       .from("orders")
       .select("id", { count: "exact", head: true })
       .eq("project_id", params.id)
-      .neq("status", "pending")
       .neq("status", "cancelled");
 
     if (ordErr) return fail("ORDER_QUERY_FAILED", ordErr.message, 500);
-    if ((paidCount ?? 0) > 0) {
+    if ((liveCount ?? 0) > 0) {
       return fail(
-        "HAS_PAID_ORDERS",
-        "결제 완료된 주문이 있는 포토북은 삭제할 수 없습니다.",
+        "HAS_ACTIVE_ORDERS",
+        "진행 중이거나 결제 완료된 주문이 있는 포토북은 삭제할 수 없습니다.",
         409,
       );
     }

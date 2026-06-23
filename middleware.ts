@@ -15,8 +15,15 @@ export async function middleware(req: NextRequest) {
   // Supabase 매직링크/OAuth 후속 ?code= 가 콜백 경로가 아닌 곳에 도착하면
   // /api/auth/callback 으로 보존하여 라우트 핸들러가 세션 교환을 수행하게 한다.
   // (Supabase Auth 가 redirect_to path 를 일관되게 strip 하는 동작에 대한 우회.)
+  // OAuth/매직링크 콜백은 항상 GET 네비게이션이므로 GET 으로만 한정한다.
+  // (메서드 가드 없으면 ?code= 를 단 임의의 POST /api/* 요청이 GET 콜백으로
+  //  307 리다이렉트되어 본문이 유실될 수 있음.)
   const codeParam = req.nextUrl.searchParams.get("code");
-  if (codeParam && req.nextUrl.pathname !== "/api/auth/callback") {
+  if (
+    codeParam &&
+    req.method === "GET" &&
+    req.nextUrl.pathname !== "/api/auth/callback"
+  ) {
     const url = req.nextUrl.clone();
     const next = url.pathname === "/" ? "/" : url.pathname;
     url.pathname = "/api/auth/callback";

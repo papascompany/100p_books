@@ -216,41 +216,28 @@ export async function POST(req: Request) {
       .update({ status: "ordered" })
       .eq("id", order.project_id);
 
-    // 5-1) 친구 추천 보상 (M16-4) — 이번 결제가 본 사용자의 첫 결제(paid+)인 경우에만.
-    //   현재 주문(order.id) 외에 status != 'pending' 이고 paid_at IS NOT NULL 인 다른 주문이 없으면 첫 결제.
-    //   referrals 에 referee_id = user 인 pending 행이 있으면 award_referral_reward RPC 로 atomic 처리.
+    // 5-1) 친구 추천 보상 (M16-4) — 결제가 paid 로 확정된 클레임 승자에서 1회 호출.
+    //   '첫 결제' 카운트 가드는 제거한다: 이미 결제 이력이 있는 사용자에게 뒤늦게
+    //   pending referral 이 생긴 엣지(재로그인/쿠키 지연 등)에서 보상이 영구 누락되던
+    //   문제를 막기 위함. award_referral_reward_v2 는 referee 의 pending referral 1건만
+    //   잡아 1회 rewarded 로 전이시키므로(없으면 null), 매 결제 호출해도 중복 지급이 없다.
+    //   조건부 클레임(4) 승자에서만 실행되므로 동일 주문의 중복 confirm 으로도 재호출되지 않는다.
     //   실패해도 결제는 살림.
     try {
-      const { count: priorPaidCount, error: cntErr } = await admin
-        .from("orders")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", order.user_id)
-        .neq("status", "pending")
-        .neq("id", order.id)
-        .not("paid_at", "is", null);
-
-      if (cntErr) {
+      const { data: referrerId, error: rwdErr } = await admin.rpc(
+        "award_referral_reward_v2",
+        { p_referee_id: order.user_id, p_reward: REFERRAL_REWARD },
+      );
+      if (rwdErr) {
         console.warn(
-          "[payments/confirm] 첫 결제 카운트 실패:",
-          cntErr.message,
+          "[payments/confirm] award_referral_reward 실패:",
+          rwdErr.message,
         );
-      } else if ((priorPaidCount ?? 0) === 0) {
-        // 첫 결제 — referrals.pending 이 있으면 보상 지급.
-        const { data: referrerId, error: rwdErr } = await admin.rpc(
-          "award_referral_reward_v2",
-          { p_referee_id: order.user_id, p_reward: REFERRAL_REWARD },
+      } else if (referrerId) {
+        console.info(
+          `[payments/confirm] 추천 보상 +${REFERRAL_REWARD}P 지급`,
+          { referrerId, refereeId: order.user_id, orderId: order.id },
         );
-        if (rwdErr) {
-          console.warn(
-            "[payments/confirm] award_referral_reward 실패:",
-            rwdErr.message,
-          );
-        } else if (referrerId) {
-          console.info(
-            `[payments/confirm] 추천 보상 +${REFERRAL_REWARD}P 지급`,
-            { referrerId, refereeId: order.user_id, orderId: order.id },
-          );
-        }
       }
     } catch (e) {
       console.warn(

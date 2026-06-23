@@ -154,19 +154,40 @@ export async function POST() {
         );
       }
 
-      // 정확히 10일째 도달한 시점에 보너스 1회 지급.
-      if (totalThisMonth === TEN_DAY_THRESHOLD) {
+      // 월 10일 달성 보너스 — 정확히 1회만.
+      // `=== 10` 등호 비교는 동시 출석 레이스(서로 다른 날짜의 거의 동시 INSERT)에서
+      //   count 가 양쪽 모두 9 또는 모두 10/11 로 읽혀 보너스가 0번 또는 2번 지급될 수 있다.
+      //   (a) 임계 도달은 `>= 10` 으로 판정해 경계를 건너뛰어도 누락되지 않게 하고,
+      //   (b) 지급 직전 ledger 에 이번 달 보너스가 이미 있는지 확인해 중복 지급을 막는다.
+      if (totalThisMonth >= TEN_DAY_THRESHOLD) {
         try {
-          await creditPoints(
-            admin,
-            user.id,
-            TEN_DAY_BONUS,
-            "attendance_bonus",
-            undefined,
-            `${monthKey} 10일 달성 보너스`,
-          );
-          pointsAwarded += TEN_DAY_BONUS;
-          tenDayBonus = true;
+          const bonusMemo = `${monthKey} 10일 달성 보너스`;
+          // 이번 달 보너스 ledger 가 이미 존재하면(=다른 요청이 선지급) 건너뛴다 — 멱등.
+          const { count: existingBonus, error: bonusCheckErr } = await admin
+            .from("point_ledger")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", user.id)
+            .eq("reason", "attendance_bonus")
+            .eq("memo", bonusMemo);
+
+          if (bonusCheckErr) {
+            throw new Error(
+              `보너스 중복 확인 실패: ${bonusCheckErr.message}`,
+            );
+          }
+
+          if (!existingBonus) {
+            await creditPoints(
+              admin,
+              user.id,
+              TEN_DAY_BONUS,
+              "attendance_bonus",
+              undefined,
+              bonusMemo,
+            );
+            pointsAwarded += TEN_DAY_BONUS;
+            tenDayBonus = true;
+          }
         } catch (e) {
           console.warn(
             "[attendance/check] 10일 보너스 지급 실패:",

@@ -6,12 +6,20 @@ import { fail, ok } from "@/app/api/_lib/response";
 import { withAdmin } from "@/lib/admin/auth";
 import { logAdminAction } from "@/lib/admin/audit";
 import { createAdminSupabase } from "@/lib/db/admin";
+import type { OrderStatus } from "@/lib/db/types";
 import { runProjectPdfBuild } from "@/lib/pdf/build-job";
 import { storigeOrderPatch } from "@/lib/storige/order-fields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+// 재빌드 허용 상태 — 종착 상태(cancelled/refunded)나 배송완료(delivered) 주문의
+// 인쇄 산출물 키를 덮어쓰면 회계/이력 정합성이 깨지므로 제작 단계로 한정한다.
+const REBUILD_ALLOWED: ReadonlySet<OrderStatus> = new Set<OrderStatus>([
+  "paid",
+  "in_production",
+]);
 
 const BodySchema = z
   .object({
@@ -43,12 +51,21 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
   const { data: order, error: getErr } = await admin
     .from("orders")
     .select(
-      "id, user_id, project_id, cover_pdf_key, interior_pdf_key, projects(title)",
+      "id, status, user_id, project_id, cover_pdf_key, interior_pdf_key, projects(title)",
     )
     .eq("id", ctx.params.id)
     .maybeSingle();
   if (getErr) return fail("ORDER_QUERY_FAILED", getErr.message, 500);
   if (!order) return fail("NOT_FOUND", "주문을 찾을 수 없습니다.", 404);
+
+  if (!REBUILD_ALLOWED.has(order.status as OrderStatus)) {
+    return fail(
+      "ORDER_NOT_REBUILDABLE",
+      "이 주문 상태에서는 PDF 를 재생성할 수 없습니다.",
+      409,
+      { status: order.status },
+    );
+  }
 
   const orderId = order.id;
   const userId = order.user_id;

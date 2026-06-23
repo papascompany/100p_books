@@ -4,12 +4,21 @@ import { fail, ok } from "@/app/api/_lib/response";
 import { withAdmin } from "@/lib/admin/auth";
 import { logAdminAction } from "@/lib/admin/audit";
 import { createAdminSupabase } from "@/lib/db/admin";
+import type { OrderStatus } from "@/lib/db/types";
 import { retryFailedJob } from "@/lib/pdf/job-runner";
 import { storigeOrderPatch } from "@/lib/storige/order-fields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+// 재시도 허용 상태 — 실패한 빌드 잡 한정이므로 미결제(pending)도 허용하되,
+// 종착 상태(cancelled/refunded)나 배송완료(delivered) 주문의 산출물 키는 덮어쓰지 않는다.
+const RETRY_ALLOWED: ReadonlySet<OrderStatus> = new Set<OrderStatus>([
+  "pending",
+  "paid",
+  "in_production",
+]);
 
 /**
  * POST /api/admin/orders/:id/retry-pdf
@@ -81,10 +90,19 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
   // 주문 정보 (uploadPath 빌드용)
   const { data: order } = await admin
     .from("orders")
-    .select("id, user_id, project_id")
+    .select("id, status, user_id, project_id")
     .eq("id", orderId)
     .maybeSingle();
   if (!order) return fail("NOT_FOUND", "주문을 찾을 수 없습니다.", 404);
+
+  if (!RETRY_ALLOWED.has(order.status as OrderStatus)) {
+    return fail(
+      "ORDER_NOT_RETRYABLE",
+      "이 주문 상태에서는 PDF 빌드를 재시도할 수 없습니다.",
+      409,
+      { status: order.status },
+    );
+  }
 
   try {
     const result = await retryFailedJob(latest.id, {

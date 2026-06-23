@@ -8,6 +8,7 @@ import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { Photo } from "@/lib/db/types";
 import {
+  ALLOWED_MIME_TYPES,
   MAX_FILE_BYTES,
   MAX_PHOTOS_PER_PROJECT,
   ORIGINALS_BUCKET,
@@ -15,11 +16,31 @@ import {
   THUMB_LONG_EDGE,
   THUMB_WEBP_QUALITY,
 } from "@/lib/image/constants";
+import { enforceRateLimit } from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-// sharp 는 native. serverExternalPackages 에 이미 포함됨 (next.config.ts).
+// sharp 는 native. serverComponentsExternalPackages 에 포함 (next.config.mjs).
 export const maxDuration = 60;
+
+/** sharp metadata.format → 저장 contentType. 화이트리스트 밖이면 null. */
+function mimeFromSharpFormat(format: string | undefined): string | null {
+  switch (format) {
+    case "jpeg":
+    case "jpg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "heic":
+      return "image/heic";
+    case "heif":
+      return "image/heif";
+    default:
+      return null;
+  }
+}
 
 const PhotoItemSchema = z.object({
   photoId: z.string().uuid(),
@@ -64,6 +85,17 @@ export async function POST(req: Request) {
   try {
     const user = await requireUser();
 
+    // 🛡 Rate limit — sharp 회전/재업로드/썸네일 등 무거운 동기 파이프라인 보호 (sign-upload 와 동일 프리셋)
+    const rl = await enforceRateLimit("photo-upload", req, user.id);
+    if (!rl.success) {
+      return fail(
+        "RATE_LIMITED",
+        "업로드 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.",
+        429,
+        { resetAt: rl.reset, limit: rl.limit },
+      );
+    }
+
     const raw = (await req.json().catch(() => ({}))) as unknown;
     const parsed = BodySchema.safeParse(raw);
     if (!parsed.success) {
@@ -86,15 +118,45 @@ export async function POST(req: Request) {
       return fail("FORBIDDEN", "해당 프로젝트에 대한 권한이 없습니다.", 403);
     }
 
-    // 2) storageKey 가 이 유저/프로젝트 경로인지 재검증
+    // 2) storageKey 가 이 유저/프로젝트 경로인지 + MIME 화이트리스트 재검증
+    //    (sign-upload 를 우회한 직접 complete 호출 방어 — sign-upload 와 동일한 검증)
     const expectedPrefix = `${user.id}/${projectId}/`;
     for (const p of photos) {
       if (!p.storageKey.startsWith(expectedPrefix)) {
         return fail("INVALID_STORAGE_KEY", `storageKey 경로 규약 위반: ${p.storageKey}`, 400);
       }
+      if (!(ALLOWED_MIME_TYPES as readonly string[]).includes(p.mime.toLowerCase())) {
+        return fail("INVALID_FILE", `허용되지 않는 MIME: ${p.mime}`, 400);
+      }
     }
 
     const admin = createAdminSupabase();
+
+    // 3) 멱등성 — 이미 존재하는 photoId 는 재처리 skip (재시도/PK 충돌 방어)
+    const requestedIds = photos.map((p) => p.photoId);
+    const { data: existingRows, error: existErr } = await admin
+      .from("photos")
+      .select("id")
+      .in("id", requestedIds);
+    if (existErr) return fail("PHOTO_COUNT_FAILED", existErr.message, 500);
+    const existingIds = new Set((existingRows ?? []).map((r) => r.id as string));
+    const pending = photos.filter((p) => !existingIds.has(p.photoId));
+
+    // 4) 100장 한도 재검증 (TOCTOU 방어) — active 사진 수 + 신규 처리분 합산
+    const { count: activeCount, error: countErr } = await admin
+      .from("photos")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", projectId)
+      .is("deleted_at", null);
+    if (countErr) return fail("PHOTO_COUNT_FAILED", countErr.message, 500);
+    if ((activeCount ?? 0) + pending.length > MAX_PHOTOS_PER_PROJECT) {
+      return fail(
+        "QUOTA_EXCEEDED",
+        `한 프로젝트에는 최대 ${MAX_PHOTOS_PER_PROJECT}장까지 업로드할 수 있습니다.`,
+        400,
+      );
+    }
+
     const sharpMod = (await import("sharp")).default;
     const exifrMod = (await import("exifr")).default;
 
@@ -114,7 +176,7 @@ export async function POST(req: Request) {
       order_idx: number;
     }> = [];
 
-    for (const p of photos) {
+    for (const p of pending) {
       try {
         // 원본 다운로드
         const { data: blob, error: dlErr } = await admin.storage
@@ -182,10 +244,22 @@ export async function POST(req: Request) {
         // sharp 는 rotate() 이후 별도 포맷 지정 없이 toBuffer() 시 입력 포맷 그대로 출력.
         const rewrittenBuffer = await normalized.toBuffer();
 
+        // contentType/mime 은 클라 값이 아니라 sharp 가 판정한 실제 포맷에서 도출 (위조 방어).
+        // 화이트리스트 밖 포맷이면 거부.
+        const detectedMime = mimeFromSharpFormat(normalizedMeta.format);
+        if (!detectedMime) {
+          results.push({
+            photoId: p.photoId,
+            photo: null,
+            error: `허용되지 않는 이미지 포맷: ${normalizedMeta.format ?? "unknown"}`,
+          });
+          continue;
+        }
+
         const { error: upErr } = await admin.storage
           .from(ORIGINALS_BUCKET)
           .upload(p.storageKey, rewrittenBuffer, {
-            contentType: p.mime,
+            contentType: detectedMime,
             upsert: true,
           });
 
@@ -233,8 +307,9 @@ export async function POST(req: Request) {
           storage_key: p.storageKey,
           thumb_key: thumbStoredKey,
           filename: p.filename,
-          mime: p.mime,
-          size_bytes: p.sizeBytes,
+          // mime/size_bytes 는 클라 값이 아니라 sharp 산출 포맷 + 실제 바이트로 기록 (위조 방어).
+          mime: detectedMime,
+          size_bytes: rewrittenBuffer.length,
           width,
           height,
           exif_taken_at: takenAt ?? p.exifTakenAt ?? null,
@@ -249,12 +324,14 @@ export async function POST(req: Request) {
       }
     }
 
-    // 일괄 INSERT (RLS 대신 소유권을 이미 검증했으므로 admin 사용)
+    // 일괄 UPSERT (RLS 대신 소유권을 이미 검증했으므로 admin 사용)
+    // 멱등성: 재시도로 동일 photoId 가 중복돼도 PK 충돌(23505)로 배치 전체가 실패하지 않도록
+    //         onConflict=id, ignoreDuplicates 로 안전 처리.
     let inserted: Photo[] = [];
     if (toInsert.length > 0) {
       const { data, error } = await admin
         .from("photos")
-        .insert(toInsert)
+        .upsert(toInsert, { onConflict: "id", ignoreDuplicates: true })
         .select();
 
       if (error) {

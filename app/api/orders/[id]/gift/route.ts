@@ -100,6 +100,27 @@ export async function POST(req: Request, { params }: RouteCtx) {
       );
     }
 
+    // 2-1) 동일 주문 중복 선물 방지 — 1회 결제로 다수에게 무료 복제되는 악용 차단.
+    //   주문당 활성(pending/claimed) gift 가 이미 있으면 추가 발급을 거부한다.
+    //   (만료/취소된 gift 는 재발급 허용.)
+    const adminGiftCheck = createAdminSupabase();
+    const { count: existingGiftCount, error: existingGiftErr } =
+      await adminGiftCheck
+        .from("gifts")
+        .select("id", { count: "exact", head: true })
+        .eq("order_id", orderId)
+        .in("status", ["pending", "claimed"]);
+    if (existingGiftErr) {
+      return fail("GIFT_QUERY_FAILED", existingGiftErr.message, 500);
+    }
+    if ((existingGiftCount ?? 0) > 0) {
+      return fail(
+        "GIFT_ALREADY_EXISTS",
+        "이 주문은 이미 선물로 발송되었어요. 주문 1건당 한 번만 선물할 수 있어요.",
+        409,
+      );
+    }
+
     // 3) 이메일 컨텍스트 — project + book_size + page count
     const { data: project, error: projErr } = await supabase
       .from("projects")
@@ -133,7 +154,7 @@ export async function POST(req: Request, { params }: RouteCtx) {
       (user.email ? emailPrefix(user.email) : "보낸이");
 
     // 5) gifts INSERT (admin — RLS 우회로 expires_at 기본값 적용 등 일관 처리)
-    const admin = createAdminSupabase();
+    const admin = adminGiftCheck;
     const { data: inserted, error: giftErr } = await admin
       .from("gifts")
       .insert({

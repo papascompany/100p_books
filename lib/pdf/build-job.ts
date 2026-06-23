@@ -196,6 +196,10 @@ export async function runProjectPdfBuild(
   const downloadPrefix = args.downloadPrefix ?? slug(project.title ?? "book");
   // STORIGE_VALIDATE=false 로 인쇄 검증 비활성 가능 (기본 활성).
   const doValidate = process.env.STORIGE_VALIDATE !== "false";
+  // 검증은 best-effort 캐시일 뿐(주문/생산을 gate 하지 않음)이며 빌드-업로드
+  // 임계경로(target='all' 이면 2회 직렬)에서 호출된다. 폴링 예산을 짧게 잡아
+  // 미종착 시 빌드 꼬리에 더해지는 시간을 줄인다(기본 15s×2 → 4s×2).
+  const validatePoll = { maxMs: 4000 } as const;
 
   // Storige 미설정이면 빌드 잡을 실패로 남겨(throw) 재시도 가능하게 한다.
   //   - 결제는 이미 살아있고(confirm), pdf_build_jobs 행이 남아 admin 이 재시도.
@@ -246,16 +250,19 @@ export async function runProjectPdfBuild(
 
       // 인쇄 검증 (best-effort — 실패해도 빌드/주문을 막지 않음)
       if (doValidate) {
-        result.interiorValidation = await validatePdf({
-          fileId: up.id,
-          fileType: "content",
-          orderOptions: {
-            size: { width: bookSize.width_mm, height: bookSize.height_mm },
-            pages: pageDocs.length,
-            binding: "perfect",
-            bleed: 2,
+        result.interiorValidation = await validatePdf(
+          {
+            fileId: up.id,
+            fileType: "content",
+            orderOptions: {
+              size: { width: bookSize.width_mm, height: bookSize.height_mm },
+              pages: pageDocs.length,
+              binding: "perfect",
+              bleed: 2,
+            },
           },
-        });
+          validatePoll,
+        );
       }
     }
 
@@ -287,16 +294,19 @@ export async function runProjectPdfBuild(
       result.coverKey = up.id;
 
       if (doValidate) {
-        result.coverValidation = await validatePdf({
-          fileId: up.id,
-          fileType: "cover",
-          orderOptions: {
-            size: { width: coverDoc.widthMm, height: coverDoc.heightMm },
-            pages: interiorPageCount,
-            binding: "perfect",
-            bleed: coverDoc.bleedMm ?? 2,
+        result.coverValidation = await validatePdf(
+          {
+            fileId: up.id,
+            fileType: "cover",
+            orderOptions: {
+              size: { width: coverDoc.widthMm, height: coverDoc.heightMm },
+              pages: interiorPageCount,
+              binding: "perfect",
+              bleed: coverDoc.bleedMm ?? 2,
+            },
           },
-        });
+          validatePoll,
+        );
       }
     }
 

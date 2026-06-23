@@ -12,6 +12,9 @@ import { createResourceResolver } from "@/lib/pdf/resources";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+// 다른 렌더 라우트(confirm/rebuild-pdf/layout-generate)와 정책 통일 —
+// 복잡한 클립아트/다수 사진 페이지에서 기본 함수 타임아웃에 걸리지 않도록 명시.
+export const maxDuration = 60;
 
 /**
  * GET/POST /api/pages/[id]/preview

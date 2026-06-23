@@ -1,5 +1,7 @@
 import "server-only";
 
+import { randomInt } from "node:crypto";
+
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/db/types";
@@ -19,7 +21,8 @@ const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 function pickRandom(len: number): string {
   let out = "";
   for (let i = 0; i < len; i += 1) {
-    out += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
+    // 예측 가능한 Math.random() 대신 CSPRNG(randomInt) 사용.
+    out += ALPHABET[randomInt(ALPHABET.length)];
   }
   return out;
 }

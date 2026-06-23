@@ -381,12 +381,18 @@ export async function uploadPdfPresigned(
       },
     );
   } catch (e) {
+    // PUT 은 성공했으나 complete 호출 자체가 실패 — R2 에 미완료 객체가 남는다.
+    // 빌드 잡은 max_attempts 까지 재시도(presign→전체 PDF 재-PUT)하므로
+    // 시도마다 고아 객체가 누적되지 않게 best-effort 로 정리.
+    await abortPresignedUpload(fileId);
     throw new StorigeError(
       `complete 네트워크 오류: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
   if (!completeResp.ok) {
     const body = await safeText(completeResp);
+    // complete 비-2xx — 미완료 R2 객체를 best-effort 로 정리(고아 누적 방지).
+    await abortPresignedUpload(fileId);
     throw new StorigeError(
       `complete 실패 (${completeResp.status}): ${body.slice(0, 300)}`,
       completeResp.status,
@@ -399,6 +405,7 @@ export async function uploadPdfPresigned(
   // 2xx 인데 id 가 없으면 백엔드 이상 — presign fileId 로 silent fallback 하지 않고
   // 명확히 실패시킨다(불완전 업로드가 orders 에 커밋되는 것 방지).
   if (!json?.id) {
+    await abortPresignedUpload(fileId);
     throw new StorigeError("complete 응답에 파일 id 가 없습니다 (백엔드 이상).");
   }
   return {
@@ -599,6 +606,21 @@ export async function deleteFile(fileId: string): Promise<DeleteResult> {
 // =====================================================================
 // helpers
 // =====================================================================
+
+/**
+ * presigned 업로드 정리 (best-effort) — complete 가 실패해 미완료가 된
+ * R2 객체(presign fileId)를 삭제 시도한다. 절대 throw 하지 않으며(원래
+ * 업로드 실패를 가려서는 안 됨), 삭제 API 미지원/오류는 조용히 무시한다.
+ * retention cron 은 orders.storige_*_file_id 기준이라 미완료 객체를 못 지우므로
+ * 여기서 즉시 정리하지 않으면 재시도마다 고아가 누적된다.
+ */
+async function abortPresignedUpload(fileId: string): Promise<void> {
+  try {
+    await deleteFile(fileId);
+  } catch {
+    // 정리 실패는 무시 — 원래 업로드 실패가 우선.
+  }
+}
 
 async function safeText(resp: Response): Promise<string> {
   try {

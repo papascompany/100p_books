@@ -23,12 +23,6 @@ const MAX_LIMIT = 48;
 /** 후기 작성 가능한 주문 상태. */
 const REVIEWABLE_ORDER_STATUSES = new Set(["shipped", "delivered"]);
 
-/** 이메일 prefix — 표시명이 없을 때 fallback. */
-function emailPrefix(email: string): string {
-  const i = email.indexOf("@");
-  return i > 0 ? email.slice(0, i) : email;
-}
-
 /**
  * 갤러리 응답 1건.
  */
@@ -135,22 +129,21 @@ export async function GET(req: Request) {
     const userIds = Array.from(new Set(reviewRows.map((r) => r.user_id)));
 
     // 작성자 표시명 — admin 으로 묶어서 조회 (profiles RLS: 본인만이지만 anon 갤러리에도
-    // 작성자 닉네임을 노출해야 하므로 service_role 로 우회 + display_name/email 만 추출).
+    // 작성자 닉네임을 노출해야 하므로 service_role 로 우회 + display_name 만 추출).
+    // NOTE: profiles.email 은 익명 갤러리(anon 접근) 표시명 fallback 으로 사용하지 않는다.
+    //       이메일 로컬파트가 식별 가능한 PII 일 수 있어, display_name 미설정 시 '익명' 으로만 노출.
     const admin = createAdminSupabase();
 
     const { data: profiles, error: profErr } = await admin
       .from("profiles")
-      .select("id, display_name, email")
+      .select("id, display_name")
       .in("id", userIds);
     if (profErr) {
       return fail("PROFILES_QUERY_FAILED", profErr.message, 500);
     }
     const nameById = new Map<string, string>();
     for (const p of profiles ?? []) {
-      const nm =
-        p.display_name ||
-        (p.email ? emailPrefix(p.email) : null) ||
-        "익명";
+      const nm = p.display_name || "익명";
       nameById.set(p.id, nm);
     }
 

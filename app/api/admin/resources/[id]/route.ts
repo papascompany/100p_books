@@ -32,6 +32,33 @@ export const PATCH = withAdmin<{ id: string }>(async (req, ctx, user) => {
     );
   }
   const admin = createAdminSupabase();
+
+  // meta 를 교체할 때는 생성(POST) 때와 동일한 type 별 필수 메타 검증을 재적용한다.
+  // (폰트의 family 가 사라지면 사용중 검사 false negative → 삭제 가드 우회 + 렌더 누락)
+  if ("meta" in parsed.data) {
+    const { data: existing, error: typeErr } = await admin
+      .from("resources")
+      .select("type")
+      .eq("id", ctx.params.id)
+      .maybeSingle();
+    if (typeErr) return fail("RESOURCE_QUERY_FAILED", typeErr.message, 500);
+    if (!existing) return fail("NOT_FOUND", "리소스를 찾을 수 없습니다.", 404);
+
+    if (existing.type === "font") {
+      const m = (parsed.data.meta ?? {}) as Record<string, unknown>;
+      const required = ["family", "licenseName"] as const;
+      for (const k of required) {
+        if (!m[k] || typeof m[k] !== "string") {
+          return fail(
+            "INVALID_META",
+            `폰트 메타 필수: ${required.join(", ")}`,
+            400,
+          );
+        }
+      }
+    }
+  }
+
   const { data, error } = await admin
     .from("resources")
     .update(parsed.data)

@@ -474,6 +474,14 @@ export interface Database {
         Args: { p_project_id: string; p_page_ids: string[] };
         Returns: number;
       };
+      regenerate_project_pages: {
+        Args: {
+          p_project_id: string;
+          p_layout_mode: string;
+          p_pages: Record<string, unknown>[];
+        };
+        Returns: number;
+      };
       shift_pages_after: {
         Args: {
           p_project_id: string;
