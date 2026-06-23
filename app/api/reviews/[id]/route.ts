@@ -17,12 +17,6 @@ const REVIEW_MAX_IMAGES = 3;
 
 const ParamsSchema = z.object({ id: z.string().uuid() });
 
-/** 이메일 prefix — 표시명이 없을 때 fallback. */
-function emailPrefix(email: string): string {
-  const i = email.indexOf("@");
-  return i > 0 ? email.slice(0, i) : email;
-}
-
 // =====================================================================
 // GET /api/reviews/[id]
 // =====================================================================
@@ -55,16 +49,13 @@ export async function GET(_req: Request, { params }: RouteCtx) {
 
     const admin = createAdminSupabase();
 
-    // 작성자 이름
+    // 작성자 이름 — 이메일 노출 금지(PII). display_name 없으면 '익명'.
     const { data: authorProfile } = await admin
       .from("profiles")
-      .select("display_name, email")
+      .select("display_name")
       .eq("id", review.user_id)
       .maybeSingle();
-    const authorName =
-      authorProfile?.display_name ||
-      (authorProfile?.email ? emailPrefix(authorProfile.email) : null) ||
-      "익명";
+    const authorName = authorProfile?.display_name || "익명";
 
     // 첨부 signed URLs
     const imageUrls: string[] = [];

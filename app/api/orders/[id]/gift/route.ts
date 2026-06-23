@@ -166,6 +166,15 @@ export async function POST(req: Request, { params }: RouteCtx) {
       .select("id, gift_token, expires_at")
       .single();
     if (giftErr || !inserted) {
+      // 부분 유니크 인덱스(gifts_active_order_uniq) 위반 — 동시 발급 레이스에서
+      // 이미 활성(pending/claimed) gift 가 존재. 위의 check-then-insert 를 DB 가 보강.
+      if ((giftErr as { code?: string } | null)?.code === "23505") {
+        return fail(
+          "GIFT_ALREADY_EXISTS",
+          "이미 이 주문으로 발송된 선물이 있습니다.",
+          409,
+        );
+      }
       return fail(
         "GIFT_INSERT_FAILED",
         giftErr?.message ?? "선물 발송에 실패했습니다.",
