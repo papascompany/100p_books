@@ -1,9 +1,53 @@
 # 100p Books — 개발 현황 및 다음 단계
 
-> 최종 업데이트: 2026-05-30
+> 최종 업데이트: 2026-06-22
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `a1f6160` (docs(partner): Lillys 연동 명세 + 시각화)
+> 운영 빌드: `296d02c` (fix(security): 감사 리뷰 fix-forward)
+> **정본 로컬 경로**: `/Users/yohan/Developer/claude/100p_books` (Documents 사본은 node_modules 제거됨)
+
+---
+
+## 🆕 최근 작업 (2026-06-13 ~ 06-22)
+
+### 1. Storige 인쇄 백엔드 일원화 (PDF 저장·검증·다운로드) — 라이브
+- 인쇄 PDF 저장처를 Supabase `pdfs` 버킷 → **Storige API**(`api.papascompany.co.kr/api`)로 이전.
+  자체 렌더러(@napi-rs/canvas + pdf-lib)·에디터는 그대로 유지.
+- `lib/storige/client.ts` — 유일한 외부 경계. **키 2종**: `STORIGE_API_KEY`(편집기 → `/files/*`),
+  `STORIGE_WORKER_API_KEY`(워커 → `/worker-jobs/*` 인쇄검증). 둘 다 서버 env 전용.
+- 업로드 2경로: ≤90MB multipart(`/files/upload/external`), **>90MB presigned 직결**
+  (`/files/presigned-upload-public` → R2 PUT → complete, 최대 2GB). uploadUrl SSRF 검증 + Content-Length.
+- 다운로드 **서버 프록시**(`/api/orders/[id]/download/[kind]`, `/api/pdf/download/[jobId]/[kind]`) — fileId 비노출.
+- 보존정책 cron `/api/cron/storige-retention` (배송완료+N일 → 삭제+컬럼 NULL).
+- DB: `orders.storige_cover_file_id / storige_interior_file_id / storige_validation`(마이그레이션 **0026**).
+- E2E 실증: 100p(105.9MB) presigned 업로드→다운로드 바이트동일→인쇄검증 **COMPLETED**.
+
+### 2. 100p 대용량 PDF 최적화 — 라이브
+- PNG→**JPEG q90 임베드**(`embedJpg`) + 스트리밍 합성으로 100p PDF 578MB→~106MB, 빌드 156s→19s.
+- 결제 confirm의 PDF 빌드를 **`waitUntil` 백그라운드**로 분리(응답 비블로킹).
+
+### 3. 전수감사(서브에이전트) 46건 → **전부 수정·배포 + 적대적 검증**
+- 발견: critical 4 / high 8 / medium 16 / low 14 / info 4 (거짓양성 0).
+- 배포 커밋: critical=`e998870`, high=`81323d7`, medium/low/info=`52e80a6`, 리뷰 fix-forward=`296d02c`.
+- 주요 수정: 인증우회(`requireUser`→`getUser` 서명검증), 결제 webhook 위조방지(시크릿 필수+재조회+금액검증),
+  결제 멱등(조건부 클레임), 환불 포인트·할인 복원(`lib/orders/refund.ts`), 엑셀 수식인젝션, 탈퇴 admin 차단,
+  출석/선물 멱등, 리뷰 PII 제거, RLS 보강 등. 모든 커밋 **Vercel 클린 빌드 SUCCESS**.
+
+### ⚠️ 운영자 수동 적용 필요 (Supabase 대시보드 — MCP는 타 계정이라 불가)
+- `0026_storige_pdf_storage.sql` — **적용 완료**(사용자 확인).
+- **`0027_reviews_storage_rls.sql`** — reviews 버킷 anon SELECT 차단. **미적용**.
+- **`0028_concurrency_unique_indexes.sql`** — gift/출석보너스 멱등 부분유니크 인덱스. **미적용**
+  (적용 전 기존 중복 0건 확인 — 파일 상단 점검쿼리).
+
+### 환경/배포 메모
+- **GitHub auto-deploy 정상**(실커밋 push→자동 빌드 확인). 빈 커밋은 Vercel이 스킵하므로 무시.
+- 로컬 `pnpm lint/build`는 세션 재개 후 **node v22 ↔ comment-json 툴링 크래시**로 불가(코드 무관).
+  → **`tsc --noEmit`은 정상**, **Vercel 클린 빌드가 권위 검증**.
+- Supabase MCP/CLI는 다른 계정("storige's Org") → 운영 DB `vprifnztvlduhpuwgdau` 직접 SQL 불가 → 대시보드 수동.
+
+### 보류 (착수 대기)
+- **데모 모드**: 인증/RLS 무훼손 + `/login` "데모 둘러보기" 원클릭 로그인(`/api/auth/demo-login`, 전용 데모계정,
+  `DEMO_MODE` env 토글). 사용자가 "구현 시작" 시 진행. 운영자 준비물: 데모계정 생성 + DEMO_* env.
 
 ---
 
