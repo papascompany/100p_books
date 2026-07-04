@@ -456,7 +456,15 @@ export async function requestValidation(opts: ValidateOpts): Promise<string> {
 interface WorkerJob {
   id: string;
   status: string; // PENDING | PROCESSING | COMPLETED | FIXABLE | FAILED ...
-  result?: { issues?: unknown[]; warnings?: unknown[] } & Record<string, unknown>;
+  // worker-job 정본 result shape = { isValid, errors, warnings, metadata }
+  // (Storige apps/worker pdf-validator.service.ts — 2026-07 실코드 확증). 'issues' 키는
+  // check-mergeable(별도 dry-run) 전용이라 validate 잡 result 엔 없다 → errors 를 읽어야 한다.
+  result?: {
+    isValid?: boolean;
+    errors?: unknown[];
+    warnings?: unknown[];
+    metadata?: unknown;
+  } & Record<string, unknown>;
 }
 
 /** GET {BASE}/worker-jobs/external/{jobId} (워커 키 — 외부 파트너 폴링 라우트) */
@@ -528,7 +536,8 @@ export async function validatePdf(
   return {
     status: (last.status ?? "PROCESSING").toUpperCase(),
     jobId,
-    issues: last.result?.issues,
+    isValid: last.result?.isValid,
+    errors: last.result?.errors,
     warnings: last.result?.warnings,
   };
 }

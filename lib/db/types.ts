@@ -218,7 +218,14 @@ export interface StorigeValidationResult {
   /** worker-job status: COMPLETED | FIXABLE | FAILED | PROCESSING | ERROR 등. */
   status: string;
   jobId?: string;
-  issues?: unknown[];
+  /** worker-job 정본 result.isValid — 검증 통과 여부. */
+  isValid?: boolean;
+  /**
+   * worker-job 정본 result.errors — 검증 실패 상세(코드/메시지/autoFixable 등).
+   * 과거 result.issues 로 읽었으나 워커 산출(ValidationResultDto)에 존재하지 않는
+   * 키였다(2026-07 Storige 실코드 확증 — 정본 shape = { isValid, errors, warnings, metadata }).
+   */
+  errors?: unknown[];
   warnings?: unknown[];
   /** 원본 응답 일부(디버그용). */
   raw?: unknown;
