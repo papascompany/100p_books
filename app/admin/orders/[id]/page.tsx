@@ -4,7 +4,12 @@ import { notFound } from "next/navigation";
 import StatusBadge from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { createAdminSupabase } from "@/lib/db/admin";
-import type { OrderAddress, OrderStatus } from "@/lib/db/types";
+import type {
+  OrderAddress,
+  OrderStatus,
+  StorigeValidationCache,
+  StorigeValidationResult,
+} from "@/lib/db/types";
 
 import OrderActions from "./OrderActions";
 
@@ -34,6 +39,7 @@ interface OrderRow {
   interior_pdf_key: string | null;
   storige_cover_file_id: string | null;
   storige_interior_file_id: string | null;
+  storige_validation: StorigeValidationCache | null;
   paid_at: string | null;
   shipped_at: string | null;
   delivered_at: string | null;
@@ -58,7 +64,7 @@ export default async function AdminOrderDetailPage({
   const { data, error } = await admin
     .from("orders")
     .select(
-      "id, project_id, user_id, qty, amount, address, status, toss_payment_key, toss_order_id, cover_pdf_key, interior_pdf_key, storige_cover_file_id, storige_interior_file_id, paid_at, shipped_at, delivered_at, tracking_no, tracking_carrier, created_at, updated_at, projects(id, title, book_sizes(id, name, width_mm, height_mm)), profiles(id, email, display_name)",
+      "id, project_id, user_id, qty, amount, address, status, toss_payment_key, toss_order_id, cover_pdf_key, interior_pdf_key, storige_cover_file_id, storige_interior_file_id, storige_validation, paid_at, shipped_at, delivered_at, tracking_no, tracking_carrier, created_at, updated_at, projects(id, title, book_sizes(id, name, width_mm, height_mm)), profiles(id, email, display_name)",
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -216,6 +222,23 @@ export default async function AdminOrderDetailPage({
             )}
           </div>
         </Section>
+
+        {o.storige_validation ? (
+          <Section title="인쇄 검증 (Storige)">
+            <ValidationRow label="표지" v={o.storige_validation.cover} />
+            <ValidationRow label="내지" v={o.storige_validation.interior} />
+            {o.storige_validation.validatedAt ? (
+              <Row
+                label="검증 일시"
+                value={DT.format(new Date(o.storige_validation.validatedAt))}
+              />
+            ) : null}
+            <p className="pt-1 text-[11px] leading-relaxed text-muted-foreground">
+              CMYK·재단선·해상도 자동 검증 결과입니다. FIXABLE/FAILED 는 인쇄 품질
+              위험을 뜻하나 현재 주문/발주를 자동 차단하지 않습니다(발주 전 확인 권장).
+            </p>
+          </Section>
+        ) : null}
       </div>
 
       <Section title="액션">
@@ -261,6 +284,72 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
     <div className="flex items-baseline justify-between gap-3">
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="text-right">{value}</dd>
+    </div>
+  );
+}
+
+/** unknown 배열 요소(ValidationError/Warning)에서 표시용 문자열을 안전 추출. */
+function messageOf(x: unknown): string {
+  if (typeof x === "string") return x;
+  if (x && typeof x === "object") {
+    const rec = x as Record<string, unknown>;
+    if (typeof rec.message === "string") return rec.message;
+    if (typeof rec.code === "string") return rec.code;
+  }
+  return JSON.stringify(x);
+}
+
+/** 검증 status → 색상 톤. */
+function toneOf(status: string): string {
+  switch (status) {
+    case "COMPLETED":
+      return "text-emerald-600";
+    case "FIXABLE":
+      return "text-amber-600";
+    case "FAILED":
+    case "ERROR":
+      return "text-destructive";
+    default:
+      return "text-muted-foreground";
+  }
+}
+
+function ValidationRow({
+  label,
+  v,
+}: {
+  label: string;
+  v?: StorigeValidationResult;
+}) {
+  if (!v) {
+    return (
+      <Row label={label} value={<span className="text-muted-foreground">미검증</span>} />
+    );
+  }
+  const status = (v.status ?? "").toUpperCase();
+  const errors = Array.isArray(v.errors) ? v.errors : [];
+  const warnings = Array.isArray(v.warnings) ? v.warnings : [];
+  return (
+    <div className="space-y-1">
+      <div className="flex items-baseline justify-between gap-3">
+        <dt className="text-muted-foreground">{label}</dt>
+        <dd className="flex flex-wrap items-baseline justify-end gap-2 text-right">
+          <span className={`font-medium ${toneOf(status)}`}>{status || "—"}</span>
+          {errors.length > 0 ? (
+            <span className="text-destructive">오류 {errors.length}</span>
+          ) : null}
+          {warnings.length > 0 ? (
+            <span className="text-amber-600">경고 {warnings.length}</span>
+          ) : null}
+        </dd>
+      </div>
+      {errors.length > 0 ? (
+        <ul className="ml-1 list-disc space-y-0.5 pl-4 text-[11px] text-destructive/90">
+          {errors.slice(0, 5).map((e, i) => (
+            <li key={i}>{messageOf(e)}</li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
