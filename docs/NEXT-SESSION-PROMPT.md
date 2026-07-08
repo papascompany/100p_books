@@ -66,7 +66,7 @@ select indexname from pg_indexes
 
 2. ✅ **[해결됨 — 폴링 라우트 동결 확인] `GET /worker-jobs/external/:id`는 Storige `contract-freeze.spec.ts:67`에 명시 포함**(경로·GET·X-API-Key 리플렉션 단언) → 경로/인증은 회귀 그물 보호됨. ⚠️ **남은 Storige측 사각지대(우리 통제 밖, 통지만)**: (a) `POST /worker-jobs/validate/external`은 FROZEN_ROUTES **미등재** (b) 검증 result 키셋(`{isValid,errors,warnings,metadata}`)을 고정하는 **골든 spec 부재** — 문서상 FROZEN이나 실제 스냅샷 테스트 없음. → Storige 세션에 "validate/external + result 키셋 골든 추가" 권고(파트너 무중단 강화). 우리 client.ts는 정본 키로 이미 정렬됨.
 
-2-D. 🟡 **[제품 결정 대기 — 신규 발견] 검증 status가 아무것도 게이팅하지 않음.** 소비처 분석 결과 `storige_validation.status`(COMPLETED/FIXABLE/**FAILED**)가 코드 어디서도 소비 안 됨 → **FAILED(불량 CMYK/재단/해상도) PDF도 주문·인쇄 발주·다운로드가 그대로 진행**. 다운로드 게이팅은 `storige_*_file_id` 존재 여부로만 판정. 이는 issues 버그와 별개인 **설계 공백**(검증하지만 결과를 안 씀). **선택지**: ① 관리자 주문 상세에 검증 뱃지 read-only 노출(additive·안전) ② FIXABLE/FAILED 시 관리자 경고/발주 보류(주문 플로우 변경=오너 승인) ③ 현행 유지(검증은 감사 로그로만). **오너 결정 필요.**
+2-D. 🟡 **[부분 완료 — 검증 가시화] 검증 status가 아무것도 게이팅하지 않던 설계 공백.** 소비처 분석 결과 `storige_validation.status`(COMPLETED/FIXABLE/**FAILED**)가 코드 어디서도 소비 안 됨 → FAILED(불량 CMYK/재단/해상도) PDF도 주문·발주·다운로드가 그대로 진행됐음. **✅ Option ① 완료(2026-07-04, 커밋 `449cc3f`, Vercel SUCCESS)**: 관리자 주문 상세에 read-only "인쇄 검증" 섹션 추가(표지/내지 status 색상코딩 + 오류/경고 카운트 + 오류 메시지 5건 + 발주 전 확인 안내). 주문/발주 플로우는 무변경. **⏭️ 남은 오너 결정**: ② FIXABLE/FAILED 시 관리자 경고 배너/발주 자동 보류(주문·이행 플로우 변경 = 오너 승인 필요) vs ③ 현행 가시화로 충분(수동 확인). ①이 ②의 선행 토대라 지금은 ②만 결정 대기.
 
 3. 🟡 **[모니터링] C-2 워커 처리조건 복귀**(Storige 오늘 로드맵 트랙 C, 재개 예정): crop marks 실배선 · DEFAULT_* 3상수 소비 · lightweight-synthesis 프로덕션 ON. → 우리가 보내는 `orderOptions`(`bleed:2`/`binding:'perfect'`/`size`/`pages`, client.ts L423-432)나 받는 검증 판정이 바뀔 수 있음. **Storige 배포 통지 시 100p PDF 검증 E2E 재실증**(105.9MB presigned→검증 COMPLETED 시나리오).
 
