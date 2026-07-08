@@ -163,7 +163,7 @@ Core Web Vitals(LCP/CLS/INP-대용 TBT) 모두 통과. Speed Index/TTI 는 클�
 Next.js:  14.2.35 (2026-05-10 보안 패치 완료)
 Supabase: vprifnztvlduhpuwgdau (Seoul / papascompany org)
 Vercel:   yohans-projects-de3234df / icn1 리전
-DB 마이그레이션: 0001 ~ 0024 (운영 DB 적용 완료 — 2026-05-14)
+DB 마이그레이션: 0001 ~ 0028 운영 적용 (0023·0024: 2026-05-14 / 0026: Storige / 0027·0028: 2026-07-04)
 정적 라우트:    /terms, /privacy, /refund, /offline, /robots.txt, /sitemap.xml, /_not-found
 PWA Service Worker: v2 (Stale-While-Revalidate 공개 페이지)
 Router Cache:   staleTimes { dynamic: 30s, static: 180s }
