@@ -33,11 +33,11 @@
   결제 멱등(조건부 클레임), 환불 포인트·할인 복원(`lib/orders/refund.ts`), 엑셀 수식인젝션, 탈퇴 admin 차단,
   출석/선물 멱등, 리뷰 PII 제거, RLS 보강 등. 모든 커밋 **Vercel 클린 빌드 SUCCESS**.
 
-### ⚠️ 운영자 수동 적용 필요 (Supabase 대시보드 — MCP는 타 계정이라 불가)
+### Supabase 마이그레이션 운영 적용 현황 (대시보드 수동 — MCP는 타 계정이라 불가)
 - `0026_storige_pdf_storage.sql` — **적용 완료**(사용자 확인).
-- **`0027_reviews_storage_rls.sql`** — reviews 버킷 anon SELECT 차단. **미적용**.
-- **`0028_concurrency_unique_indexes.sql`** — gift/출석보너스 멱등 부분유니크 인덱스. **미적용**
-  (적용 전 기존 중복 0건 확인 — 파일 상단 점검쿼리).
+- `0027_reviews_storage_rls.sql` — reviews 버킷 anon SELECT 차단. **적용 완료(2026-07-04)** — 사용자 확인.
+- `0028_concurrency_unique_indexes.sql` — gift/출석보너스 멱등 부분유니크 인덱스.
+  **적용 완료(2026-07-04)** — 사전 점검(gift 활성 중복·보너스 중복) 둘 다 0행 확인 후 적용.
 
 ### 환경/배포 메모
 - **GitHub auto-deploy 정상**(실커밋 push→자동 빌드 확인). 빈 커밋은 Vercel이 스킵하므로 무시.

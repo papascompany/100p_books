@@ -18,9 +18,9 @@
 - **Supabase 마이그레이션은 MCP/CLI 불가**(MCP=타 계정 "storige's Org", 운영 DB `vprifnztvlduhpuwgdau`=papascompany org). → 사용자가 **대시보드 SQL Editor 수동 적용**. SQL은 붙여넣기 좋게 정리해 제공.
 - 첫 작업 전 루트 `STATUS.md` + 이 문서를 읽고 현재 상태를 사용자에게 보고할 것.
 
-### 즉시 처리 미결 1 — 운영 DB 마이그레이션 0027 / 0028 수동 적용 (최우선, 놓치지 말 것)
-앱 코드는 둘 다 **이미 배포됨**. 인덱스 미적용 시 앱 레벨 체크는 동작하나 **DB 원자 멱등은 미보장**. reviews RLS 미적용 시 **비공개 후기 첨부가 anon에 노출**.
-파일: `supabase/migrations/0027_reviews_storage_rls.sql`, `supabase/migrations/0028_concurrency_unique_indexes.sql`.
+### ✅ [완료됨 — 2026-07-04] 미결 1 — 운영 DB 마이그레이션 0027 / 0028 수동 적용
+`0027_reviews_storage_rls.sql`(reviews 버킷 anon SELECT 차단) + `0028_concurrency_unique_indexes.sql`(gift/출석보너스 멱등 부분유니크) **운영 DB(`100p_books`/PRODUCTION, ref `vprifnztvlduhpuwgdau`) 적용 완료**. 사전 점검(gift 활성 중복·보너스 중복) 둘 다 0행 확인 후 적용. 아래 절차는 재적용/롤포워드 참고용 보존.
+> 함정 메모: SQL Editor가 다른 프로젝트에 연결되면 `42P01 relation "public.gifts" does not exist` 발생 — 반드시 상단이 `100p_books / PRODUCTION`인지 확인 후 실행.
 
 **절차 (사용자에게 SQL Editor 실행 요청 → 결과 확인 후 STATUS 갱신):**
 
