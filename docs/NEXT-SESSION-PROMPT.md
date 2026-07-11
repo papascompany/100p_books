@@ -68,7 +68,11 @@ select indexname from pg_indexes
 
 2-D. 🟡 **[부분 완료 — 검증 가시화] 검증 status가 아무것도 게이팅하지 않던 설계 공백.** 소비처 분석 결과 `storige_validation.status`(COMPLETED/FIXABLE/**FAILED**)가 코드 어디서도 소비 안 됨 → FAILED(불량 CMYK/재단/해상도) PDF도 주문·발주·다운로드가 그대로 진행됐음. **✅ Option ① 완료(2026-07-04, 커밋 `449cc3f`, Vercel SUCCESS)**: 관리자 주문 상세에 read-only "인쇄 검증" 섹션 추가(표지/내지 status 색상코딩 + 오류/경고 카운트 + 오류 메시지 5건 + 발주 전 확인 안내). 주문/발주 플로우는 무변경. **⏭️ 남은 오너 결정**: ② FIXABLE/FAILED 시 관리자 경고 배너/발주 자동 보류(주문·이행 플로우 변경 = 오너 승인 필요) vs ③ 현행 가시화로 충분(수동 확인). ①이 ②의 선행 토대라 지금은 ②만 결정 대기.
 
-3. 🟡 **[모니터링] C-2 워커 처리조건 복귀**(Storige 오늘 로드맵 트랙 C, 재개 예정): crop marks 실배선 · DEFAULT_* 3상수 소비 · lightweight-synthesis 프로덕션 ON. → 우리가 보내는 `orderOptions`(`bleed:2`/`binding:'perfect'`/`size`/`pages`, client.ts L423-432)나 받는 검증 판정이 바뀔 수 있음. **Storige 배포 통지 시 100p PDF 검증 E2E 재실증**(105.9MB presigned→검증 COMPLETED 시나리오).
+3. ✅ **[해결됨 — 2026-07-11, 커밋 `4b89aa2`, Vercel SUCCESS] 워커 검증 계약 정밀 대응 완료.** Storige 워커 검증 파이프라인 리포트(2026-07-09)+실코드(pdf-validator.service.ts·worker-job.dto.ts) 전수 대조로 orderOptions 계약 확정·적용:
+   - **내지에 DD `pageMultiple: 2` 전송** — 미전송 시 레거시가 perfect=4배수 강제 → 짝수 페이지(50 등)도 PAGE_COUNT_INVALID(FIXABLE) **오탐**(bookmoa 실측 FIXABLE 70% 함정). 무선=2가 인쇄소 실규칙. 홀수 페이지는 계속 에러(정당 — 제품에 짝수 강제/패딩 없음, 발생 시 관리자 검증 섹션에 표시됨).
+   - **표지 `size`=통판 스프레드(블리드 제외) 유지가 정답** (validatePageSize에 표지 예외 없음 → 판형 전송 시 SIZE_MISMATCH 필패). **spineWidthMm/paperThickness 전송 금지**(워커 spine 공식 `size.width×2`와 스프레드 size 충돌 → 필패; 미전송 시 spine 검증 생략, 책등 정합은 우리 빌더 assert 담당). 근거 주석 코드에 고정.
+   - 워커 판정 3분기: COMPLETED(에러0)/FIXABLE(에러 전부 autoFixable)/FAILED(수정불가). FIXABLE 자동수정 실행기는 addBlankPages만 배선(SIZE/SPINE/BLEED는 미배선 — Storige측 C안 게이팅 예정). 우리는 fix-pagecount 사용 안 함(PageDoc 재빌드가 정공).
+   - **잔여 모니터링**: Storige C-2(crop marks 실배선·lightweight-synthesis ON) 배포 통지 시 100p PDF 검증 E2E 재실증. `cropMarkEnabled`는 우리가 opt-in 안 하므로 기본 무영향.
 
 4. 🟢 **[안심·회귀주의] 우리 하드 의존 표면 대부분 FROZEN 보호됨.** CONTRACT_FREEZE §1-B/1-C가 우리 client.ts 라인을 계약 근거로 박아둠: `POST /files/upload/external`(multer 100MB) · `GET /files/:id/download/external` · `DELETE /files/:id/external`(404=성공) · `POST /files/:id/expiry/external` · presigned 6종(`presigned-upload-public`/`multipart/init·sign·complete·abort`/`:id/complete`) · **업로드 크기 경계**(90MB 라우팅 임계·multer 100MB·presigned 2GB) · **`503+STORIGE_NOT_S3` 폴백 문자열** · **응답 최상위 `id` 키** · `ALLOWED_CONTENT_TYPES`(svg 제외). → Storige가 함부로 못 바꾼다(안심). **역으로 우리가 client.ts 리팩터링 시 이 계약 근거를 깨지 말 것**: `json.id` 의존, `body.includes('STORIGE_NOT_S3')`, 90MB 임계, multipart 응답 3키(`fileId/uploadUrl/uploadToken`).
 
