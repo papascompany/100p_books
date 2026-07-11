@@ -234,8 +234,10 @@ export default async function AdminOrderDetailPage({
               />
             ) : null}
             <p className="pt-1 text-[11px] leading-relaxed text-muted-foreground">
-              CMYK·재단선·해상도 자동 검증 결과입니다. FIXABLE/FAILED 는 인쇄 품질
-              위험을 뜻하나 현재 주문/발주를 자동 차단하지 않습니다(발주 전 확인 권장).
+              규격·재단·색상·해상도 자동 검증 결과입니다. COMPLETED=통과(경고는
+              정보성), FIXABLE=자동수정 가능한 규격 에러(페이지 배수 등),
+              FAILED=수정불가 에러. 현재 주문/발주를 자동 차단하지 않으므로
+              FIXABLE/FAILED 는 발주 전 확인이 필요합니다.
             </p>
           </Section>
         ) : null}

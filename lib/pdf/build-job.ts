@@ -255,10 +255,14 @@ export async function runProjectPdfBuild(
             fileId: up.id,
             fileType: "content",
             orderOptions: {
+              // 내지 PDF 페이지 = 판형 + 블리드×2 (build.ts) → size+bleed 매칭으로 통과.
               size: { width: bookSize.width_mm, height: bookSize.height_mm },
               pages: pageDocs.length,
               binding: "perfect",
               bleed: 2,
+              // DD 페이지규칙: 무선(perfect)=2. 미전송 시 워커 레거시가 4의 배수를
+              // 강제해 짝수 페이지수(50 등)도 PAGE_COUNT_INVALID(FIXABLE) 오탐.
+              pageMultiple: 2,
             },
           },
           validatePoll,
@@ -299,6 +303,12 @@ export async function runProjectPdfBuild(
             fileId: up.id,
             fileType: "cover",
             orderOptions: {
+              // 표지 PDF 페이지 = coverDoc(북폭×2+책등, 블리드 제외) + 블리드×2 (build.ts)
+              // → size 에 통판 스프레드를 보내야 워커 size 검증(size+bleed 매칭)을 통과.
+              //   판형을 보내면 표지 예외가 없는 validatePageSize 가 SIZE_MISMATCH 오탐.
+              // ⚠️ spineWidthMm/paperThickness 는 보내지 않는다 — 워커 spine 공식
+              //   (size.width×2+spine)과 스프레드 size 가 충돌해 필패. 미전송 시 spine
+              //   검증은 생략되며, 책등 정합은 우리 빌더가 자체 검증(cover width assert).
               size: { width: coverDoc.widthMm, height: coverDoc.heightMm },
               pages: interiorPageCount,
               binding: "perfect",

@@ -424,10 +424,35 @@ export interface ValidateOpts {
   fileId: string;
   fileType: StorigeFileType;
   orderOptions: {
+    /**
+     * 기대 페이지 크기(mm). 워커 validatePageSize 는 실페이지가
+     * size / size+bleed×2 / workSize 중 하나와 ±1mm 매칭이어야 통과.
+     * ⚠️ 표지(cover)에도 예외 없이 적용되므로 표지는 "책 판형"이 아니라
+     * **통판 스프레드(북폭×2+책등, 블리드 제외)** 를 보내야 한다 — 우리 표지
+     * PDF 페이지가 정확히 스프레드+블리드×2 이기 때문(matchesWithBleed 로 통과).
+     */
     size: { width: number; height: number }; // mm
     pages: number;
     binding: "perfect";
     bleed: number; // mm
+    /**
+     * 내지 페이지수 배수 — 데이터 주도(DD) 계약(Storige worker-job.dto, 2026-06-25).
+     * 미전송 시 워커 레거시 폴백이 perfect 제본에 "4의 배수"를 강제해 짝수
+     * 페이지(50, 54 등)도 PAGE_COUNT_INVALID(FIXABLE) 오탐이 난다.
+     * 무선(perfect)=2 가 인쇄소 실규칙(bookmoa DD 값표와 동일).
+     */
+    pageMultiple?: number;
+    /** 제본별 페이지수 상한(DD). 초과=에러. */
+    pageCountMax?: number;
+    /** 제본별 페이지수 하한(DD). 미만=경고(비차단). */
+    pageCountMin?: number;
+    /**
+     * 책등 폭 권위값(mm). ⚠️ 전송 금지(현 계약): 워커 validateSpine 은
+     * 기대 표지폭을 size.width×2+spine+bleed×2 로 계산하는데 우리는 size 에
+     * 스프레드를 넣으므로(위 참조) spine 을 주면 2×스프레드와 비교돼 필패.
+     * spineWidthMm/paperThickness 둘 다 없으면 spine 검증은 생략된다(의도).
+     */
+    spineWidthMm?: number;
   };
 }
 
