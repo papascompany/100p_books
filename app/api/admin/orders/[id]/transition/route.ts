@@ -15,6 +15,11 @@ import {
   assertTransition,
   InvalidStateTransitionError,
 } from "@/lib/orders/state";
+import {
+  formatValidationBlocks,
+  getValidationBlocks,
+} from "@/lib/orders/validation-gate";
+import type { StorigeValidationCache } from "@/lib/db/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +28,8 @@ const BodySchema = z.object({
   to: z.enum(ALL_ORDER_STATUSES as [string, ...string[]]),
   trackingNo: z.string().trim().max(60).optional(),
   trackingCarrier: z.string().trim().max(40).optional(),
+  /** 인쇄 검증(FIXABLE/FAILED) 보류를 관리자가 확인 후 강제 진행. */
+  force: z.boolean().optional(),
 });
 
 /**
@@ -46,13 +53,13 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
       parsed.error.flatten(),
     );
   }
-  const { to, trackingNo, trackingCarrier } = parsed.data;
+  const { to, trackingNo, trackingCarrier, force } = parsed.data;
 
   const admin = createAdminSupabase();
 
   const { data: row, error: getErr } = await admin
     .from("orders")
-    .select("id, status, user_id, points_used, discount_code_id")
+    .select("id, status, user_id, points_used, discount_code_id, storige_validation")
     .eq("id", ctx.params.id)
     .maybeSingle();
   if (getErr) return fail("ORDER_QUERY_FAILED", getErr.message, 500);
@@ -68,6 +75,29 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
       return fail(e.code, e.message, e.status);
     }
     throw e;
+  }
+
+  // 발주 게이트 (2-D Option ②) — 인쇄 검증이 FIXABLE/FAILED 면 in_production
+  // 진입을 보류한다. best-effort 특성상 ERROR/PROCESSING/SKIPPED/미검증은 비차단.
+  // 관리자가 force 로 오버라이드하면 진행하되 감사 로그에 남긴다(아래 details).
+  // 알려진 한계(적대검증 2026-07-14, low): 이 SELECT 판정과 아래 조건부 UPDATE
+  // 사이 ms 창에서 빌드 잡이 검증 캐시를 갱신하면 게이트를 비켜갈 수 있다.
+  // 자문적 게이트(force 오버라이드 허용) + 관리자 전용 액터라 감수 — jsonb
+  // 재가드로 닫으려면 UPDATE 조건 복잡도가 이득을 넘는다.
+  const validationBlocks =
+    target === "in_production"
+      ? getValidationBlocks(
+          row.storige_validation as StorigeValidationCache | null,
+        )
+      : [];
+  if (validationBlocks.length > 0 && !force) {
+    return fail(
+      "VALIDATION_BLOCKED",
+      `인쇄 검증 미통과 — ${formatValidationBlocks(validationBlocks)}. ` +
+        "PDF 재생성으로 해소하거나, 확인 후 강제 발주(force)로 진행하세요.",
+      409,
+      { blocks: validationBlocks },
+    );
   }
 
   // shipped 전이 시 tracking 정보 필수
@@ -129,6 +159,10 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
       to: target,
       ...(target === "shipped"
         ? { trackingNo, trackingCarrier }
+        : {}),
+      // 검증 보류를 강제 통과한 발주는 사유와 함께 감사 추적.
+      ...(validationBlocks.length > 0
+        ? { validationOverride: true, validationBlocks }
         : {}),
     },
     request: req,

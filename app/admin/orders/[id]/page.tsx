@@ -10,6 +10,7 @@ import type {
   StorigeValidationCache,
   StorigeValidationResult,
 } from "@/lib/db/types";
+import { getValidationBlocks } from "@/lib/orders/validation-gate";
 
 import OrderActions from "./OrderActions";
 
@@ -236,8 +237,8 @@ export default async function AdminOrderDetailPage({
             <p className="pt-1 text-[11px] leading-relaxed text-muted-foreground">
               규격·재단·색상·해상도 자동 검증 결과입니다. COMPLETED=통과(경고는
               정보성), FIXABLE=자동수정 가능한 규격 에러(페이지 배수 등),
-              FAILED=수정불가 에러. 현재 주문/발주를 자동 차단하지 않으므로
-              FIXABLE/FAILED 는 발주 전 확인이 필요합니다.
+              FAILED=수정불가 에러. FIXABLE/FAILED 는 제작 시작(발주) 시 자동
+              보류되며, 관리자 확인을 거쳐 강제 진행할 수 있습니다(감사 기록).
             </p>
           </Section>
         ) : null}
@@ -249,6 +250,7 @@ export default async function AdminOrderDetailPage({
           status={o.status}
           trackingNo={o.tracking_no}
           trackingCarrier={o.tracking_carrier}
+          validationBlocks={getValidationBlocks(o.storige_validation)}
           pdfJob={
             latestJob
               ? {

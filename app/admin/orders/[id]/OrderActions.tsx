@@ -8,6 +8,10 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import type { OrderStatus } from "@/lib/db/types";
 import { canTransition } from "@/lib/orders/state";
+import {
+  formatValidationBlocks,
+  type ValidationBlock,
+} from "@/lib/orders/validation-gate";
 
 const NEXT: Array<{ to: OrderStatus; label: string; tone?: "default" | "destructive" }> = [
   { to: "in_production", label: "제작 시작" },
@@ -40,12 +44,15 @@ export default function OrderActions({
   trackingNo,
   trackingCarrier,
   pdfJob,
+  validationBlocks,
 }: {
   orderId: string;
   status: OrderStatus;
   trackingNo: string | null;
   trackingCarrier: string | null;
   pdfJob?: PdfJobBrief | null;
+  /** 인쇄 검증(FIXABLE/FAILED) 발주 차단 사유 — 서버 게이트와 동일 판정. */
+  validationBlocks?: ValidationBlock[];
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -57,6 +64,7 @@ export default function OrderActions({
   const transition = async (
     to: OrderStatus,
     extras?: { trackingNo?: string; trackingCarrier?: string },
+    force = false,
   ) => {
     if (extras && (!extras.trackingNo || !extras.trackingCarrier)) {
       toast({
@@ -66,14 +74,16 @@ export default function OrderActions({
       });
       return;
     }
+    // force 재시도는 이미 오버라이드 confirm 을 통과했으므로 기본 confirm 생략.
     if (
-      to === "cancelled" || to === "refunded"
+      !force &&
+      (to === "cancelled" || to === "refunded"
         ? !confirm(
             to === "refunded"
               ? "환불 처리하시겠습니까? 결제 환불은 별도 토스 콘솔에서 진행해야 합니다."
               : "주문을 취소하시겠습니까?",
           )
-        : !confirm(`상태를 '${to}' 로 변경하시겠습니까?`)
+        : !confirm(`상태를 '${to}' 로 변경하시겠습니까?`))
     ) {
       return;
     }
@@ -82,10 +92,24 @@ export default function OrderActions({
       const r = await fetch(`/api/admin/orders/${orderId}/transition`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ to, ...extras }),
+        body: JSON.stringify({ to, ...extras, ...(force ? { force: true } : {}) }),
       });
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.ok) {
+        // 발주 게이트(409) — 검증 미통과. 관리자 확인 후 force 재전송.
+        if (r.status === 409 && j?.error?.code === "VALIDATION_BLOCKED") {
+          const reason: string =
+            j?.error?.message ?? "인쇄 검증(FIXABLE/FAILED) 미통과 상태입니다.";
+          if (
+            confirm(
+              `${reason}\n\n검증 미통과 PDF 로 강제 발주하면 인쇄 사고 책임이 ` +
+                "운영자에게 있습니다. 그래도 발주하시겠습니까?",
+            )
+          ) {
+            await transition(to, extras, true);
+          }
+          return;
+        }
         toast({
           variant: "destructive",
           title: "상태 변경 실패",
@@ -160,8 +184,20 @@ export default function OrderActions({
   const showRetry = pdfJob && pdfJob.status === "failed";
   const retryDisabled = pdfJob ? pdfJob.attempt >= pdfJob.maxAttempts : true;
 
+  const showValidationHold =
+    !!validationBlocks &&
+    validationBlocks.length > 0 &&
+    canTransition(status, "in_production");
+
   return (
     <div className="space-y-3">
+      {showValidationHold ? (
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+          <strong>발주 보류:</strong> 인쇄 검증 미통과 —{" "}
+          {formatValidationBlocks(validationBlocks)}. PDF 재생성으로 해소하거나,
+          제작 시작 시 확인을 거쳐 강제 발주할 수 있습니다(감사 로그 기록).
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {NEXT.filter((opt) => canTransition(status, opt.to)).map((opt) => {
           if (opt.to === "shipped") {
