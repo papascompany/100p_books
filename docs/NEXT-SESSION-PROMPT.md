@@ -82,9 +82,9 @@ select indexname from pg_indexes
 
 6. ⚪ **[트리거 대기] 파트너 연동 라우트 미착수 유지.** `docs/lillys-integration.md`(v1 초안, `POST /api/partner/import` 등)는 **아직 미구현**(app/api/partner 없음 — 확인됨). Storige도 플랫폼 확장(Phase 1 파트너 SDK)을 **"파트너 수요 확약(계약/LOI) 건수 트리거 대기"** 로 닫음. → 우리도 partner 라우트 **지금 구현 불필요**. 실제 파트너 LOI/계약 나오면 그때 착수.
 
-### 하우스키핑 (낮은 우선순위, 사용자 승인 후)
-- **stale 워크트리**: `.claude/worktrees/frosty-haibt-512d2b`(branch `claude/frosty-haibt-512d2b` @ `81323d7`, 이미 main 머지됨) — 커밋 안 된 감사 잔재 M 파일 다수 보유. 내용은 이미 main에 반영됨. `git worktree remove` 대상(사용자 확인 후). `git worktree list`로 먼저 검토.
-- **stale 파일**: `app/api/pdf/build/route.ts.stale-disabled`(추적 안 됨) — 용도 확인 후 제거 판단.
+### ✅ 하우스키핑 완료 (2026-07-21, 사용자 승인 후 실행)
+- stale 워크트리 `frosty-haibt-512d2b` 제거 — 삭제 전 검증: 미커밋 M 4파일 전부 main `52e80a6`과 바이트 동일(고유 콘텐츠 0), 브랜치는 main 머지 확인 후 삭제. 빈 `.claude/worktrees/`도 정리.
+- `app/api/pdf/build/route.ts.stale-disabled`(감사 이전 백업, 추적 안 됨) 제거 — 활성 `route.ts` 유지. 작업트리 clean 확인.
 
 ### 보류 항목 (사용자 "구현 시작" 시)
 - **데모 모드**: 인증/RLS 무훼손 + `/login`에 "데모 둘러보기" 원클릭 + `POST /api/auth/demo-login`(전용 데모계정 서버 자동 로그인) + `DEMO_MODE` env 토글(off=버튼/라우트 차단). 운영자 준비물: 데모계정 생성 + `DEMO_EMAIL/DEMO_PASSWORD/DEMO_MODE`. **계정 생성·비번 입력은 어시스턴트가 직접 하지 않음**.
