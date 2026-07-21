@@ -66,7 +66,9 @@ select indexname from pg_indexes
 
 2. ✅ **[해결됨 — 폴링 라우트 동결 확인] `GET /worker-jobs/external/:id`는 Storige `contract-freeze.spec.ts:67`에 명시 포함**(경로·GET·X-API-Key 리플렉션 단언) → 경로/인증은 회귀 그물 보호됨. ⚠️ **남은 Storige측 사각지대(우리 통제 밖, 통지만)**: (a) `POST /worker-jobs/validate/external`은 FROZEN_ROUTES **미등재** (b) 검증 result 키셋(`{isValid,errors,warnings,metadata}`)을 고정하는 **골든 spec 부재** — 문서상 FROZEN이나 실제 스냅샷 테스트 없음. → Storige 세션에 "validate/external + result 키셋 골든 추가" 권고(파트너 무중단 강화). 우리 client.ts는 정본 키로 이미 정렬됨.
 
-2-D. 🟡 **[부분 완료 — 검증 가시화] 검증 status가 아무것도 게이팅하지 않던 설계 공백.** 소비처 분석 결과 `storige_validation.status`(COMPLETED/FIXABLE/**FAILED**)가 코드 어디서도 소비 안 됨 → FAILED(불량 CMYK/재단/해상도) PDF도 주문·발주·다운로드가 그대로 진행됐음. **✅ Option ① 완료(2026-07-04, 커밋 `449cc3f`, Vercel SUCCESS)**: 관리자 주문 상세에 read-only "인쇄 검증" 섹션 추가(표지/내지 status 색상코딩 + 오류/경고 카운트 + 오류 메시지 5건 + 발주 전 확인 안내). 주문/발주 플로우는 무변경. **⏭️ 남은 오너 결정**: ② FIXABLE/FAILED 시 관리자 경고 배너/발주 자동 보류(주문·이행 플로우 변경 = 오너 승인 필요) vs ③ 현행 가시화로 충분(수동 확인). ①이 ②의 선행 토대라 지금은 ②만 결정 대기.
+2-D. ✅ **[완결 — 2026-07-14] 검증 게이팅 설계 공백 해소 (Option ①+② 모두 배포).**
+   - **Option ① (2026-07-04, `449cc3f`)**: 관리자 주문 상세 read-only "인쇄 검증" 섹션(status 색상코딩+오류/경고 카운트+오류 메시지 5건).
+   - **Option ② (2026-07-14, `24adaed`, Vercel SUCCESS)**: **발주 게이트** — FIXABLE/FAILED 검증 주문의 paid→in_production 전이를 서버에서 409 `VALIDATION_BLOCKED`로 보류. `lib/orders/validation-gate.ts` 순수 헬퍼(FIXABLE/FAILED만 차단, ERROR/PROCESSING/SKIPPED/미검증은 best-effort라 비차단, 테스트 8건). 관리자 배너+책임 고지 confirm 후 `force` 오버라이드 가능(감사로그 `validationOverride` 기록). 발주 진입은 transition 라우트 단일 경로(우회 없음 전수 확인). 적대적 리뷰 3렌즈 PASS. 알려진 한계(low, 감수): SELECT 판정↔조건부 UPDATE 사이 ms TOCTOU 창(주석 문서화), 감사로그 best-effort.
 
 3. ✅ **[해결됨 — 2026-07-11, 커밋 `4b89aa2`, Vercel SUCCESS] 워커 검증 계약 정밀 대응 완료.** Storige 워커 검증 파이프라인 리포트(2026-07-09)+실코드(pdf-validator.service.ts·worker-job.dto.ts) 전수 대조로 orderOptions 계약 확정·적용:
    - **내지에 DD `pageMultiple: 2` 전송** — 미전송 시 레거시가 perfect=4배수 강제 → 짝수 페이지(50 등)도 PAGE_COUNT_INVALID(FIXABLE) **오탐**(bookmoa 실측 FIXABLE 70% 함정). 무선=2가 인쇄소 실규칙. 홀수 페이지는 계속 에러(정당 — 제품에 짝수 강제/패딩 없음, 발생 시 관리자 검증 섹션에 표시됨).
