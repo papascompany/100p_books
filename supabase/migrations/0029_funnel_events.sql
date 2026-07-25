@@ -36,11 +36,9 @@ create unique index if not exists uq_funnel_signup_once
 alter table public.funnel_events enable row level security;
 
 -- admin 만 SELECT. INSERT/UPDATE/DELETE 정책 없음 → service_role 외에는 불가.
+-- 재적용 안전: 레포 관례대로 create 전에 drop (Postgres 는 create policy if not exists 미지원).
+-- admin 판정은 표준 헬퍼 public.is_admin() 사용 (profiles RLS 변경에 영향받지 않음 — security definer).
+drop policy if exists "funnel_events_admin_select" on public.funnel_events;
 create policy "funnel_events_admin_select"
   on public.funnel_events for select
-  using (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid() and p.role = 'admin'
-    )
-  );
+  using (public.is_admin());
