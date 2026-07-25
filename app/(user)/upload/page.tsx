@@ -2,6 +2,7 @@ import type { User } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 
 import UploadClient from "./UploadClient";
+import { trackFunnelEvent } from "@/lib/analytics/funnel";
 import { requireUser } from "@/lib/auth/session";
 import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize } from "@/lib/db/types";
@@ -76,6 +77,19 @@ export default async function UploadPage({ searchParams }: PageProps) {
         </div>
       );
     }
+
+    // 퍼널 계측: 첫 책 생성 (S1-2). redirect 는 throw 이므로 반드시 그 전에 기록.
+    const { count: projectCount } = await supabase
+      .from("projects")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id);
+    await trackFunnelEvent({
+      event: "project_created",
+      userId: user.id,
+      projectId: project.id,
+      props: { first: (projectCount ?? 1) <= 1, source: "upload" },
+    });
+
     redirect(`/upload?projectId=${project.id}`);
   }
 

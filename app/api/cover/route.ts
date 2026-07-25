@@ -3,6 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
+import { trackFunnelEvent } from "@/lib/analytics/funnel";
 import { requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
@@ -267,6 +268,13 @@ export async function PATCH(req: Request) {
         500,
       );
     }
+
+    // 퍼널 계측: 표지 저장 = 책 완성 시점 (S1-2).
+    await trackFunnelEvent({
+      event: "book_completed",
+      userId: user.id,
+      projectId,
+    });
 
     return ok({
       id: updated.id,

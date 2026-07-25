@@ -4,6 +4,7 @@ import { waitUntil } from "@vercel/functions";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
+import { trackFunnelEvent } from "@/lib/analytics/funnel";
 import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
@@ -181,6 +182,14 @@ export async function POST(req: Request) {
         idempotent: true,
       });
     }
+
+    // 퍼널 계측: 결제 확정 (S1-2) — 클레임 승자에서만 1회 기록.
+    await trackFunnelEvent({
+      event: "order_paid",
+      userId: order.user_id,
+      projectId: order.project_id,
+      props: { orderId: order.id, amount: order.amount },
+    });
 
     // 5) 포인트 차감 (atomic) — 클레임 승자만 1회 실행.
     //    Toss 결제는 이미 성공했으므로 차감 실패 시에도 결제는 살린다 (관리자 보정).

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
+import { trackFunnelEvent } from "@/lib/analytics/funnel";
 import { requireUser } from "@/lib/auth/session";
 import { createServerSupabase } from "@/lib/db/server";
 
@@ -69,6 +70,18 @@ export async function POST(req: Request) {
         500,
       );
     }
+
+    // 퍼널 계측: 책 생성 (S1-2). first — 이 사용자의 첫 프로젝트 여부.
+    const { count: projectCount } = await supabase
+      .from("projects")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id);
+    await trackFunnelEvent({
+      event: "project_created",
+      userId: user.id,
+      projectId: project.id,
+      props: { first: (projectCount ?? 1) <= 1, source: "api" },
+    });
 
     return ok({
       id: project.id,

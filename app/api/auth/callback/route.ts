@@ -2,6 +2,7 @@ import "server-only";
 
 import { NextResponse, type NextRequest } from "next/server";
 
+import { trackFunnelEvent } from "@/lib/analytics/funnel";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import { ensureReferralCode } from "@/lib/referrals/code";
@@ -71,6 +72,15 @@ export async function GET(req: NextRequest) {
         "[auth/callback] sync_oauth_profile 실패:",
         e instanceof Error ? e.message : String(e),
       );
+    }
+
+    // 퍼널 계측: 가입 완료 (S1-2). created_at 이 최근일 때만 가입으로 간주 —
+    // 반복 로그인은 제외되고, (user_id, event) 부분 유니크가 중복 기록도 차단한다.
+    const createdAtMs = data.user?.created_at
+      ? Date.parse(data.user.created_at)
+      : Number.NaN;
+    if (Number.isFinite(createdAtMs) && Date.now() - createdAtMs < 10 * 60 * 1000) {
+      await trackFunnelEvent({ event: "signup_completed", userId });
     }
 
     // 본인 추천 코드 발급 (없으면 신규 발급)
