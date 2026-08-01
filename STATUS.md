@@ -10,7 +10,18 @@
 
 ## 🆕 최근 작업 (2026-06-13 ~ 2026-08-01)
 
-### 0. 모바일 UX/QA 일괄 개선 (2026-08-01) — **미커밋, 커밋 대기**
+### 0-1. 포인트 결제 배선 + 미적용 버그 수정 (2026-08-01)
+- `clampPointsForMinPayment`를 클라(`OrderForm`)·서버(`orders/create`) **양쪽에 배선** — 사용 포인트/최종
+  금액의 단일 정본(100P 단위 내림 + 토스 최소 100원 확보, 할인 후 기준).
+- **버그 수정**: 클라가 `pointsToUse` 키로 전송 → 서버 스키마는 `usePoints` → zod가 버려서
+  **포인트가 실제로는 전혀 적용되지 않던** 운영 버그(금액은 서버 재계산이라 과금 사고는 없었음).
+- 적대적 리뷰(보안 렌즈) 발견 대응: ① 할인 코드 소계 변경 시 자동 재검증(클라/서버 금액 불일치 방지)
+  ② `payments/confirm`에서 결제 캡처 **전** 포인트 잔액 재확인(다중 탭 이중 사용 차단 — 캡처 후
+  차감까지 ms TOCTOU 창은 감수) ③ 서버 `AMOUNT_BELOW_MINIMUM` 게이트 + 클라 제출 버튼 게이트.
+- 후속 제안(미착수): 포인트 홀드/예약 설계(pending 주문 합산 검증 또는 ledger hold),
+  100% 할인 코드 발급 정책(현재는 100원 미만 주문 자체가 차단됨).
+
+### 0. 모바일 UX/QA 일괄 개선 (2026-08-01) — 커밋 `e656108`
 - 27+4개 파일, 약 +1.7k줄. 다른 세션이 시작(QA 발견 UP-x/EC-x 일괄 수정)한 것을 이어서 완결.
 - 주요 내용: 로그인 개편(카카오 상단·약관은 가입시만·콜백 에러 한국어화), 업로드 서명 **배치화**(20개/호출,
   레이트리밋 회피)+재진입 복원+진행률/취소 시맨틱 정리, 에디터 자동저장 편집 유실 방지·배경 직렬화 보존·
@@ -19,9 +30,8 @@
 - 이 세션에서 완결한 부분: `MobileToolbar` 퀵 바(Undo/Redo 상시+선택 도구), `ResourcePalette` `tabs` 제한,
   `PagePreviewDialog` `trimGuide` 정밀 재단선, `clampPointsForMinPayment` 테스트 8케이스.
 - 검증: `tsc --noEmit` 0 에러 · vitest **169 passed**/1 skipped · dev 서버에서 에디터 라우트 컴파일+
-  로그인 렌더 확인(콘솔/서버 에러 0). **Vercel 빌드는 커밋·push 후 확인 필요.**
-- ⚠️ 잔여: `clampPointsForMinPayment`(토스 최소 100원 클램프)가 아직 `OrderForm`/`payments/confirm`에
-  **미배선**(헬퍼+테스트만 존재). 결제 경로 민감 변경이라 별도 승인 후 배선.
+  로그인 렌더 확인(콘솔/서버 에러 0) · **Vercel 클린 빌드 success**(`2d48ca7`).
+- `clampPointsForMinPayment` 배선은 위 0-1에서 완료.
 
 ### 1. Storige 인쇄 백엔드 일원화 (PDF 저장·검증·다운로드) — 라이브
 - 인쇄 PDF 저장처를 Supabase `pdfs` 버킷 → **Storige API**(`api.papascompany.co.kr/api`)로 이전.

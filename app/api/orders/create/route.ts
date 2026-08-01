@@ -10,7 +10,11 @@ import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize, OrderAddress } from "@/lib/db/types";
 import { reasonMessage, validateDiscount } from "@/lib/discounts/validate";
 import { isPageDoc } from "@/lib/layout/types";
-import { calcOrderAmount } from "@/lib/orders/pricing";
+import {
+  calcOrderAmount,
+  clampPointsForMinPayment,
+  MIN_PAYMENT_AMOUNT,
+} from "@/lib/orders/pricing";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -164,12 +168,9 @@ export async function POST(req: Request) {
       discountAmount = dv.discountAmount;
     }
 
-    const subtotalAfterDiscount = Math.max(0, breakdown.total - discountAmount);
-
     // 3-2) 포인트 사용 (선택) — 잔액 검증.
     //   실제 차감은 결제 confirm 시점에 deduct_user_points 로 atomic 처리.
     //   여기서는 검증만 + 주문 amount 산정.
-    let pointsUsed = 0;
     if (usePoints && usePoints > 0) {
       const { data: pts, error: ptsErr } = await admin
         .from("user_points")
@@ -188,11 +189,28 @@ export async function POST(req: Request) {
           { balance, requested: usePoints },
         );
       }
-      // 사용 포인트는 할인 후 금액을 초과할 수 없음.
-      pointsUsed = Math.min(usePoints, subtotalAfterDiscount);
     }
 
-    const finalAmount = Math.max(0, subtotalAfterDiscount - pointsUsed);
+    // 사용 포인트·최종 금액 정본 — 클라이언트(OrderForm)와 동일한
+    // clampPointsForMinPayment 하나로 계산 (100P 단위 내림 + 토스 최소
+    // 결제 금액 100원 확보). 표시 금액과 주문 금액이 항상 일치한다.
+    const { pointsUsed, finalAmount } = clampPointsForMinPayment({
+      subtotal: breakdown.total,
+      discountAmount,
+      requestedPoints: usePoints ?? 0,
+    });
+
+    // 토스는 100원 미만 결제 요청 자체가 불가 — 결제할 수 없는 주문을
+    // 만들지 않는다. (포인트는 위에서 클램프되므로 이 게이트에 걸리는 건
+    // 사실상 할인 코드만으로 100원 미만이 된 경우.)
+    if (finalAmount < MIN_PAYMENT_AMOUNT) {
+      return fail(
+        "AMOUNT_BELOW_MINIMUM",
+        `최종 결제 금액이 최소 결제 금액(${MIN_PAYMENT_AMOUNT}원) 미만입니다. 할인 적용을 조정해주세요.`,
+        400,
+        { finalAmount },
+      );
+    }
 
     // 4) orders INSERT (service_role 필요 — RLS 정책상 사용자 INSERT 불가)
     const tossOrderId = `100p-${nanoid(8)}`;

@@ -119,6 +119,29 @@ export async function POST(req: Request) {
       );
     }
 
+    // 1-1) 포인트 잔액 재확인 — 결제 캡처 **전**에 검증한다.
+    //    주문 생성(create)은 검증만 하고 홀드하지 않으므로, 다중 탭 동시 주문 등으로
+    //    같은 포인트를 이중 사용한 주문이 캡처까지 가는 것을 여기서 차단한다.
+    //    (캡처 후 아래 5번 차감까지의 ms 단위 TOCTOU 창은 잔존 — 감수,
+    //     차감 실패 시 관리자 보정 경로가 백스톱.)
+    if (order.points_used && order.points_used > 0) {
+      const { data: pts, error: ptsErr } = await admin
+        .from("user_points")
+        .select("balance")
+        .eq("user_id", order.user_id)
+        .maybeSingle();
+      if (ptsErr) return fail("POINTS_QUERY_FAILED", ptsErr.message, 500);
+      const balance = pts?.balance ?? 0;
+      if (balance < order.points_used) {
+        return fail(
+          "POINTS_INSUFFICIENT",
+          "포인트 잔액이 부족해 결제를 진행할 수 없습니다. 주문을 다시 생성해주세요.",
+          400,
+          { requested: order.points_used, balance },
+        );
+      }
+    }
+
     // 2) 토스 결제 승인
     let tossRes;
     try {

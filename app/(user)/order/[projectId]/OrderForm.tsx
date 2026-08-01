@@ -7,7 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { usePostcode } from "@/lib/address/use-postcode";
-import { calcOrderAmount, type CalcOrderAmountResult } from "@/lib/orders/pricing";
+import {
+  calcOrderAmount,
+  type CalcOrderAmountResult,
+  clampPointsForMinPayment,
+  MIN_PAYMENT_AMOUNT,
+} from "@/lib/orders/pricing";
 
 export interface OrderFormProps {
   projectId: string;
@@ -41,10 +46,11 @@ interface DiscountState {
 interface PointsState {
   /** 보유 잔액 */
   balance: number;
-  /** 입력 문자열 */
+  /**
+   * 입력 문자열 (숫자만). 실제 사용 포인트는 여기서 직접 쓰지 않고
+   * clampPointsForMinPayment 로 파생한 effectivePoints 를 정본으로 쓴다.
+   */
   inputValue: string;
-  /** 실제 사용할 포인트 (100 단위 정수) */
-  useAmount: number;
   /** 로딩 중 */
   loading: boolean;
 }
@@ -86,7 +92,6 @@ export default function OrderForm(props: OrderFormProps) {
   const [points, setPoints] = useState<PointsState>({
     balance: 0,
     inputValue: "",
-    useAmount: 0,
     loading: true,
   });
 
@@ -135,37 +140,59 @@ export default function OrderForm(props: OrderFormProps) {
     [props.bookSizeName, props.pageCount, qty],
   );
 
-  // 포인트 입력 핸들러
+  // 수량 변경 등으로 소계가 바뀌면 적용된 할인 코드를 서버 기준으로 재검증 —
+  // percent 코드 등에서 클라 표시 금액과 서버 주문(create 재계산) 금액이
+  // 어긋나는 것을 방지. 재검증 실패 시 기존 실패 경로대로 코드 해제 + 사유 표시.
+  useEffect(() => {
+    if (!discount.appliedCode) return;
+    void validateAndApplyDiscount(discount.appliedCode);
+    // breakdown.total 변경 시에만 재검증 (appliedCode 는 해당 렌더의 현재값).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [breakdown.total]);
+
+  // 포인트 입력 — 타이핑 중에는 숫자만 유지 (키 입력마다 클램프하면 100 미만
+  // 중간값이 지워져 입력 자체가 불가능해진다). 실제 사용액은 아래 effectivePoints.
   function handlePointsInput(raw: string) {
-    const numStr = raw.replace(/\D/g, "");
-    const num = numStr === "" ? 0 : parseInt(numStr, 10);
-    // 100단위 내림, 보유 잔액 이하, 소계 이하로 클램프
-    const clamped = Math.min(num, points.balance, breakdown.total);
-    const floored = Math.floor(clamped / 100) * 100;
-    setPoints((s) => ({
-      ...s,
-      inputValue: floored === 0 ? "" : String(floored),
-      useAmount: floored,
-    }));
+    const numStr = raw.replace(/\D/g, "").slice(0, 9);
+    setPoints((s) => ({ ...s, inputValue: numStr }));
   }
 
   function useAllPoints() {
-    const max = Math.min(points.balance, breakdown.total);
-    const floored = Math.floor(max / 100) * 100;
+    const { pointsUsed } = clampPointsForMinPayment({
+      subtotal: breakdown.total,
+      discountAmount: discount.discountAmount,
+      requestedPoints: points.balance,
+    });
     setPoints((s) => ({
       ...s,
-      inputValue: String(floored),
-      useAmount: floored,
+      inputValue: pointsUsed === 0 ? "" : String(pointsUsed),
     }));
   }
 
-  // 할인 코드가 적용된 경우 최종 결제 금액 (서버가 재계산하지만 클라에서 미리 표시)
-  const finalAmount = Math.max(0, breakdown.total - discount.discountAmount - points.useAmount);
+  // 사용 포인트·최종 결제 금액 — 서버(orders/create)와 동일한 정본
+  // clampPointsForMinPayment 하나로 계산 (100P 단위 내림 + 토스 최소 결제
+  // 금액 100원 확보, 할인 코드 적용 후 기준). 표시/제출 모두 이 값만 쓴다.
+  const requestedPoints = Math.min(
+    points.inputValue === "" ? 0 : parseInt(points.inputValue, 10),
+    points.balance,
+  );
+  const { pointsUsed: effectivePoints, finalAmount } = useMemo(
+    () =>
+      clampPointsForMinPayment({
+        subtotal: breakdown.total,
+        discountAmount: discount.discountAmount,
+        requestedPoints,
+      }),
+    [breakdown.total, discount.discountAmount, requestedPoints],
+  );
 
-  async function applyDiscountCode() {
+  function applyDiscountCode() {
     const code = discount.inputCode.trim();
     if (!code) return;
+    void validateAndApplyDiscount(code);
+  }
 
+  async function validateAndApplyDiscount(code: string) {
     const seq = ++validateSeqRef.current;
     setDiscount((s) => ({ ...s, validating: true, error: null }));
 
@@ -247,7 +274,13 @@ export default function OrderForm(props: OrderFormProps) {
 
   const allAgreed = agreeService && agreePrivacy && agreeRefund;
 
-  const canSubmit = !submitting && addressValid && allAgreed && qty >= 1;
+  const canSubmit =
+    !submitting &&
+    addressValid &&
+    allAgreed &&
+    qty >= 1 &&
+    // 토스 최소 결제 금액 미만이면 서버(orders/create)도 400 — 제출 자체를 막는다.
+    finalAmount >= MIN_PAYMENT_AMOUNT;
 
   function update<K extends keyof AddressState>(k: K, v: string) {
     setAddress((s) => ({ ...s, [k]: v }));
@@ -273,7 +306,9 @@ export default function OrderForm(props: OrderFormProps) {
             memo: address.memo.trim() || undefined,
           },
           ...(discount.appliedCode ? { discountCode: discount.appliedCode } : {}),
-          ...(points.useAmount > 0 ? { pointsToUse: points.useAmount } : {}),
+          // 서버 BodySchema 키는 usePoints — 기존 pointsToUse 는 zod 가 버려서
+          // 포인트가 전혀 적용되지 않던 버그 (2026-08-01 수정).
+          ...(effectivePoints > 0 ? { usePoints: effectivePoints } : {}),
         }),
       });
       const json = (await res.json()) as {
@@ -573,6 +608,26 @@ export default function OrderForm(props: OrderFormProps) {
               <Input
                 value={points.inputValue}
                 onChange={(e) => handlePointsInput(e.target.value)}
+                onBlur={() =>
+                  // 입력 종료 시 실제 사용될 값으로 정규화 표시.
+                  // (렌더 클로저의 effectivePoints 대신 최신 state 로 재계산 —
+                  //  같은 배치에 입력+blur 가 묶여도 마지막 입력이 반영되게)
+                  setPoints((s) => {
+                    const req = Math.min(
+                      s.inputValue === "" ? 0 : parseInt(s.inputValue, 10),
+                      s.balance,
+                    );
+                    const { pointsUsed } = clampPointsForMinPayment({
+                      subtotal: breakdown.total,
+                      discountAmount: discount.discountAmount,
+                      requestedPoints: req,
+                    });
+                    return {
+                      ...s,
+                      inputValue: pointsUsed === 0 ? "" : String(pointsUsed),
+                    };
+                  })
+                }
                 inputMode="numeric"
                 placeholder="사용할 포인트 입력 (100 단위)"
                 aria-label="사용할 포인트"
@@ -591,9 +646,12 @@ export default function OrderForm(props: OrderFormProps) {
                 전액 사용
               </Button>
             </div>
-            {points.useAmount > 0 ? (
+            {effectivePoints > 0 ? (
               <p className="text-xs text-coral-600 dark:text-coral-400 font-medium">
-                {KRW.format(points.useAmount)}P 차감 예정
+                {KRW.format(effectivePoints)}P 차감 예정
+                {requestedPoints > effectivePoints
+                  ? " — 100P 단위·최소 결제 금액(100원) 기준으로 조정돼요"
+                  : ""}
               </p>
             ) : points.balance === 0 && !points.loading ? (
               <p className="text-xs text-muted-foreground">
@@ -659,10 +717,10 @@ export default function OrderForm(props: OrderFormProps) {
                 accent="coupon"
               />
             ) : null}
-            {points.useAmount > 0 ? (
+            {effectivePoints > 0 ? (
               <Row
                 label="포인트 차감"
-                value={`-${fmtKrw(points.useAmount)}`}
+                value={`-${fmtKrw(effectivePoints)}`}
                 accent="coupon"
               />
             ) : null}
@@ -673,6 +731,12 @@ export default function OrderForm(props: OrderFormProps) {
                 {fmtKrw(finalAmount)}
               </dd>
             </div>
+            {finalAmount < MIN_PAYMENT_AMOUNT ? (
+              <p className="mt-1 text-xs text-destructive" role="alert">
+                최소 결제 금액은 {MIN_PAYMENT_AMOUNT}원입니다. 할인 적용을
+                조정해주세요.
+              </p>
+            ) : null}
           </dl>
         </div>
 
