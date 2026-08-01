@@ -1,7 +1,7 @@
 # 다음 세션 시작 프롬프트 (100p_books)
 
 > 새 세션 첫 메시지로 아래 "■ 붙여넣기 블록"을 그대로 붙여넣으세요.
-> 작성 2026-07-25. 직전 실코드 커밋: 발주 게이트 `24adaed` + 퍼널 계측 `95db65f`(PR #1, 다른 세션). 작업트리 clean.
+> 작성 2026-07-25 · 갱신 2026-08-01(모바일 UX/QA 일괄 개선 완결 — **미커밋**). 직전 실코드 커밋: 발주 게이트 `24adaed` + 퍼널 계측 `95db65f`(PR #1, 다른 세션). ⚠️ 작업트리에 **커밋 대기 변경 31개 파일** 존재(아래 완료 9번).
 
 ---
 
@@ -15,7 +15,7 @@
 - 레포 `papascompany/100p_books`(PUBLIC). GitHub **auto-deploy 정상**(main push→Vercel 자동빌드, 빈 커밋 스킵).
 - **로컬 `pnpm lint/build` 불가**(node v22 ↔ comment-json 크래시, 코드 무관). → `tsc --noEmit` + `pnpm vitest run`은 정상, **Vercel 클린 빌드가 권위 검증**: push 후 `gh api repos/papascompany/100p_books/commits/<sha>/status --jq .state` 로 success 확인.
 - 커밋은 사용자가 요청할 때만. 커밋 메시지 끝 `Co-Authored-By: Claude ...`. zsh glob 때문에 git add 시 `[id]` 경로는 **따옴표**로.
-- **Supabase 운영 DB(`vprifnztvlduhpuwgdau`)는 MCP/CLI 불가**(MCP=타 계정 "storige's Org") → 마이그레이션은 사용자가 대시보드 SQL Editor 수동 적용. ⚠️ 함정: SQL Editor가 다른 프로젝트에 연결되면 `42P01 relation does not exist` — 상단이 `100p_books / PRODUCTION`인지 먼저 확인시킬 것. 0001~0028 적용 완료, **0029 미적용(아래 예정 1번)**.
+- **Supabase 운영 DB(`vprifnztvlduhpuwgdau`)는 MCP/CLI 불가**(MCP=타 계정 "storige's Org") → 마이그레이션은 사용자가 대시보드 SQL Editor 수동 적용. ⚠️ 함정: SQL Editor가 다른 프로젝트에 연결되면 `42P01 relation does not exist` — 상단이 `100p_books / PRODUCTION`인지 먼저 확인시킬 것. **0001~0029 적용 완료**(0029: 2026-07-31).
 - 첫 작업 전 루트 `STATUS.md` + 이 문서를 읽고 현재 상태를 사용자에게 보고할 것.
 
 ### 완료된 것 (재작업 금지 — 증거 커밋 포함)
@@ -26,15 +26,18 @@
 5. **운영 DB 마이그레이션 0027/0028 적용 완료**(2026-07-04, 사용자 확인 — 사전 점검 중복 0행).
 6. **하우스키핑 완료**(2026-07-21): stale 워크트리 `frosty-haibt-512d2b`(유실 0 검증 후)·`route.ts.stale-disabled` 제거. 작업트리 clean.
 7. **(다른 세션, PR #1 `95db65f`) 온보딩 퍼널 계측 4종(S1-2)** — signup_completed/project_created/book_completed/order_paid 이벤트, `lib/analytics/funnel.ts` best-effort 계측(제품 동작 무변경). `feat/funnel-events` 원격 브랜치 존재.
+8. **마이그레이션 0029 운영 적용 완료**(2026-07-31, 사용자 확인) — funnel_events 테이블+RLS. 사후 확인 rls_enabled=true/index 3/policy 1 기대값 일치. 계측 데이터 기록 시작됨.
+9. **모바일 UX/QA 일괄 개선 완결**(2026-08-01, **미커밋**) — 다른 세션이 시작한 27파일 개선(로그인 개편·업로드 서명 배치화·에디터 자동저장 보호·PreviewGrid DnD 재작성·제스처 팬/더블탭·a11y)을 이어서 자식 컴포넌트 3개(`MobileToolbar` 퀵바 / `ResourcePalette` tabs / `PagePreviewDialog` trimGuide)와 `clampPointsForMinPayment` 테스트로 완결. 검증: tsc 0 에러 · vitest 169 passed · dev 서버 에디터 라우트 컴파일+로그인 렌더 OK. 상세: STATUS.md §최근 작업 0.
 
 ### 예정 작업 (우선순위 순 — 여기서 이어서 진행)
-1. **[최우선] 마이그레이션 0029 운영 적용 안내/확인** — `supabase/migrations/0029_funnel_events.sql`(funnel_events 테이블+RLS, PR #1이 추가). 앱 코드는 배포됐고 계측이 best-effort라 미적용이어도 장애는 없으나 **이벤트가 전부 유실됨**. 사용자에게 SQL Editor 적용 요청(0027/0028 때처럼 붙여넣기 SQL 정리 + 프로젝트 확인 함정 주의) → 적용 확인 후 이 문서와 STATUS.md 갱신.
-2. **[사용자 액션 대기] Storige측 통지 전달** — 통지문 정본: `docs/STORIGE-NOTICE-2026-07-21.md`. 사용자가 Storige 세션에 붙여넣으면 끝. 요지: (a) validate/external FROZEN_ROUTES 등재 (b) 검증 result 키셋 골든 spec 신설 (c) 표지 검증 계약 긴장 정리(선택). 전달 완료 통보 받으면 이 항목 닫기.
-3. **품질 백로그** (사용자가 고르면 착수 — STATUS.md 우선순위 절 참조):
+0. **[최우선] 미커밋 변경 커밋 승인** — 완료 9번(31개 파일)을 사용자 승인 하에 커밋·push → Vercel 클린 빌드 확인(`gh api .../commits/<sha>/status`). ⚠️ `clampPointsForMinPayment`는 헬퍼+테스트만 있고 `OrderForm`/`payments/confirm` **배선은 미완** — 결제 경로라 별도 승인 후 진행(배선 전까지 동작 무변경).
+1. **[사용자 액션 대기] Storige측 통지 전달** — 통지문 정본: `docs/STORIGE-NOTICE-2026-07-21.md`. 사용자가 Storige 세션에 붙여넣으면 끝. 요지: (a) validate/external FROZEN_ROUTES 등재 (b) 검증 result 키셋 골든 spec 신설 (c) 표지 검증 계약 긴장 정리(선택). 전달 완료 통보 받으면 이 항목 닫기.
+2. **품질 백로그** (사용자가 고르면 착수 — STATUS.md 우선순위 절 참조):
    - PDF 회귀 테스트 CI 통합(페이지 수+첫 페이지 해시 — CLAUDE.md 명시 항목, 미구성)
    - WCAG 2.1 AA 접근성 감사(Lighthouse a11y+axe-core)
    - 인증된 사용자 E2E 골든 플로우(업로드→에디터→주문)
    - Lighthouse SI 4.8s/TTI 7.3s 개선(fabric lazy split)
+3. **[선택] 퍼널 데이터 첫 확인** — 0029 적용(2026-07-31) 이후 실사용 이벤트가 쌓이면 `select event, count(*) from funnel_events group by 1;`로 유입 확인. 필요 시 관리자 콘솔 퍼널 대시보드 착수 여부 결정.
 4. **[보류] 데모 모드** — 사용자 "구현 시작" 시: `/login` "데모 둘러보기" 원클릭 + `POST /api/auth/demo-login` + `DEMO_MODE` env 토글. 운영자 준비물: 데모계정+`DEMO_EMAIL/DEMO_PASSWORD/DEMO_MODE`. 계정 생성·비번 입력은 어시스턴트 직접 금지.
 5. **[모니터링] Storige C-2 배포 통지 시** — 100p PDF 검증 E2E 재실증(105.9MB presigned→COMPLETED 시나리오). `cropMarkEnabled` 미opt-in이라 기본 무영향.
 
@@ -49,6 +52,6 @@
 - 결제/인증/RLS/발주 게이트/Storige 계약 등 민감 변경은 typecheck + vitest + 적대적 리뷰 + Vercel 빌드 다층 검증 후 커밋.
 - 세션 종료 시 이 문서와 STATUS.md 갱신(완료/미완/다음 단계).
 
-첫 작업: STATUS.md와 이 문서를 읽고 상태 보고 → 예정 1번(마이그레이션 0029 운영 적용)부터 사용자에게 확인받고 진행.
+첫 작업: STATUS.md와 이 문서를 읽고 상태 보고 → 예정 0번(미커밋 변경 커밋 승인)부터 확인 후 사용자가 고른 항목 진행.
 
 ## ─────────────────────────────── (붙여넣기 블록 끝)

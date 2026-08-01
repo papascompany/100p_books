@@ -1,6 +1,6 @@
 # 100p Books — 개발 현황 및 다음 단계
 
-> 최종 업데이트: 2026-06-22
+> 최종 업데이트: 2026-08-01
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
 > 운영 빌드: `296d02c` (fix(security): 감사 리뷰 fix-forward)
@@ -8,7 +8,20 @@
 
 ---
 
-## 🆕 최근 작업 (2026-06-13 ~ 06-22)
+## 🆕 최근 작업 (2026-06-13 ~ 2026-08-01)
+
+### 0. 모바일 UX/QA 일괄 개선 (2026-08-01) — **미커밋, 커밋 대기**
+- 27+4개 파일, 약 +1.7k줄. 다른 세션이 시작(QA 발견 UP-x/EC-x 일괄 수정)한 것을 이어서 완결.
+- 주요 내용: 로그인 개편(카카오 상단·약관은 가입시만·콜백 에러 한국어화), 업로드 서명 **배치화**(20개/호출,
+  레이트리밋 회피)+재진입 복원+진행률/취소 시맨틱 정리, 에디터 자동저장 편집 유실 방지·배경 직렬화 보존·
+  다이얼로그 단축키 차단, PreviewGrid 드래그앤드롭 재작성(오토스크롤·iOS long-press 충돌 해결),
+  제스처 2손가락 팬·더블탭 리셋·핀치 앵커 보정, 모바일 드로어 스크림/스크롤락, a11y 대비·44px 터치 타깃.
+- 이 세션에서 완결한 부분: `MobileToolbar` 퀵 바(Undo/Redo 상시+선택 도구), `ResourcePalette` `tabs` 제한,
+  `PagePreviewDialog` `trimGuide` 정밀 재단선, `clampPointsForMinPayment` 테스트 8케이스.
+- 검증: `tsc --noEmit` 0 에러 · vitest **169 passed**/1 skipped · dev 서버에서 에디터 라우트 컴파일+
+  로그인 렌더 확인(콘솔/서버 에러 0). **Vercel 빌드는 커밋·push 후 확인 필요.**
+- ⚠️ 잔여: `clampPointsForMinPayment`(토스 최소 100원 클램프)가 아직 `OrderForm`/`payments/confirm`에
+  **미배선**(헬퍼+테스트만 존재). 결제 경로 민감 변경이라 별도 승인 후 배선.
 
 ### 1. Storige 인쇄 백엔드 일원화 (PDF 저장·검증·다운로드) — 라이브
 - 인쇄 PDF 저장처를 Supabase `pdfs` 버킷 → **Storige API**(`api.papascompany.co.kr/api`)로 이전.
@@ -38,6 +51,9 @@
 - `0027_reviews_storage_rls.sql` — reviews 버킷 anon SELECT 차단. **적용 완료(2026-07-04)** — 사용자 확인.
 - `0028_concurrency_unique_indexes.sql` — gift/출석보너스 멱등 부분유니크 인덱스.
   **적용 완료(2026-07-04)** — 사전 점검(gift 활성 중복·보너스 중복) 둘 다 0행 확인 후 적용.
+- `0029_funnel_events.sql` — 온보딩 퍼널 계측 테이블(funnel_events)+RLS(admin SELECT only, PR #1).
+  **적용 완료(2026-07-31)** — 사후 확인 rls_enabled=true / index 3 / policy 1 기대값 일치(사용자 확인).
+  적용 즉시 배포된 계측 4종(signup_completed/project_created/book_completed/order_paid)이 기록 시작.
 
 ### 환경/배포 메모
 - **GitHub auto-deploy 정상**(실커밋 push→자동 빌드 확인). 빈 커밋은 Vercel이 스킵하므로 무시.
@@ -163,7 +179,7 @@ Core Web Vitals(LCP/CLS/INP-대용 TBT) 모두 통과. Speed Index/TTI 는 클�
 Next.js:  14.2.35 (2026-05-10 보안 패치 완료)
 Supabase: vprifnztvlduhpuwgdau (Seoul / papascompany org)
 Vercel:   yohans-projects-de3234df / icn1 리전
-DB 마이그레이션: 0001 ~ 0028 운영 적용 (0023·0024: 2026-05-14 / 0026: Storige / 0027·0028: 2026-07-04)
+DB 마이그레이션: 0001 ~ 0029 운영 적용 (0023·0024: 2026-05-14 / 0026: Storige / 0027·0028: 2026-07-04 / 0029: 2026-07-31)
 정적 라우트:    /terms, /privacy, /refund, /offline, /robots.txt, /sitemap.xml, /_not-found
 PWA Service Worker: v2 (Stale-While-Revalidate 공개 페이지)
 Router Cache:   staleTimes { dynamic: 30s, static: 180s }
@@ -272,7 +288,7 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 ## 테스트 현황
 
 ```
-유닛 테스트 (Vitest):     15 파일 / 153 tests / 1 skipped
+유닛 테스트 (Vitest):     16 파일 / 170 tests / 1 skipped (2026-08-01)
 E2E 테스트 (Playwright):  desktop+mobile chromium 12/12 통과 (5.7s)
 PDF 런타임 검증:          pnpm verify:pdf — 40KB / 353ms / PDF 1.7
 Lighthouse 모바일:        Performance 97 · LCP 1.5s · CLS 0
