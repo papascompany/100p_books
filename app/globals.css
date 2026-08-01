@@ -129,15 +129,6 @@
     text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
   }
 
-  /* hairline */
-  .border-hairline {
-    border-color: #e4e4e7;
-  }
-
-  .bg-soft-cloud {
-    background-color: #f4f4f5;
-  }
-
   /* 코랄 그라디언트 텍스트 — 감성 강조 */
   .text-gradient-coral {
     background: linear-gradient(135deg, #ff8678 0%, #ff6b5e 50%, #ed4f40 100%);

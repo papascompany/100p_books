@@ -83,7 +83,7 @@ export function MobileBottomSheet({
               </div>
               <DialogPrimitive.Close
                 aria-label="닫기"
-                className="-mt-1 inline-flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="relative -mt-1 inline-flex size-9 items-center justify-center rounded-md text-muted-foreground after:absolute after:-inset-1 after:content-[''] hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <X className="size-5" />
               </DialogPrimitive.Close>

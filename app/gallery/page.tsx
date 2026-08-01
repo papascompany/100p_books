@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+
+import { Button } from "@/components/ui/button";
 
 import GalleryClient from "./GalleryClient";
 
+// 루트 템플릿(%s · 100p Books)이 사이트명을 붙이므로 접미사 없이 표기.
 export const metadata: Metadata = {
-  title: "후기 갤러리 | 100p Books",
+  title: "후기 갤러리",
   description:
     "100p Books 고객들의 실제 포토북 후기를 확인하세요. 별점, 사진, 텍스트 후기로 나만의 포토북 제작에 영감을 받으세요.",
   openGraph: {
-    title: "후기 갤러리 | 100p Books",
+    title: "후기 갤러리",
     description: "100p Books 고객들의 실제 포토북 후기를 확인하세요.",
     type: "website",
   },
@@ -58,13 +62,18 @@ export default async function GalleryPage() {
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-10">
-      <header className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
-          후기 갤러리
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          실제 고객들의 포토북 후기를 확인해 보세요.
-        </p>
+      <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
+            후기 갤러리
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            실제 고객들의 포토북 후기를 확인해 보세요.
+          </p>
+        </div>
+        <Button asChild variant="coral">
+          <Link href="/upload">나도 포토북 만들기</Link>
+        </Button>
       </header>
 
       <GalleryClient

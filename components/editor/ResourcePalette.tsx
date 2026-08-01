@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,8 @@ export interface ResourceItem {
 
 export interface ResourcePaletteProps {
   initialTab?: ResourceTab;
+  /** 표시할 탭 제한 — 미지정 시 전체 노출. (모바일 시트에서 클립아트/배경만 등) */
+  tabs?: ResourceTab[];
   /** 폰트 클릭 — 기존 텍스트 선택돼 있으면 fontFamily 변경, 없으면 새 텍스트 추가. */
   onPickFont: (family: string, url: string) => void;
   /** 클립아트(또는 사진) 추가. resourceId 는 PageDoc 에 보존되어 PDF 빌드 시 signedUrl 재발급에 사용. */
@@ -43,12 +45,27 @@ const TABS: Array<{ id: ResourceTab; label: string }> = [
  */
 export default function ResourcePalette({
   initialTab = "font",
+  tabs,
   onPickFont,
   onPickClipart,
   onPickBackground,
   className,
 }: ResourcePaletteProps) {
+  const allowedTabs = useMemo(
+    () => (tabs && tabs.length > 0 ? TABS.filter((t) => tabs.includes(t.id)) : TABS),
+    [tabs],
+  );
   const [tab, setTab] = useState<ResourceTab>(initialTab);
+
+  // 부모가 시트를 유지한 채 initialTab 만 바꾸는 경우(클립아트→배경 등) 동기화.
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
+
+  // 현재 탭이 허용 목록 밖이면 첫 허용 탭으로 폴백.
+  const activeTab = allowedTabs.some((t) => t.id === tab)
+    ? tab
+    : (allowedTabs[0]?.id ?? "font");
   const [items, setItems] = useState<ResourceItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,8 +99,8 @@ export default function ResourcePalette({
   );
 
   useEffect(() => {
-    void fetchItems(tab);
-  }, [tab, fetchItems]);
+    void fetchItems(activeTab);
+  }, [activeTab, fetchItems]);
 
   const filtered =
     q.trim().length > 0
@@ -95,14 +112,14 @@ export default function ResourcePalette({
   return (
     <div className={cn("flex h-full flex-col", className)}>
       <div className="flex items-center gap-1 border-b pb-2">
-        {TABS.map((t) => (
+        {allowedTabs.map((t) => (
           <Button
             key={t.id}
             type="button"
             size="sm"
-            variant={tab === t.id ? "default" : "ghost"}
+            variant={activeTab === t.id ? "default" : "ghost"}
             onClick={() => setTab(t.id)}
-            aria-pressed={tab === t.id}
+            aria-pressed={activeTab === t.id}
           >
             {t.label}
           </Button>
@@ -139,7 +156,7 @@ export default function ResourcePalette({
           <p className="p-3 text-sm text-muted-foreground">
             표시할 리소스가 없어요.
           </p>
-        ) : tab === "font" ? (
+        ) : activeTab === "font" ? (
           <ul className="space-y-1 p-1">
             {filtered.map((it) => (
               <li key={it.id}>
@@ -176,7 +193,7 @@ export default function ResourcePalette({
                   type="button"
                   className="block aspect-square w-full overflow-hidden rounded-md border border-border bg-card transition-transform hover:scale-[1.02]"
                   onClick={() =>
-                    tab === "clipart"
+                    activeTab === "clipart"
                       ? onPickClipart(it.url, it.id)
                       : onPickBackground(it.url, it.id)
                   }

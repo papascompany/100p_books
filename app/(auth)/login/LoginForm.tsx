@@ -56,22 +56,36 @@ function friendlyAuthError(message: string, mode: Mode): string {
   return message || "로그인에 실패했습니다.";
 }
 
+/** 콜백 라우트(?error=코드)가 전달하는 에러 코드를 한국어 안내문으로 변환. */
+function callbackErrorMessage(code: string): string {
+  switch (code) {
+    case "callback_failed":
+      return "로그인 처리 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.";
+    default:
+      return "로그인에 실패했어요. 다시 시도해주세요.";
+  }
+}
+
 export default function LoginForm() {
   const searchParams = useSearchParams();
   const next = sanitizeNext(searchParams.get("next"));
   const errorParam = searchParams.get("error");
+  const modeParam = searchParams.get("mode");
 
-  const [mode, setMode] = React.useState<Mode>("signin");
+  const [mode, setMode] = React.useState<Mode>(
+    modeParam === "forgot" || modeParam === "signup" ? modeParam : "signin",
+  );
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [agreed, setAgreed] = React.useState(false);
   const [status, setStatus] = React.useState<Status>(
-    errorParam ? { kind: "error", message: errorParam } : { kind: "idle" },
+    errorParam
+      ? { kind: "error", message: callbackErrorMessage(errorParam) }
+      : { kind: "idle" },
   );
 
   const isSubmitting = status.kind === "submitting" || status.kind === "oauth";
   const isOauth = status.kind === "oauth";
-  const isSent = status.kind === "signup-sent" || status.kind === "reset-sent";
 
   function switchMode(nextMode: Mode) {
     setMode(nextMode);
@@ -81,13 +95,8 @@ export default function LoginForm() {
 
   async function onKakaoLogin() {
     if (isSubmitting) return;
-    if (!agreed) {
-      setStatus({
-        kind: "error",
-        message: "이용약관과 개인정보 처리방침에 동의해주세요.",
-      });
-      return;
-    }
+    // 약관 동의는 버튼 아래 고지 문구 + 콜백의 record_agreements 로 처리 —
+    // 별도 체크 없이 바로 진행한다.
     setStatus({ kind: "oauth", provider: "kakao" });
     try {
       const supabase = getBrowserSupabase();
@@ -126,9 +135,9 @@ export default function LoginForm() {
       setStatus({ kind: "error", message: "이메일을 입력해주세요." });
       return;
     }
-    // 가입/로그인은 약관 동의 + 비밀번호 필요. 비번찾기는 이메일만.
+    // 가입은 약관 동의 + 비밀번호, 로그인은 비밀번호만. 비번찾기는 이메일만.
     if (mode !== "forgot") {
-      if (!agreed) {
+      if (mode === "signup" && !agreed) {
         setStatus({
           kind: "error",
           message: "이용약관과 개인정보 처리방침에 동의해주세요.",
@@ -267,7 +276,68 @@ export default function LoginForm() {
             </button>
           </div>
         ) : (
-          <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
+          <>
+            {mode !== "forgot" ? (
+              <>
+                {/* 카카오 — 모바일 주 로그인 수단으로 폼 상단에 배치 */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  className="w-full bg-[#FEE500] text-black hover:bg-[#FEE500]/90 border-transparent"
+                  onClick={() => void onKakaoLogin()}
+                  disabled={isSubmitting}
+                  aria-label="카카오로 시작하기"
+                >
+                  {isOauth ? (
+                    <>
+                      <Loader2 className="animate-spin" aria-hidden /> 카카오 연결 중...
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="size-4"
+                        viewBox="0 0 18 18"
+                        fill="currentColor"
+                        aria-hidden
+                      >
+                        <path d="M9 1.5C4.58 1.5 1 4.31 1 7.78c0 2.24 1.49 4.2 3.74 5.32l-.96 3.49c-.07.25.21.45.43.31l4.18-2.77c.2.02.4.03.61.03 4.42 0 8-2.81 8-6.28S13.42 1.5 9 1.5z" />
+                      </svg>
+                      카카오로 시작하기
+                    </>
+                  )}
+                </Button>
+                <p className="mt-3 text-center text-xs text-muted-foreground">
+                  계속하면{" "}
+                  <Link
+                    href="/terms"
+                    target="_blank"
+                    className="underline underline-offset-2 hover:text-foreground"
+                  >
+                    이용약관
+                  </Link>
+                  ·
+                  <Link
+                    href="/privacy"
+                    target="_blank"
+                    className="underline underline-offset-2 hover:text-foreground"
+                  >
+                    개인정보처리방침
+                  </Link>
+                  에 동의하게 됩니다.
+                </p>
+                <div className="relative my-5" aria-hidden>
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase tracking-wide">
+                    <span className="bg-card px-2 text-muted-foreground">또는</span>
+                  </div>
+                </div>
+              </>
+            ) : null}
+
+            <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
             <div className="flex flex-col gap-1.5">
               <label htmlFor="email" className="text-sm font-medium text-foreground">
                 이메일
@@ -320,7 +390,7 @@ export default function LoginForm() {
               </div>
             ) : null}
 
-            {mode !== "forgot" ? (
+            {mode === "signup" ? (
               <label className="flex items-start gap-2 text-sm text-muted-foreground">
                 <input
                   type="checkbox"
@@ -366,7 +436,7 @@ export default function LoginForm() {
               size="lg"
               variant="coral"
               className={cn("mt-1 w-full", isSubmitting && "opacity-90")}
-              disabled={isSubmitting || (mode !== "forgot" && !agreed)}
+              disabled={isSubmitting}
             >
               {status.kind === "submitting" ? (
                 <>
@@ -415,48 +485,9 @@ export default function LoginForm() {
                 </button>
               )}
             </div>
-          </form>
-        )}
-
-        {!isSent && mode !== "forgot" ? (
-          <>
-            <div className="relative my-5" aria-hidden>
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase tracking-wide">
-                <span className="bg-card px-2 text-muted-foreground">또는</span>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="lg"
-              className="w-full bg-[#FEE500] text-black hover:bg-[#FEE500]/90 border-transparent"
-              onClick={() => void onKakaoLogin()}
-              disabled={isSubmitting || !agreed}
-              aria-label="카카오로 시작하기"
-            >
-              {isOauth ? (
-                <>
-                  <Loader2 className="animate-spin" aria-hidden /> 카카오 연결 중...
-                </>
-              ) : (
-                <>
-                  <svg
-                    className="size-4"
-                    viewBox="0 0 18 18"
-                    fill="currentColor"
-                    aria-hidden
-                  >
-                    <path d="M9 1.5C4.58 1.5 1 4.31 1 7.78c0 2.24 1.49 4.2 3.74 5.32l-.96 3.49c-.07.25.21.45.43.31l4.18-2.77c.2.02.4.03.61.03 4.42 0 8-2.81 8-6.28S13.42 1.5 9 1.5z" />
-                  </svg>
-                  카카오로 시작하기
-                </>
-              )}
-            </Button>
+            </form>
           </>
-        ) : null}
+        )}
       </CardContent>
 
       <CardFooter className="justify-center text-xs text-muted-foreground">

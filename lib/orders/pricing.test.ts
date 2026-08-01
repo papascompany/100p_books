@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { calcOrderAmount } from "./pricing";
+import {
+  calcOrderAmount,
+  clampPointsForMinPayment,
+  MIN_PAYMENT_AMOUNT,
+  POINTS_UNIT,
+} from "./pricing";
 
 describe("calcOrderAmount — 단가", () => {
   it("A5 50p 1권 — 기본 단가 18000, surcharge 0", () => {
@@ -108,5 +113,107 @@ describe("calcOrderAmount — 입력 클램프", () => {
   it("페이지 수 음수 → 0 surcharge", () => {
     const r = calcOrderAmount({ bookSize: "A5", pageCount: -10, qty: 1 });
     expect(r.surcharge).toBe(0);
+  });
+});
+
+describe("clampPointsForMinPayment — 토스 최소 결제 금액 확보", () => {
+  it("여유가 충분하면 요청 포인트 그대로 사용", () => {
+    const r = clampPointsForMinPayment({
+      subtotal: 18000,
+      discountAmount: 0,
+      requestedPoints: 5000,
+    });
+    expect(r.pointsUsed).toBe(5000);
+    expect(r.finalAmount).toBe(13000);
+  });
+
+  it("요청 포인트는 100P 단위로 내림", () => {
+    const r = clampPointsForMinPayment({
+      subtotal: 18000,
+      discountAmount: 0,
+      requestedPoints: 1234,
+    });
+    expect(r.pointsUsed).toBe(1200);
+    expect(r.finalAmount).toBe(16800);
+  });
+
+  it("전액 포인트 요청 — 최소 결제 금액 100원이 남도록 클램프", () => {
+    const r = clampPointsForMinPayment({
+      subtotal: 18000,
+      discountAmount: 0,
+      requestedPoints: 18000,
+    });
+    // 상한 = floor((18000-100)/100)*100 = 17900 → 최종 정확히 100원.
+    expect(r.pointsUsed).toBe(17900);
+    expect(r.finalAmount).toBe(MIN_PAYMENT_AMOUNT);
+  });
+
+  it("할인 반영 후 잔액 기준으로 클램프", () => {
+    const r = clampPointsForMinPayment({
+      subtotal: 18000,
+      discountAmount: 17000,
+      requestedPoints: 10000,
+    });
+    // 할인 후 소계 1000 → 상한 = floor((1000-100)/100)*100 = 900 → 최종 100원.
+    expect(r.pointsUsed).toBe(900);
+    expect(r.finalAmount).toBe(MIN_PAYMENT_AMOUNT);
+  });
+
+  it("할인만으로 이미 100원 미만이면 포인트 0", () => {
+    const r = clampPointsForMinPayment({
+      subtotal: 18000,
+      discountAmount: 17950,
+      requestedPoints: 500,
+    });
+    expect(r.pointsUsed).toBe(0);
+    expect(r.finalAmount).toBe(50);
+  });
+
+  it("할인이 소계 초과 — 소계 0 클램프, 포인트 0", () => {
+    const r = clampPointsForMinPayment({
+      subtotal: 18000,
+      discountAmount: 99999,
+      requestedPoints: 1000,
+    });
+    expect(r.pointsUsed).toBe(0);
+    expect(r.finalAmount).toBe(0);
+  });
+
+  it("음수/소수 입력 방어 — 음수 요청은 0, 소수는 내림", () => {
+    expect(
+      clampPointsForMinPayment({
+        subtotal: 18000,
+        discountAmount: -500,
+        requestedPoints: -1000,
+      }),
+    ).toEqual({ pointsUsed: 0, finalAmount: 18000 });
+    const r = clampPointsForMinPayment({
+      subtotal: 18000.9,
+      discountAmount: 0.9,
+      requestedPoints: 199.9,
+    });
+    expect(r.pointsUsed).toBe(100);
+    expect(r.finalAmount).toBe(17900);
+  });
+
+  it("결과는 항상 100P 단위·정수·최소금액 불변식 유지", () => {
+    for (const subtotal of [100, 150, 999, 18000, 35000]) {
+      for (const discount of [0, 99, 100, 5000]) {
+        for (const requested of [0, 50, 100, 12345, 100000]) {
+          const r = clampPointsForMinPayment({
+            subtotal,
+            discountAmount: discount,
+            requestedPoints: requested,
+          });
+          expect(r.pointsUsed % POINTS_UNIT).toBe(0);
+          expect(Number.isInteger(r.finalAmount)).toBe(true);
+          expect(r.pointsUsed).toBeGreaterThanOrEqual(0);
+          // 포인트를 실제로 사용했다면 최소 결제 금액은 항상 확보된다.
+          if (r.pointsUsed > 0) {
+            expect(r.finalAmount).toBeGreaterThanOrEqual(MIN_PAYMENT_AMOUNT);
+          }
+        }
+      }
+    }
   });
 });

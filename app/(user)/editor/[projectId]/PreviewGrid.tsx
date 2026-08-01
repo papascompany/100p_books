@@ -1,12 +1,17 @@
 "use client";
 
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Eye, MoreVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
+  memo,
   useCallback,
   useEffect,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
@@ -47,13 +52,22 @@ export interface PreviewGridProps {
   busy?: boolean;
 }
 
+/** 드래그 중 뷰포트 상/하단 이 거리(px) 안에 들어오면 오토스크롤. */
+const AUTOSCROLL_EDGE_PX = 64;
+/** 오토스크롤 프레임당 최대 이동량(px). */
+const AUTOSCROLL_MAX_STEP_PX = 20;
+
 /**
  * 썸네일 그리드 (모바일 2 / sm 3 / md 4 / lg 5 열).
  *
  * 기능:
- *  - 카드 클릭/Enter → /editor/[projectId]/pages/[pageId] 로 이동.
+ *  - 카드 클릭/Enter/Space → /editor/[projectId]/pages/[pageId] 로 이동.
  *  - 드래그&드롭 reorder (Pointer Events). 모바일은 long-press 500ms 후 시작.
- *  - 카드 우상단 ⋯ 메뉴: "이 페이지 다음에 추가" / "삭제" / "복제는 X" — 단순.
+ *    - 평상시 카드 위 터치는 세로 스크롤 허용(touch-action: pan-y),
+ *      드래그 활성 중에만 스크롤 차단(touch-action: none + touchmove preventDefault).
+ *    - 드래그 중 뷰포트 경계 근접 시 오토스크롤로 장거리 이동 지원.
+ *  - 카드 우상단 ⋯ 메뉴: "미리보기" / "이 페이지 다음에 추가" / "삭제".
+ *    터치(hover 미지원) 환경에서는 상시 노출.
  *  - 마지막 카드: "+" 빈 카드. 클릭 시 onInsert(maxPageNo).
  *  - 키보드: 카드에 포커스 후 Backspace/Delete → 삭제 confirm.
  */
@@ -68,6 +82,8 @@ export default function PreviewGrid({
   onDelete,
   busy,
 }: PreviewGridProps) {
+  const router = useRouter();
+
   // 카드 폭을 컨테이너 사이즈 기반으로 측정 → PagePreview 에 전달
   const gridRef = useRef<HTMLDivElement>(null);
   const [colWidth, setColWidth] = useState(180);
@@ -78,12 +94,19 @@ export default function PreviewGrid({
   const [overIndex, setOverIndex] = useState<number | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  // 이벤트 핸들러에서 최신값을 읽기 위한 렌더 미러 ref —
+  // 드래그 effect 가 overIndex/orderedPages 를 deps 로 갖지 않게 해
+  // pointermove 마다 리스너·rAF 루프가 재구독되는 것을 막는다.
+  const overIndexRef = useRef<number | null>(null);
+  const orderedPagesRef = useRef<PageSummary[]>(pages);
+  orderedPagesRef.current = orderedPages;
 
   // 외부 pages 가 갱신되면 동기화 (refresh 후)
   useEffect(() => {
     setOrderedPages(pages);
     setDraggingId(null);
     setOverIndex(null);
+    overIndexRef.current = null;
   }, [pages]);
 
   useEffect(() => {
@@ -144,10 +167,10 @@ export default function PreviewGrid({
       if (dist > 8 && longPressTimerRef.current) {
         clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = null;
-        // 마우스라면 즉시 드래그 시작
-        if (e.pointerType === "mouse" && !draggingId) {
-          beginDrag(id);
-        }
+      }
+      // 마우스라면 이동 임계 초과 시 즉시 드래그 시작
+      if (dist > 8 && e.pointerType === "mouse" && !draggingId) {
+        beginDrag(id);
       }
     },
     [draggingId, beginDrag],
@@ -161,9 +184,19 @@ export default function PreviewGrid({
     pointerStartRef.current = null;
   }, []);
 
-  // global pointermove for active drag
+  // long-press(드래그 대기/진행) 중에만 네이티브 컨텍스트 메뉴 차단 —
+  // iOS 링크 프리뷰/Android long-press 메뉴가 드래그 시작을 가로채는 것 방지.
+  // 데스크톱 우클릭은 pointerStartRef 가 세팅되지 않으므로(button!==0) 그대로 동작.
+  const onCardContextMenu = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
+    if (pointerStartRef.current || longPressTimerRef.current) {
+      e.preventDefault();
+    }
+  }, []);
+
+  // global pointermove for active drag — 오토스크롤 포함.
   useEffect(() => {
     if (!draggingId) return;
+
     function findCellIndex(clientX: number, clientY: number): number | null {
       const el = gridRef.current;
       if (!el) return null;
@@ -182,19 +215,71 @@ export default function PreviewGrid({
       return null;
     }
 
-    function onMove(e: PointerEvent) {
-      const idx = findCellIndex(e.clientX, e.clientY);
+    function applyOver(clientX: number, clientY: number) {
+      const idx = findCellIndex(clientX, clientY);
+      overIndexRef.current = idx;
       setOverIndex(idx);
     }
+
+    // ----- 엣지 오토스크롤 (rAF 루프) -----
+    let lastX = 0;
+    let lastY = 0;
+    let scrollStep = 0; // px/frame — 음수면 위로.
+    let rafId: number | null = null;
+
+    function scrollLoop() {
+      if (scrollStep === 0) {
+        rafId = null;
+        return;
+      }
+      window.scrollBy(0, scrollStep);
+      // 스크롤로 셀들이 포인터 아래를 지나가므로 드롭 타깃 재계산.
+      applyOver(lastX, lastY);
+      rafId = requestAnimationFrame(scrollLoop);
+    }
+
+    function onMove(e: PointerEvent) {
+      lastX = e.clientX;
+      lastY = e.clientY;
+      applyOver(e.clientX, e.clientY);
+
+      const vh = window.innerHeight;
+      if (e.clientY < AUTOSCROLL_EDGE_PX) {
+        scrollStep = -Math.ceil(
+          ((AUTOSCROLL_EDGE_PX - e.clientY) / AUTOSCROLL_EDGE_PX) *
+            AUTOSCROLL_MAX_STEP_PX,
+        );
+      } else if (e.clientY > vh - AUTOSCROLL_EDGE_PX) {
+        scrollStep = Math.ceil(
+          ((e.clientY - (vh - AUTOSCROLL_EDGE_PX)) / AUTOSCROLL_EDGE_PX) *
+            AUTOSCROLL_MAX_STEP_PX,
+        );
+      } else {
+        scrollStep = 0;
+      }
+      if (scrollStep !== 0 && rafId == null) {
+        rafId = requestAnimationFrame(scrollLoop);
+      }
+    }
+
+    // 드래그 중 브라우저 스크롤 개시 차단 — 평상시엔 pan-y 로 스크롤 허용하되
+    // 드래그가 시작된 뒤의 터치 이동은 페이지 스크롤로 새지 않게 한다.
+    function preventTouchScroll(e: TouchEvent) {
+      e.preventDefault();
+    }
+
     async function onUp() {
-      const idx = overIndex;
+      scrollStep = 0;
+      const idx = overIndexRef.current;
       const id = draggingId;
       setDraggingId(null);
       setOverIndex(null);
+      overIndexRef.current = null;
       if (id == null || idx == null) return;
-      const fromIdx = orderedPages.findIndex((p) => p.id === id);
+      const current = orderedPagesRef.current;
+      const fromIdx = current.findIndex((p) => p.id === id);
       if (fromIdx === idx || fromIdx < 0) return;
-      const next = [...orderedPages];
+      const next = [...current];
       const [moved] = next.splice(fromIdx, 1);
       if (!moved) return;
       next.splice(idx, 0, moved);
@@ -204,7 +289,7 @@ export default function PreviewGrid({
         await onReorder?.(next.map((p) => p.id));
       } catch (e) {
         // 롤백
-        setOrderedPages(orderedPages);
+        setOrderedPages(current);
         toast({
           description:
             e instanceof Error ? e.message : "순서 변경에 실패했어요.",
@@ -212,16 +297,21 @@ export default function PreviewGrid({
         });
       }
     }
+
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp, { once: true });
     window.addEventListener("pointercancel", onUp, { once: true });
+    window.addEventListener("touchmove", preventTouchScroll, {
+      passive: false,
+    });
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
+      window.removeEventListener("touchmove", preventTouchScroll);
+      if (rafId != null) cancelAnimationFrame(rafId);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draggingId, overIndex, orderedPages]);
+  }, [draggingId, onReorder]);
 
   // ---------- 삭제 / 미리보기 ----------
   const [deleteCandidate, setDeleteCandidate] = useState<PageSummary | null>(
@@ -238,7 +328,7 @@ export default function PreviewGrid({
     try {
       await onDelete(target.id);
       toast({
-        description: `페이지 ${target.pageNo} 을(를) 삭제했어요.`,
+        description: `${target.pageNo}페이지를 삭제했어요.`,
         variant: "success",
       });
     } catch (e) {
@@ -249,15 +339,29 @@ export default function PreviewGrid({
     }
   }, [deleteCandidate, onDelete]);
 
-  // 키보드: 카드에 포커스 시 Backspace/Delete → 삭제
+  // 키보드: 카드 자체에 포커스 시 Enter/Space → 편집 이동, Backspace/Delete → 삭제.
+  // 내부 버튼/링크에서 버블된 키 입력은 무시.
   const onCardKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>, p: PageSummary) => {
+    (e: ReactKeyboardEvent<HTMLDivElement>, p: PageSummary) => {
+      if (e.target !== e.currentTarget) return;
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        router.push(`/editor/${projectId}/pages/${p.id}`);
+        return;
+      }
       if ((e.key === "Backspace" || e.key === "Delete") && onDelete) {
         e.preventDefault();
         setDeleteCandidate(p);
       }
     },
-    [onDelete],
+    [onDelete, projectId, router],
+  );
+
+  const handleInsertAfter = useCallback(
+    (pageNo: number) => {
+      void onInsert?.(pageNo);
+    },
+    [onInsert],
   );
 
   if (loading) {
@@ -308,6 +412,10 @@ export default function PreviewGrid({
 
   return (
     <>
+      {/* 드래그 reorder 시각 안내 — aria-label 만으로는 발견이 어려움 */}
+      <p className="text-xs text-muted-foreground">
+        카드를 길게 누르면(마우스는 드래그) 순서를 바꿀 수 있어요.
+      </p>
       <div
         ref={gridRef}
         className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
@@ -321,120 +429,31 @@ export default function PreviewGrid({
             : bookSize
               ? bookSize.width_mm / bookSize.height_mm
               : 1;
-          const isDragging = draggingId === p.id;
-          const isDropTarget = overIndex === i && draggingId && draggingId !== p.id;
           return (
-            <div
+            <PreviewCell
               key={p.id}
-              data-preview-cell
-              role="listitem"
-              tabIndex={0}
-              onKeyDown={(e) => onCardKeyDown(e, p)}
-              onPointerDown={(e) => onCardPointerDown(e, p.id)}
-              onPointerMove={(e) => onCardPointerMove(e, p.id)}
+              page={p}
+              projectId={projectId}
+              aspect={aspect}
+              colWidth={colWidth}
+              photoUrls={photoUrls}
+              isDragging={draggingId === p.id}
+              isDropTarget={
+                overIndex === i && Boolean(draggingId) && draggingId !== p.id
+              }
+              dragActive={Boolean(draggingId)}
+              busy={busy}
+              canInsert={Boolean(onInsert)}
+              canDelete={Boolean(onDelete)}
+              onKeyDown={onCardKeyDown}
+              onPointerDown={onCardPointerDown}
+              onPointerMove={onCardPointerMove}
               onPointerUp={onCardPointerUp}
-              onPointerCancel={onCardPointerUp}
-              className={cn(
-                "group relative touch-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                isDragging && "z-30 scale-105 opacity-80 shadow-soft-lg",
-                isDropTarget && "ring-2 ring-primary/70",
-                "transition-transform",
-              )}
-              style={{ aspectRatio: aspect }}
-              aria-label={`페이지 ${p.pageNo}, ${p.layoutMode === "polaroid" ? "폴라로이드" : "콜라주"}`}
-              aria-grabbed={isDragging}
-            >
-              <div className="absolute inset-0 overflow-hidden rounded-md bg-card shadow-soft ring-1 ring-black/5">
-                {doc ? (
-                  <PagePreview
-                    doc={doc}
-                    photoUrls={photoUrls}
-                    cardWidthPx={colWidth}
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                    빈 페이지
-                  </div>
-                )}
-              </div>
-
-              {/* 페이지 번호 배지 */}
-              <span
-                aria-hidden
-                className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white"
-              >
-                p.{p.pageNo}
-              </span>
-
-              {/* 컨텍스트 메뉴 (⋯) */}
-              {!isDragging ? (
-                <div className="absolute right-1.5 top-1.5 z-10">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        aria-label={`페이지 ${p.pageNo} 옵션`}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        className={cn(
-                          "inline-flex size-8 items-center justify-center rounded-md bg-black/55 text-white",
-                          "opacity-0 transition-opacity",
-                          "group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100",
-                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        )}
-                      >
-                        <MoreVertical className="size-4" aria-hidden />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onSelect={() => setPreviewCandidate(p)}
-                        disabled={busy || !p.fabricJson}
-                      >
-                        <Eye className="mr-2 size-4" /> 미리보기
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onSelect={() => void onInsert?.(p.pageNo)}
-                        disabled={busy || !onInsert}
-                      >
-                        <Plus className="mr-2 size-4" /> 이 페이지 다음에 추가
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onSelect={() => setDeleteCandidate(p)}
-                        disabled={busy || !onDelete}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="mr-2 size-4" /> 삭제
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              ) : null}
-
-              {/* 편집 오버레이 — 드래그 중엔 비활성 */}
-              {!isDragging ? (
-                <Link
-                  href={`/editor/${projectId}/pages/${p.id}`}
-                  draggable={false}
-                  onPointerDown={(e) => {
-                    // 카드 부모의 long-press 와 충돌 방지 — 마우스/터치 모두 부모에서 처리됨.
-                    if (e.pointerType !== "mouse") {
-                      // 모바일에서는 부모의 long-press 가 이미 동작 중. 단, 짧은 탭은 link 가 살아있도록.
-                    }
-                  }}
-                  className={cn(
-                    "absolute inset-0 flex items-center justify-center rounded-md bg-black/0 opacity-0 transition-opacity",
-                    "focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    "group-hover:bg-black/30 group-hover:opacity-100",
-                  )}
-                  aria-label={`페이지 ${p.pageNo} 편집`}
-                >
-                  <span className="inline-flex items-center gap-1 rounded-md bg-card/90 px-2 py-1 text-xs font-medium text-foreground shadow-soft">
-                    <Pencil className="size-3" aria-hidden /> 편집
-                  </span>
-                </Link>
-              ) : null}
-            </div>
+              onContextMenu={onCardContextMenu}
+              onPreview={setPreviewCandidate}
+              onInsertAfter={handleInsertAfter}
+              onRequestDelete={setDeleteCandidate}
+            />
           );
         })}
 
@@ -463,7 +482,7 @@ export default function PreviewGrid({
         ) : null}
       </div>
 
-      {/* 삭제 confirm 다이얼로그 — 단순 prompt */}
+      {/* 삭제 confirm 다이얼로그 */}
       {deleteCandidate ? (
         <DeleteDialog
           page={deleteCandidate}
@@ -481,6 +500,15 @@ export default function PreviewGrid({
           onOpenChange={(o) => {
             if (!o) setPreviewCandidate(null);
           }}
+          trimGuide={
+            previewCandidate.fabricJson
+              ? {
+                  widthMm: previewCandidate.fabricJson.widthMm,
+                  heightMm: previewCandidate.fabricJson.heightMm,
+                  bleedMm: previewCandidate.fabricJson.bleedMm,
+                }
+              : null
+          }
         />
       ) : null}
     </>
@@ -488,7 +516,168 @@ export default function PreviewGrid({
 }
 
 // =====================================================================
-// 삭제 confirm — 가벼운 모달 (Radix Dialog 대신 div + portal-less)
+// 개별 카드 셀 — memo 로 드래그 중 리렌더를 드롭 타깃 변경 셀로 한정
+// =====================================================================
+interface PreviewCellProps {
+  page: PageSummary;
+  projectId: string;
+  aspect: number;
+  colWidth: number;
+  photoUrls: Record<string, string>;
+  isDragging: boolean;
+  isDropTarget: boolean;
+  /** 그리드 어딘가에서 드래그 진행 중 (touch-action 전환용). */
+  dragActive: boolean;
+  busy?: boolean;
+  canInsert: boolean;
+  canDelete: boolean;
+  onKeyDown: (e: ReactKeyboardEvent<HTMLDivElement>, p: PageSummary) => void;
+  onPointerDown: (e: ReactPointerEvent<HTMLDivElement>, id: string) => void;
+  onPointerMove: (e: ReactPointerEvent<HTMLDivElement>, id: string) => void;
+  onPointerUp: () => void;
+  onContextMenu: (e: ReactMouseEvent<HTMLDivElement>) => void;
+  onPreview: (p: PageSummary) => void;
+  onInsertAfter: (pageNo: number) => void;
+  onRequestDelete: (p: PageSummary) => void;
+}
+
+const PreviewCell = memo(function PreviewCell({
+  page: p,
+  projectId,
+  aspect,
+  colWidth,
+  photoUrls,
+  isDragging,
+  isDropTarget,
+  dragActive,
+  busy,
+  canInsert,
+  canDelete,
+  onKeyDown,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onContextMenu,
+  onPreview,
+  onInsertAfter,
+  onRequestDelete,
+}: PreviewCellProps) {
+  const doc = p.fabricJson;
+  return (
+    <div
+      data-preview-cell
+      role="listitem"
+      tabIndex={0}
+      onKeyDown={(e) => onKeyDown(e, p)}
+      onPointerDown={(e) => onPointerDown(e, p.id)}
+      onPointerMove={(e) => onPointerMove(e, p.id)}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onContextMenu={onContextMenu}
+      className={cn(
+        // select-none + touch-callout 억제 — long-press 드래그가 iOS 링크
+        // 프리뷰/Android 컨텍스트 메뉴·텍스트 선택과 경합하지 않게.
+        "group relative select-none [-webkit-touch-callout:none] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        isDragging && "z-30 scale-105 opacity-80 shadow-soft-lg",
+        isDropTarget && "ring-2 ring-primary/70",
+        "transition-transform",
+      )}
+      style={{
+        aspectRatio: aspect,
+        // 평상시엔 세로 스크롤 허용, 드래그 중에만 터치 제스처 차단.
+        touchAction: dragActive ? "none" : "pan-y",
+      }}
+      aria-label={`페이지 ${p.pageNo}, ${p.layoutMode === "polaroid" ? "폴라로이드" : "콜라주"}`}
+      aria-grabbed={isDragging}
+    >
+      <div className="absolute inset-0 overflow-hidden rounded-md bg-card shadow-soft ring-1 ring-black/5">
+        {doc ? (
+          <PagePreview doc={doc} photoUrls={photoUrls} cardWidthPx={colWidth} />
+        ) : (
+          <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+            빈 페이지
+          </div>
+        )}
+      </div>
+
+      {/* 페이지 번호 배지 */}
+      <span
+        aria-hidden
+        className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white"
+      >
+        p.{p.pageNo}
+      </span>
+
+      {/* 컨텍스트 메뉴 (⋯) — hover 미지원(터치) 환경에서는 상시 노출 + 44px 타깃 */}
+      {!isDragging ? (
+        <div className="absolute right-1 top-1 z-10">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label={`페이지 ${p.pageNo} 옵션`}
+                onPointerDown={(e) => e.stopPropagation()}
+                className={cn(
+                  "inline-flex size-11 items-center justify-center rounded-md bg-black/55 text-white",
+                  "[@media(hover:hover)]:size-8",
+                  "transition-opacity",
+                  "[@media(hover:hover)]:opacity-0",
+                  "group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                )}
+              >
+                <MoreVertical className="size-4" aria-hidden />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onSelect={() => onPreview(p)}
+                disabled={busy || !p.fabricJson}
+              >
+                <Eye className="mr-2 size-4" /> 미리보기
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => onInsertAfter(p.pageNo)}
+                disabled={busy || !canInsert}
+              >
+                <Plus className="mr-2 size-4" /> 이 페이지 다음에 추가
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => onRequestDelete(p)}
+                disabled={busy || !canDelete}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 size-4" /> 삭제
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ) : null}
+
+      {/* 편집 오버레이 — 드래그 중엔 비활성 */}
+      {!isDragging ? (
+        <Link
+          href={`/editor/${projectId}/pages/${p.id}`}
+          draggable={false}
+          className={cn(
+            "absolute inset-0 flex items-center justify-center rounded-md bg-black/0 opacity-0 transition-opacity",
+            "focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "group-hover:bg-black/30 group-hover:opacity-100",
+          )}
+          aria-label={`페이지 ${p.pageNo} 편집`}
+        >
+          <span className="inline-flex items-center gap-1 rounded-md bg-card/90 px-2 py-1 text-xs font-medium text-foreground shadow-soft">
+            <Pencil className="size-3" aria-hidden /> 편집
+          </span>
+        </Link>
+      ) : null}
+    </div>
+  );
+});
+
+// =====================================================================
+// 삭제 confirm — Radix Dialog (포커스 트랩·초기 포커스·ESC·오버레이 닫기)
 // =====================================================================
 function DeleteDialog({
   page,
@@ -499,49 +688,53 @@ function DeleteDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  // ESC 닫기
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onCancel();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="delete-page-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px]"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel();
+    <DialogPrimitive.Root
+      open
+      onOpenChange={(o) => {
+        if (!o) onCancel();
       }}
     >
-      <div className="w-[min(92vw,420px)] rounded-xl border bg-background p-5 shadow-soft-lg">
-        <h2 id="delete-page-title" className="text-base font-semibold">
-          페이지 {page.pageNo} 을(를) 삭제할까요?
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          이 동작은 되돌릴 수 없어요. 페이지의 모든 편집 내용이 함께 사라집니다.
-        </p>
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-accent"
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="inline-flex h-9 items-center justify-center rounded-md bg-destructive px-3 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
-          >
-            삭제
-          </button>
-        </div>
-      </div>
-    </div>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay
+          className={cn(
+            "fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px]",
+            "data-[state=open]:animate-in data-[state=open]:fade-in-0",
+            "data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
+          )}
+        />
+        <DialogPrimitive.Content
+          role="alertdialog"
+          className={cn(
+            "fixed left-1/2 top-1/2 z-50 w-[min(92vw,420px)] -translate-x-1/2 -translate-y-1/2",
+            "rounded-xl border bg-background p-5 shadow-soft-lg",
+            "focus:outline-none",
+          )}
+        >
+          <DialogPrimitive.Title className="text-base font-semibold">
+            {page.pageNo}페이지를 삭제할까요?
+          </DialogPrimitive.Title>
+          <DialogPrimitive.Description className="mt-1 text-sm text-muted-foreground">
+            이 동작은 되돌릴 수 없어요. 페이지의 모든 편집 내용이 함께 사라집니다.
+          </DialogPrimitive.Description>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              className="inline-flex h-9 items-center justify-center rounded-md bg-destructive px-3 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              삭제
+            </button>
+          </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }

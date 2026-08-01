@@ -104,6 +104,8 @@ const ToastClose = React.forwardRef<
     ref={ref}
     className={cn(
       "absolute right-2 top-2 rounded-md p-1 text-current/70 opacity-70",
+      /* 44px 히트 슬롭 — 시각 크기는 유지 (24px + inset 10px*2) */
+      "after:absolute after:-inset-2.5 after:content-['']",
       "transition-opacity hover:opacity-100",
       "focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       className,

@@ -118,7 +118,7 @@ export default function StepsSection() {
           </motion.h2>
           <motion.p
             variants={headingVariants}
-            className="mt-2 text-sm text-white/40"
+            className="mt-2 text-sm text-white/60"
           >
             세 단계만 거치면 나만의 감성 포토북이 완성돼요.
           </motion.p>
@@ -254,7 +254,7 @@ export default function StepsSection() {
                   </span>
 
                   <h3 className="relative text-base font-bold text-white mb-2">{title}</h3>
-                  <p className="relative text-sm text-white/45 leading-relaxed">{desc}</p>
+                  <p className="relative text-sm text-white/60 leading-relaxed">{desc}</p>
                 </div>
               </motion.div>
             ))}

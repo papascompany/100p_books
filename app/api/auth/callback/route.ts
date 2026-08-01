@@ -45,8 +45,12 @@ export async function GET(req: NextRequest) {
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
+    // 원문(영어)은 서버 로그로만 남기고, 클라이언트에는 코드로 전달 —
+    // LoginForm 이 한국어 안내문으로 매핑한다. next 도 보존해 재로그인 시 원래 경로로 복귀.
+    console.warn("[auth/callback] exchangeCodeForSession 실패:", error.message);
     const url = new URL("/login", origin);
-    url.searchParams.set("error", error.message);
+    url.searchParams.set("error", "callback_failed");
+    if (target !== "/") url.searchParams.set("next", target);
     return NextResponse.redirect(url);
   }
 

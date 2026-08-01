@@ -90,3 +90,51 @@ export function calcOrderAmount(
 function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v));
 }
+
+/** 토스페이먼츠 최소 결제 금액 (KRW) — 이 금액 미만은 결제 요청 자체가 불가하다. */
+export const MIN_PAYMENT_AMOUNT = 100;
+
+/** 포인트 사용 단위 (100P 단위로만 사용 가능). */
+export const POINTS_UNIT = 100;
+
+export interface ClampPointsForMinPaymentArgs {
+  /** 수량 할인 반영 후 소계 — calcOrderAmount().total (KRW). */
+  subtotal: number;
+  /** 할인 코드 차감액 (KRW, >= 0). */
+  discountAmount: number;
+  /** 사용 요청 포인트 (1P = 1원). */
+  requestedPoints: number;
+}
+
+export interface ClampPointsForMinPaymentResult {
+  /** 실제 사용할 포인트 — 100P 단위 내림 + 최소 결제 금액 확보 클램프. */
+  pointsUsed: number;
+  /** 클램프 반영 후 최종 결제 금액 (= 할인 후 소계 - pointsUsed). */
+  finalAmount: number;
+}
+
+/**
+ * 최종 결제 금액이 토스 최소 결제 금액(100원) 미만이 되지 않도록 사용 포인트를
+ * 클램프한다. 클라이언트 표시 금액과 서버 주문 금액이 항상 일치하도록
+ * 양쪽에서 이 함수 하나만 사용한다.
+ *
+ *   - 요청 포인트는 100P 단위로 내림.
+ *   - 사용 가능 상한 = (할인 후 소계 - 100원)을 100P 단위로 내림.
+ *   - 할인만으로 이미 100원 미만이면 포인트는 0 (주문 가능 여부는 호출측 판단).
+ */
+export function clampPointsForMinPayment(
+  args: ClampPointsForMinPaymentArgs,
+): ClampPointsForMinPaymentResult {
+  const subtotalAfterDiscount = Math.max(
+    0,
+    Math.floor(args.subtotal) - Math.max(0, Math.floor(args.discountAmount)),
+  );
+  const requested =
+    Math.max(0, Math.floor(args.requestedPoints / POINTS_UNIT)) * POINTS_UNIT;
+  const cap =
+    Math.floor(
+      Math.max(0, subtotalAfterDiscount - MIN_PAYMENT_AMOUNT) / POINTS_UNIT,
+    ) * POINTS_UNIT;
+  const pointsUsed = Math.min(requested, cap);
+  return { pointsUsed, finalAmount: subtotalAfterDiscount - pointsUsed };
+}

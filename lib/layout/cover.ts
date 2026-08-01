@@ -3,8 +3,11 @@
  *
  * 좌표계:
  *   - 표지는 "뒤표지(좌) + 책등(중앙) + 앞표지(우)" 를 한 장의 펼친 캔버스로 다룬다.
- *   - widthMm = bookWidthMm * 2 + spineMm
- *   - heightMm = bookHeightMm
+ *   - DB 정본(0003_seed.sql): book_sizes.cover_width_mm 은
+ *     "펼친(앞+뒤) 전체 폭 — 책등 제외, 재단 여유 포함" 이다.
+ *   - bookWidthMm(한 면) = cover_width_mm / 2
+ *   - widthMm(totalWidthMm) = cover_width_mm + spineMm
+ *   - heightMm = cover_height_mm
  *   - bleed 2mm 는 다른 페이지와 동일.
  *
  * 책등 두께:

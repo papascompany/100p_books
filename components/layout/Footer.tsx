@@ -21,7 +21,7 @@ export default async function Footer() {
             <p className="mt-2 text-sm text-mute max-w-[28ch] leading-relaxed">
               {footerContent.tagline}
             </p>
-            <p className="mt-3 text-xs text-stone">
+            <p className="mt-3 text-xs text-mute">
               © {year} {footerContent.copyright}
             </p>
           </div>
@@ -35,7 +35,7 @@ export default async function Footer() {
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="text-mute hover:text-coral transition-colors"
+                    className="text-mute hover:text-coral-700 dark:hover:text-coral transition-colors"
                   >
                     {link.label}
                   </Link>

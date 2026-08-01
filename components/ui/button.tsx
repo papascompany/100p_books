@@ -20,12 +20,13 @@ const buttonVariants = cva(
         /* 기본: 모노 pill (전경/배경 시맨틱 — 다크 자동 반전) */
         default:
           "bg-foreground text-background shadow-soft hover:shadow-soft-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]",
-        /* 포인트 CTA: 코랄 pill (주요 행동 유도) */
+        /* 포인트 CTA: 코랄 pill (주요 행동 유도)
+           — 텍스트는 다크 무관 고정 잉크(night)로 AA 대비 확보 (코랄 위 흰색 ≈2.8:1 미달) */
         coral:
-          "bg-coral text-white shadow-soft hover:bg-coral-600 hover:shadow-coral-glow hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]",
+          "bg-coral text-night shadow-soft hover:bg-coral-600 hover:shadow-coral-glow hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]",
         /* 보조: soft pill */
         secondary:
-          "bg-soft-cloud text-ink hover:bg-[#e7e7ea] active:scale-[0.98]",
+          "bg-soft-cloud text-ink hover:bg-hairline active:scale-[0.98]",
         /* 아웃라인 (표면 배경) */
         outline:
           "bg-card text-ink border border-hairline shadow-soft hover:border-ink hover:shadow-soft-lg active:scale-[0.98]",
@@ -37,11 +38,11 @@ const buttonVariants = cva(
           "bg-[#d30005] text-white shadow-soft hover:bg-[#d30005]/90 active:scale-[0.98]",
         /* 고스트 */
         ghost: "hover:bg-soft-cloud text-ink active:scale-[0.98]",
-        /* 링크 */
-        link: "text-coral-600 underline-offset-4 hover:underline p-0 h-auto",
+        /* 링크 — 소형 텍스트 AA (라이트 coral-700 ≈5.1:1 / 다크는 기존 coral-600 유지) */
+        link: "text-coral-700 underline-offset-4 hover:underline p-0 h-auto dark:text-coral-600",
         /* legacy gradient → 코랄로 매핑 */
         gradient:
-          "bg-coral text-white shadow-soft hover:bg-coral-600 hover:shadow-coral-glow hover:-translate-y-0.5 active:scale-[0.98]",
+          "bg-coral text-night shadow-soft hover:bg-coral-600 hover:shadow-coral-glow hover:-translate-y-0.5 active:scale-[0.98]",
       },
       size: {
         default: "h-12 px-8 text-base",

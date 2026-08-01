@@ -1,7 +1,6 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, Eye, Keyboard, Save } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -42,7 +41,12 @@ import type { BookSize } from "@/lib/db/types";
 // fabricClipboard: 실제 사용 시점에 동적으로 import (fabric.js 번들 분리)
 const getClipboard = () => import("@/lib/fabric/clipboard").then((m) => m.fabricClipboard);
 import type { TaggedFabricObject } from "@/lib/fabric/serialize";
-import { PAGEDOC_VERSION, type PageDoc } from "@/lib/layout/types";
+import {
+  PAGEDOC_VERSION,
+  type BackgroundImage,
+  type PageDoc,
+  type PageLayoutMode,
+} from "@/lib/layout/types";
 import { cn } from "@/lib/utils";
 
 export interface PageEditorProps {
@@ -61,31 +65,26 @@ export interface PageEditorProps {
 
 const AUTOSAVE_DEBOUNCE_MS = 5000;
 
+/** 사진 선택 다이얼로그의 진입 경로 — 추가/교체 플로우 분리. */
+type PhotoPickerMode = "add" | "replace";
+
 /**
  * 페이지 단일 편집 클라이언트.
  *
  * 레이아웃:
  *   - 데스크탑: 좌측 ResourcePalette / 중앙 FabricStage / 우측 SelectionPanel
- *   - 모바일:   상단 미니 헤더 / 가운데 FabricStage (풀 높이) / 하단 MobileToolbar
+ *   - 모바일:   상단 미니 헤더 / 가운데 FabricStage / 하단 MobileToolbar(퀵 바 + 탭 바)
  *
- * 모바일 탭:
- *   - 도구(Tools): 기존 Toolbar 콘텐츠 (텍스트/사진/클립아트/배경/레이어 + Undo/Redo/Delete)
- *   - 레이어(Layers): 선택 객체 속성 편집 (SelectionPanel)
- *   - 추가(Add): 사진 추가, 텍스트 추가, 클립아트, 배경 변경
+ * 모바일:
+ *   - 퀵 바: Undo/Redo 상시 노출 + 선택 객체 도구(복제/앞뒤/삭제/더보기).
+ *     캔버스를 가리지 않는 비모달 — 객체 탭 시 자동 시트 오픈은 하지 않는다.
+ *   - 탭 바: 도구(Toolbar) / 레이어(SelectionPanel) / 추가(사진·텍스트·클립아트·배경)
  *
  * 저장:
- *   - 수동: "저장" 버튼.
- *   - 자동: 토글(기본 ON). 변경 후 5초 debounce.
- *   - leave guard: 미저장 변경이 있을 때 beforeunload.
- *
- * M12 추가:
- *   - 단축키 (복사/붙여넣기/복제, 페이지 점프, 단축키 안내)
- *   - 페이지 번호 드롭다운 점프
- *
- * M17-9 추가:
- *   - MobileToolbar (fixed bottom-0, iOS safe-area)
- *   - SelectionPanel 객체 선택 시 모바일 자동 Bottom Sheet 오픈
- *   - 캔버스 높이 --toolbar-h CSS 변수 기반 동적 계산
+ *   - 수동: "저장" 버튼. 자동: 토글(기본 ON). 변경 후 5초 debounce.
+ *   - 페이지 이동(이전/다음/점프/J·K)은 dirty 면 저장 후 이동, 저장 실패 시에만 confirm.
+ *   - 하드 내비게이션(새로고침/탭 닫기)은 beforeunload 로 경고.
+ *   - 배경(색/이미지)은 metaRef 로 추적해 serialize meta 로 전달 — 저장 시 보존.
  */
 export default function PageEditor({
   projectId,
@@ -112,7 +111,7 @@ export default function PageEditor({
   const [toolSheet, setToolSheet] = useState<ToolbarTool | null>(null);
   const [collageOpen, setCollageOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
+  const [photoPicker, setPhotoPicker] = useState<PhotoPickerMode | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [currentDoc, setCurrentDoc] = useState<PageDoc | null>(initialDoc);
 
@@ -120,28 +119,30 @@ export default function PageEditor({
   // null = 모든 시트 닫힘, 값 = 해당 시트 오픈
   const [mobileTab, setMobileTab] = useState<MobileTab | null>(null);
 
-  // M17-9: 객체가 선택될 때 모바일에서 자동으로 레이어 시트 오픈.
-  // 시트가 이미 열려있는 경우에도 갱신 (재렌더만 발생하므로 닫지 않음).
-  const prevSelectionRef = useRef<TaggedFabricObject | null>(null);
-  useEffect(() => {
-    const hasSel = selection !== null;
-    const hadSel = prevSelectionRef.current !== null;
-    prevSelectionRef.current = selection;
+  // 편집 시퀀스 — 저장 요청 중 발생한 편집을 dirty 해제에서 보호 (EC-16).
+  const editSeqRef = useRef(0);
+  const markDirty = useCallback(() => {
+    editSeqRef.current += 1;
+    setDirty(true);
+  }, []);
 
-    // 새로운 객체 선택(없음→있음, 또는 다른 객체로 변경)일 때 시트 오픈.
-    // 이미 레이어 시트가 열려있다면 그대로 유지.
-    // 데스크탑(md+)에서는 동작 안 함 — JS로 판단하되 Tailwind 브레이크포인트와 동기화.
-    if (hasSel && typeof window !== "undefined" && window.innerWidth < 768) {
-      if (!hadSel || selection !== prevSelectionRef.current) {
-        setMobileTab("layers");
-      }
-    }
-  }, [selection]);
+  // 직렬화 메타(레이아웃 모드/배경) — 저장 시 meta 로 전달해 배경 소실 방지 (EC-3).
+  // 자동저장 타이머의 stale closure 를 피하려고 state 대신 ref 로 추적한다.
+  const metaRef = useRef<{
+    layoutMode: PageLayoutMode;
+    backgroundColor: string;
+    backgroundImage: BackgroundImage | null;
+  }>({
+    layoutMode: initialDoc?.layoutMode ?? "polaroid",
+    backgroundColor: initialDoc?.backgroundColor ?? "#f8f5f0",
+    backgroundImage: initialDoc?.backgroundImage ?? null,
+  });
 
   const { shouldShow: shouldAutoShowShortcuts, mark: markShortcutsSeen } =
     useShortcutsAutoShow();
 
-  // 첫 방문 시 단축키 안내 자동 노출
+  // 첫 방문 시 단축키 안내 자동 노출 — 데스크탑(fine pointer)에서만 (EC-12,
+  // 판정은 useShortcutsAutoShow 내부에서 처리)
   useEffect(() => {
     if (shouldAutoShowShortcuts) {
       const t = setTimeout(() => {
@@ -157,44 +158,21 @@ export default function PageEditor({
     void stageRef.current?.loadDoc(initialDoc, initialPhotoUrls);
   }, [initialDoc, initialPhotoUrls]);
 
-  // 자동 저장 debounce
-  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (!dirty || !autosave) return;
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    autosaveTimerRef.current = setTimeout(() => {
-      void save();
-    }, AUTOSAVE_DEBOUNCE_MS);
-    return () => {
-      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dirty, autosave]);
-
-  // beforeunload guard
-  useEffect(() => {
-    function onBeforeUnload(e: BeforeUnloadEvent) {
-      if (!dirty) return;
-      e.preventDefault();
-      e.returnValue = "저장되지 않은 변경 사항이 있어요.";
-    }
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [dirty]);
-
-  const save = useCallback(async () => {
+  const save = useCallback(async (): Promise<boolean> => {
     const handle = stageRef.current;
-    if (!handle) return;
+    if (!handle) return false;
+    // 저장 시작 시점의 편집 시퀀스 캡처 — 완료 시 값이 그대로일 때만 dirty 해제.
+    const seq = editSeqRef.current;
     const doc = handle.serialize({
       version: PAGEDOC_VERSION,
       bookSizeId: bookSize.id,
       pageNo,
-      layoutMode: currentDoc?.layoutMode ?? initialDoc?.layoutMode ?? "polaroid",
+      layoutMode: metaRef.current.layoutMode,
       widthMm: bookSize.width_mm,
       heightMm: bookSize.height_mm,
       bleedMm: 2,
-      backgroundColor:
-        currentDoc?.backgroundColor ?? initialDoc?.backgroundColor ?? "#f8f5f0",
+      backgroundColor: metaRef.current.backgroundColor,
+      backgroundImage: metaRef.current.backgroundImage ?? undefined,
     });
     setSaving(true);
     setError(null);
@@ -212,18 +190,111 @@ export default function PageEditor({
         throw new Error(json.error?.message ?? "저장에 실패했어요.");
       }
       setSavedAt(Date.now());
-      setDirty(false);
+      // 저장 요청 중 새 편집이 없을 때만 해제 — 있으면 dirty 유지해 다음 자동저장이 돈다.
+      if (editSeqRef.current === seq) {
+        setDirty(false);
+      }
       setCurrentDoc(doc);
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장에 실패했어요.");
+      return false;
     } finally {
       setSaving(false);
     }
-  }, [bookSize, pageId, pageNo, initialDoc, currentDoc]);
+  }, [bookSize, pageId, pageNo]);
 
-  const onToolPick = useCallback((tool: ToolbarTool) => {
-    setToolSheet(tool);
-  }, []);
+  // 자동 저장 debounce.
+  // savedAt 의존 포함: 저장 중 편집(dirty 유지)된 경우 저장 완료 후 타이머를 재무장한다.
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!dirty || !autosave) return;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      void save();
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, autosave, savedAt]);
+
+  // beforeunload guard — 하드 내비게이션(새로고침/탭 닫기) 전용.
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (!dirty) return;
+      e.preventDefault();
+      e.returnValue = "저장되지 않은 변경 사항이 있어요.";
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
+
+  /**
+   * 소프트 내비게이션 가드 (EC-1).
+   * App Router 소프트 내비에서는 beforeunload 가 발화하지 않으므로,
+   * dirty 면 저장 후 이동하고 저장 실패 시에만 확인을 받는다.
+   */
+  const navigateTo = useCallback(
+    async (href: string) => {
+      if (dirty) {
+        const ok = await save();
+        if (!ok) {
+          const proceed = window.confirm(
+            "저장에 실패했어요. 저장하지 않고 이동하면 최근 변경 사항이 사라져요. 그래도 이동할까요?",
+          );
+          if (!proceed) return;
+        }
+      }
+      router.push(href);
+    },
+    [dirty, save, router],
+  );
+
+  /** 미리보기 열기 — 저장 성공 시에만 오픈 (EC-17). */
+  const openPreview = useCallback(() => {
+    if (!dirty) {
+      setPreviewOpen(true);
+      return;
+    }
+    void save().then((ok) => {
+      if (ok) {
+        setPreviewOpen(true);
+      } else {
+        toast({
+          title: "저장 실패",
+          description: "미리보기를 열지 않았어요. 잠시 후 다시 시도해주세요.",
+          variant: "destructive",
+        });
+      }
+    });
+  }, [dirty, save]);
+
+  /**
+   * 도구 선택 라우팅.
+   *  - "사진": 사진 추가 플로우(PhotoPickerDialog) — 클립아트 팔레트 아님 (EC-9).
+   *  - "텍스트": 선택된 텍스트가 없으면 새 텍스트를 먼저 추가한 뒤 속성 패널 (EC-10).
+   */
+  const handleToolPick = useCallback(
+    (tool: ToolbarTool) => {
+      if (tool === "image") {
+        setPhotoPicker("add");
+        return;
+      }
+      if (tool === "text") {
+        const handle = stageRef.current;
+        const sel = handle?.getSelection();
+        if (handle && (!sel || sel.oType !== "text")) {
+          handle.addText({});
+          markDirty();
+        }
+        setToolSheet("text");
+        return;
+      }
+      setToolSheet(tool);
+    },
+    [markDirty],
+  );
 
   // M17-9: 모바일 탭 핸들러 — 같은 탭 재클릭 시 토글(닫기)
   const handleMobileTabPress = useCallback((tab: MobileTab) => {
@@ -268,9 +339,9 @@ export default function PageEditor({
     const obj = clipboard.read();
     if (!obj) return;
     await handle.pasteLayoutObject(obj, initialPhotoUrls);
-    setDirty(true);
+    markDirty();
     toast({ description: "붙여넣기 완료", variant: "success" });
-  }, [initialPhotoUrls]);
+  }, [initialPhotoUrls, markDirty]);
 
   const duplicateSelection = useCallback(async () => {
     const handle = stageRef.current;
@@ -284,9 +355,9 @@ export default function PageEditor({
       return;
     }
     await handle.duplicateSelected();
-    setDirty(true);
+    markDirty();
     toast({ description: "복제 완료", variant: "success" });
-  }, []);
+  }, [markDirty]);
 
   // 입력 중인 폼/텍스트박스에서는 단축키 무시.
   const isTypingTarget = useCallback((target: EventTarget | null): boolean => {
@@ -299,8 +370,18 @@ export default function PageEditor({
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      // 모달 열려있으면 ESC 외 전부 패스
-      if (shortcutsOpen || collageOpen) return;
+      // 다이얼로그/시트가 열려있으면 페이지 단축키 전부 패스 (EC-13).
+      // Esc 등 닫기 동작은 Radix 가 처리한다.
+      if (
+        shortcutsOpen ||
+        collageOpen ||
+        previewOpen ||
+        photoPicker !== null ||
+        toolSheet !== null ||
+        mobileTab !== null
+      ) {
+        return;
+      }
       if (isTypingTarget(e.target)) return;
 
       const meta = e.metaKey || e.ctrlKey;
@@ -312,19 +393,29 @@ export default function PageEditor({
         return;
       }
 
-      // 페이지 점프 — J / K, PageDown / PageUp
+      // Esc — 선택 해제 (단축키 안내 표기와 일치, EC-18)
+      if (!meta && e.key === "Escape") {
+        const sel = stageRef.current?.getSelection();
+        if (sel?.canvas) {
+          sel.canvas.discardActiveObject();
+          sel.canvas.requestRenderAll();
+        }
+        return;
+      }
+
+      // 페이지 점프 — J / K, PageDown / PageUp (dirty 면 저장 후 이동)
       if (!meta && !e.altKey) {
         if (e.key === "j" || e.key === "J" || e.key === "PageDown") {
           if (nextPageId) {
             e.preventDefault();
-            router.push(`/editor/${projectId}/pages/${nextPageId}`);
+            void navigateTo(`/editor/${projectId}/pages/${nextPageId}`);
           }
           return;
         }
         if (e.key === "k" || e.key === "K" || e.key === "PageUp") {
           if (prevPageId) {
             e.preventDefault();
-            router.push(`/editor/${projectId}/pages/${prevPageId}`);
+            void navigateTo(`/editor/${projectId}/pages/${prevPageId}`);
           }
           return;
         }
@@ -335,12 +426,7 @@ export default function PageEditor({
         const k = e.key.toLowerCase();
         if (e.shiftKey && k === "p") {
           e.preventDefault();
-          // 자동 저장 직후 호출되어야 신선한 결과 — 일단 즉시 저장 후 열기.
-          if (dirty) {
-            void save().then(() => setPreviewOpen(true));
-          } else {
-            setPreviewOpen(true);
-          }
+          openPreview();
           return;
         }
         if (k === "c") {
@@ -366,6 +452,10 @@ export default function PageEditor({
   }, [
     shortcutsOpen,
     collageOpen,
+    previewOpen,
+    photoPicker,
+    toolSheet,
+    mobileTab,
     isTypingTarget,
     copySelection,
     pasteFromClipboard,
@@ -373,10 +463,39 @@ export default function PageEditor({
     nextPageId,
     prevPageId,
     projectId,
-    router,
-    dirty,
-    save,
+    navigateTo,
+    openPreview,
   ]);
+
+  // EC-13: 다이얼로그/시트가 열린 동안 gestures.ts 의 window keydown(삭제/이동/undo)이
+  // 뒤편 캔버스를 조작하지 못하게 캡처 단계에서 전파를 차단한다.
+  // Esc/Tab 은 Radix 닫기·포커스 트랩에 필요하므로 차단하지 않는다.
+  useEffect(() => {
+    const overlayOpen =
+      shortcutsOpen ||
+      collageOpen ||
+      previewOpen ||
+      photoPicker !== null ||
+      toolSheet !== null ||
+      mobileTab !== null;
+    if (!overlayOpen) return;
+    function blockCanvasShortcuts(e: KeyboardEvent) {
+      const meta = e.metaKey || e.ctrlKey;
+      const k = e.key;
+      const isCanvasKey =
+        k === "Delete" ||
+        k === "Backspace" ||
+        k === "ArrowLeft" ||
+        k === "ArrowRight" ||
+        k === "ArrowUp" ||
+        k === "ArrowDown" ||
+        (meta && (k.toLowerCase() === "z" || k.toLowerCase() === "y"));
+      if (isCanvasKey) e.stopPropagation();
+    }
+    window.addEventListener("keydown", blockCanvasShortcuts, true);
+    return () =>
+      window.removeEventListener("keydown", blockCanvasShortcuts, true);
+  }, [shortcutsOpen, collageOpen, previewOpen, photoPicker, toolSheet, mobileTab]);
 
   // ====================== 공통 팔레트 핸들러 ======================
   const handlePickFont = useCallback(
@@ -389,36 +508,50 @@ export default function PageEditor({
         };
         tb.set({ fontFamily: family });
         tb.canvas?.fire("object:modified", { target: sel });
-        setDirty(true);
+        markDirty();
       } else {
         stageRef.current?.addText({ fontFamily: family });
       }
     },
-    [],
+    [markDirty],
   );
 
   const handlePickClipart = useCallback((url: string, resourceId: string) => {
     void stageRef.current?.addClipart(url, resourceId);
   }, []);
 
-  const handlePickBackground = useCallback((url: string, _resourceId: string) => {
-    stageRef.current?.setBackground({ type: "resource", url });
-    setDirty(true);
-  }, []);
+  // 배경 선택 — 캔버스 적용 + metaRef 갱신(저장 시 backgroundImage 로 직렬화, EC-3).
+  const handlePickBackground = useCallback(
+    (url: string, _resourceId: string) => {
+      stageRef.current?.setBackground({ type: "resource", url });
+      metaRef.current.backgroundImage = { url, cropMode: "cover", opacity: 1 };
+      markDirty();
+    },
+    [markDirty],
+  );
 
   return (
     /*
-     * CSS 변수 --toolbar-h: MobileToolbar 높이.
+     * CSS 변수 --toolbar-h: MobileToolbar 전체 높이.
+     * 퀵 바(48px) + 탭 바(56px) + 상단 보더(1px) + iOS safe-area (EC-11).
      * 모바일 캔버스 높이 계산: calc(100dvh - 헤더높이 - --toolbar-h)
      */
     <div
       className="flex min-h-[calc(100dvh-4rem)] flex-col"
-      style={{ "--toolbar-h": "64px" } as React.CSSProperties}
+      style={
+        {
+          "--toolbar-h": "calc(105px + env(safe-area-inset-bottom))",
+        } as React.CSSProperties
+      }
     >
       {/* 상단 — 페이지 번호 + 네비 + 저장 */}
       <header className="sticky top-0 z-30 flex flex-wrap items-center gap-2 border-b bg-background/95 px-3 py-2 backdrop-blur md:px-6">
-        <Button asChild variant="ghost" size="sm">
-          <Link href={`/editor/${projectId}`}>← 페이지 목록</Link>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => void navigateTo(`/editor/${projectId}`)}
+        >
+          ← 페이지 목록
         </Button>
         <span className="text-sm text-muted-foreground" aria-live="polite">
           {projectTitle} ·
@@ -444,7 +577,7 @@ export default function PageEditor({
                   disabled={s.id === pageId}
                   onSelect={() => {
                     if (s.id !== pageId) {
-                      router.push(`/editor/${projectId}/pages/${s.id}`);
+                      void navigateTo(`/editor/${projectId}/pages/${s.id}`);
                     }
                   }}
                   className={cn(
@@ -464,10 +597,15 @@ export default function PageEditor({
 
         <div className="ml-auto flex items-center gap-2">
           {prevPageId ? (
-            <Button asChild variant="ghost" size="icon" aria-label="이전 페이지 (K)">
-              <Link href={`/editor/${projectId}/pages/${prevPageId}`}>
-                <ChevronLeft className="size-5" />
-              </Link>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="이전 페이지 (K)"
+              onClick={() =>
+                void navigateTo(`/editor/${projectId}/pages/${prevPageId}`)
+              }
+            >
+              <ChevronLeft className="size-5" />
             </Button>
           ) : (
             <Button variant="ghost" size="icon" disabled aria-label="이전 페이지">
@@ -475,10 +613,15 @@ export default function PageEditor({
             </Button>
           )}
           {nextPageId ? (
-            <Button asChild variant="ghost" size="icon" aria-label="다음 페이지 (J)">
-              <Link href={`/editor/${projectId}/pages/${nextPageId}`}>
-                <ChevronRight className="size-5" />
-              </Link>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="다음 페이지 (J)"
+              onClick={() =>
+                void navigateTo(`/editor/${projectId}/pages/${nextPageId}`)
+              }
+            >
+              <ChevronRight className="size-5" />
             </Button>
           ) : (
             <Button variant="ghost" size="icon" disabled aria-label="다음 페이지">
@@ -490,13 +633,7 @@ export default function PageEditor({
             variant="ghost"
             size="sm"
             aria-label="페이지 미리보기 (Cmd/Ctrl+Shift+P)"
-            onClick={() => {
-              if (dirty) {
-                void save().then(() => setPreviewOpen(true));
-              } else {
-                setPreviewOpen(true);
-              }
-            }}
+            onClick={openPreview}
             className="gap-1.5"
           >
             <Eye className="size-4" aria-hidden />
@@ -552,7 +689,7 @@ export default function PageEditor({
       {/*
        * 본문 영역.
        * 모바일: 단일 컬럼. 캔버스가 남은 화면 전체를 차지.
-       *   padding-bottom: var(--toolbar-h) → MobileToolbar 아래 가림 방지.
+       *   padding-bottom: var(--toolbar-h) → MobileToolbar(퀵 바 포함) 아래 가림 방지.
        * 데스크탑: 3단 flex-row.
        */}
       <div className="flex flex-1 flex-col gap-3 p-3 pb-[var(--toolbar-h)] md:flex-row md:gap-4 md:p-6 md:pb-6">
@@ -562,7 +699,7 @@ export default function PageEditor({
           className="hidden md:flex md:w-72 md:shrink-0 md:flex-col md:gap-3"
         >
           <Toolbar
-            onPick={onToolPick}
+            onPick={handleToolPick}
             onUndo={() => stageRef.current?.undo()}
             onRedo={() => stageRef.current?.redo()}
             onDelete={() => stageRef.current?.remove()}
@@ -603,7 +740,7 @@ export default function PageEditor({
             dpi={PREVIEW_DPI}
             pageId={pageId}
             onSelectionChange={setSelection}
-            onModified={() => setDirty(true)}
+            onModified={markDirty}
             onHistoryChange={(u, r) => {
               setCanUndo(u);
               setCanRedo(r);
@@ -629,18 +766,28 @@ export default function PageEditor({
           <SelectionPanel
             selection={selection}
             dpi={PREVIEW_DPI}
-            onChange={() => setDirty(true)}
-            onReplacePhoto={() => setPhotoPickerOpen(true)}
+            onChange={markDirty}
+            onReplacePhoto={() => setPhotoPicker("replace")}
           />
         </aside>
       </div>
 
       {/* ====================== 모바일 전용 영역 ====================== */}
 
-      {/* 하단 탭 바 (모바일) */}
+      {/* 하단 퀵 바(Undo/Redo 상시 + 선택 객체 도구) + 탭 바 (모바일) */}
       <MobileToolbar
         activeTab={mobileTab}
         onTabPress={handleMobileTabPress}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={() => stageRef.current?.undo()}
+        onRedo={() => stageRef.current?.redo()}
+        hasSelection={Boolean(selection)}
+        onDuplicate={() => void duplicateSelection()}
+        onBringForward={() => stageRef.current?.bringForward()}
+        onSendBackward={() => stageRef.current?.sendBackward()}
+        onDelete={() => stageRef.current?.remove()}
+        onMore={() => setMobileTab("layers")}
         className="md:hidden"
       />
 
@@ -656,14 +803,17 @@ export default function PageEditor({
             mobile
             onPick={(tool) => {
               setMobileTab(null);
-              // 리소스 팔레트가 필요한 도구는 toolSheet 로 위임.
-              setToolSheet(tool);
+              // 리소스 팔레트가 필요한 도구는 handleToolPick 으로 위임.
+              handleToolPick(tool);
             }}
             onUndo={() => {
               stageRef.current?.undo();
+              // 결과가 보이도록 시트를 닫는다 (EC-14).
+              setMobileTab(null);
             }}
             onRedo={() => {
               stageRef.current?.redo();
+              setMobileTab(null);
             }}
             onDelete={() => {
               stageRef.current?.remove();
@@ -709,9 +859,9 @@ export default function PageEditor({
           <SelectionPanel
             selection={selection}
             dpi={PREVIEW_DPI}
-            onChange={() => setDirty(true)}
+            onChange={markDirty}
             onReplacePhoto={() => {
-              setPhotoPickerOpen(true);
+              setPhotoPicker("replace");
               setMobileTab(null);
             }}
           />
@@ -740,7 +890,7 @@ export default function PageEditor({
               )}
               onClick={() => {
                 setMobileTab(null);
-                setPhotoPickerOpen(true);
+                setPhotoPicker("add");
               }}
               aria-label="사진 추가"
             >
@@ -761,7 +911,7 @@ export default function PageEditor({
               )}
               onClick={() => {
                 stageRef.current?.addText({});
-                setDirty(true);
+                markDirty();
                 setMobileTab(null);
               }}
               aria-label="텍스트 추가"
@@ -822,33 +972,31 @@ export default function PageEditor({
         title={
           toolSheet === "text"
             ? "텍스트"
-            : toolSheet === "image"
-              ? "사진"
-              : toolSheet === "clipart"
-                ? "클립아트"
-                : toolSheet === "background"
-                  ? "배경"
-                  : "레이어"
+            : toolSheet === "clipart"
+              ? "클립아트"
+              : toolSheet === "background"
+                ? "배경"
+                : "레이어"
         }
       >
         {toolSheet === "text" ? (
           <SelectionPanel
             selection={selection}
             dpi={PREVIEW_DPI}
-            onChange={() => setDirty(true)}
-            onReplacePhoto={() => setPhotoPickerOpen(true)}
+            onChange={markDirty}
+            onReplacePhoto={() => setPhotoPicker("replace")}
           />
         ) : toolSheet === "clipart" || toolSheet === "background" ? (
           <ResourcePalette
             initialTab={toolSheet}
-            onPickFont={() => {}}
+            tabs={["clipart", "background"]}
+            onPickFont={handlePickFont}
             onPickClipart={(url, resourceId) => {
               void stageRef.current?.addClipart(url, resourceId);
               setToolSheet(null);
             }}
-            onPickBackground={(url, _resourceId) => {
-              stageRef.current?.setBackground({ type: "resource", url });
-              setDirty(true);
+            onPickBackground={(url, resourceId) => {
+              handlePickBackground(url, resourceId);
               setToolSheet(null);
             }}
           />
@@ -871,16 +1019,6 @@ export default function PageEditor({
               뒤로 보내기
             </Button>
           </div>
-        ) : toolSheet === "image" ? (
-          <ResourcePalette
-            initialTab="clipart"
-            onPickFont={() => {}}
-            onPickClipart={(url, resourceId) => {
-              void stageRef.current?.addClipart(url, resourceId);
-              setToolSheet(null);
-            }}
-            onPickBackground={() => {}}
-          />
         ) : null}
       </MobileBottomSheet>
 
@@ -892,8 +1030,13 @@ export default function PageEditor({
           doc={currentDoc}
           onApply={(next) => {
             setCurrentDoc(next);
+            metaRef.current = {
+              layoutMode: next.layoutMode,
+              backgroundColor: next.backgroundColor,
+              backgroundImage: next.backgroundImage ?? null,
+            };
             void stageRef.current?.loadDoc(next, initialPhotoUrls);
-            setDirty(true);
+            markDirty();
           }}
         />
       ) : null}
@@ -915,19 +1058,37 @@ export default function PageEditor({
         onOpenChange={setPreviewOpen}
       />
 
-      {/* 사진 선택 / 교체 */}
+      {/* 사진 추가 / 교체 — 진입 경로별 플로우 분리 (EC-2) */}
       <PhotoPickerDialog
-        open={photoPickerOpen}
-        onOpenChange={setPhotoPickerOpen}
+        open={photoPicker !== null}
+        onOpenChange={(o) => !o && setPhotoPicker(null)}
         currentProjectId={projectId}
-        title="사진 교체"
-        description="현재 선택된 사진을 다른 사진으로 교체합니다."
+        title={photoPicker === "replace" ? "사진 교체" : "사진 추가"}
+        description={
+          photoPicker === "replace"
+            ? "현재 선택된 사진을 다른 사진으로 교체합니다."
+            : "페이지에 추가할 사진을 선택하세요."
+        }
         onPick={async (photoId, url) => {
           const handle = stageRef.current;
           if (!handle) return;
-          await handle.replacePhoto(photoId, url);
-          setDirty(true);
-          toast({ description: "사진 교체 완료", variant: "success" });
+          if (photoPicker === "replace") {
+            const sel = handle.getSelection();
+            if (!sel || sel.oType !== "photo") {
+              toast({
+                description: "교체할 사진을 먼저 선택해주세요.",
+                variant: "warning",
+              });
+              return;
+            }
+            await handle.replacePhoto(photoId, url);
+            markDirty();
+            toast({ description: "사진 교체 완료", variant: "success" });
+          } else {
+            await handle.addPhoto(photoId, url);
+            markDirty();
+            toast({ description: "사진을 추가했어요.", variant: "success" });
+          }
         }}
       />
     </div>

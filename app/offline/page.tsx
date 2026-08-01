@@ -31,13 +31,19 @@ export default function OfflinePage() {
       </div>
 
       <div className="flex flex-col gap-3 w-full max-w-xs">
-        {/* 브라우저 자체 새로고침 — JavaScript 없이도 동작 */}
-        <a
-          href="/"
+        {/*
+         * 재시도 = 현재 URL 새로고침. 서비스워커가 실패한 원래 URL 위에
+         * 이 페이지를 폴백으로 그리므로, reload 하면 원래 가려던 페이지를
+         * 다시 요청한다. 오프라인에서 JS 청크 로드가 불가능할 수 있어
+         * 하이드레이션 대신 HTML 에 함께 캐시되는 인라인 스크립트로 처리.
+         */}
+        <button
+          type="button"
+          id="offline-retry"
           className="flex items-center justify-center h-11 w-full rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 transition-colors"
         >
           다시 연결하기
-        </a>
+        </button>
         <Link
           href="/"
           className="flex items-center justify-center h-11 w-full rounded-xl border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 text-sm font-medium hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
@@ -45,6 +51,12 @@ export default function OfflinePage() {
           홈으로 이동
         </Link>
       </div>
+
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `(function(){var b=document.getElementById("offline-retry");if(b)b.addEventListener("click",function(){location.reload()});window.addEventListener("online",function(){location.reload()});})();`,
+        }}
+      />
     </main>
   );
 }

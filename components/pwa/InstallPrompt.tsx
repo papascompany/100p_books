@@ -37,7 +37,23 @@ function detectPlatform(): Platform {
   return "none";
 }
 
-const SESSION_KEY = "pwa-install-dismissed";
+/** 닫은 시각(ms)을 저장 — 일정 기간 재노출을 억제한다. */
+const DISMISS_KEY = "pwa-install-dismissed-at";
+const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7일
+/** 첫 랜딩 히어로를 즉시 덮지 않도록 iOS 안내를 지연 표시. */
+const IOS_SHOW_DELAY_MS = 3000;
+
+function isRecentlyDismissed(): boolean {
+  try {
+    const raw = localStorage.getItem(DISMISS_KEY);
+    if (!raw) return false;
+    const dismissedAt = Number(raw);
+    return Number.isFinite(dismissedAt) && Date.now() - dismissedAt < DISMISS_TTL_MS;
+  } catch {
+    // localStorage 접근 불가(프라이빗 모드 등) — 노출 허용
+    return false;
+  }
+}
 
 // ── 컴포넌트 ──────────────────────────────────────────────────────────────────
 
@@ -57,13 +73,17 @@ export default function InstallPrompt() {
   }
 
   function dismiss() {
-    sessionStorage.setItem(SESSION_KEY, "1");
+    try {
+      localStorage.setItem(DISMISS_KEY, String(Date.now()));
+    } catch {
+      // 저장 실패 시에도 이번 노출은 닫는다
+    }
     setVisible(false);
     setTimeout(() => setRendered(false), 300);
   }
 
   useEffect(() => {
-    if (sessionStorage.getItem(SESSION_KEY)) return;
+    if (isRecentlyDismissed()) return;
 
     const detected = detectPlatform();
     if (detected === "none") return;
@@ -78,9 +98,9 @@ export default function InstallPrompt() {
       return () => window.removeEventListener("beforeinstallprompt", handler);
     }
 
-    if (detected === "ios") {
-      show("ios");
-    }
+    // iOS: 첫 진입 직후 히어로 CTA 를 덮지 않도록 잠시 뒤에 표시
+    const timer = window.setTimeout(() => show("ios"), IOS_SHOW_DELAY_MS);
+    return () => window.clearTimeout(timer);
   }, []);
 
   if (!rendered) return null;
@@ -98,7 +118,7 @@ export default function InstallPrompt() {
   return (
     <div
       className={[
-        "fixed bottom-0 left-0 right-0 z-[200] px-4 pb-safe-bottom",
+        "fixed bottom-0 left-0 right-0 z-[200] px-4 pb-[env(safe-area-inset-bottom)]",
         "transition-all duration-300 ease-out",
         visible ? "translate-y-0 opacity-100" : "translate-y-full opacity-0",
       ].join(" ")}

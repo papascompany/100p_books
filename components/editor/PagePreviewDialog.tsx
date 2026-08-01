@@ -27,6 +27,13 @@ export interface PagePreviewDialogProps {
   onOpenChange: (open: boolean) => void;
   /** 다운로드 파일명 prefix. 기본 "page-{pageNo}". */
   filenamePrefix?: string;
+  /**
+   * 재단선 정밀 표시용 치수 — PageDoc 의 trim 크기(mm)와 bleed(mm).
+   * 미리보기 PNG 는 (widthMm + 2*bleedMm) × (heightMm + 2*bleedMm) 로
+   * 렌더되므로(lib/pdf/render-page.ts), bleed/전체 비율로 정확한 위치를 계산한다.
+   * null/미지정이면 기존 보수적 근사 표시로 폴백.
+   */
+  trimGuide?: { widthMm: number; heightMm: number; bleedMm: number } | null;
 }
 
 export default function PagePreviewDialog({
@@ -35,6 +42,7 @@ export default function PagePreviewDialog({
   open,
   onOpenChange,
   filenamePrefix,
+  trimGuide,
 }: PagePreviewDialogProps) {
   const [pngDataUrl, setPngDataUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -167,19 +175,31 @@ export default function PagePreviewDialog({
                   className="max-h-[72vh] max-w-full rounded-md bg-card shadow-soft ring-1 ring-black/5"
                 />
                 {showBleed ? (
-                  <div
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 rounded-md"
-                    style={{
-                      // bleed 2mm 가이드 — PNG 외곽선에서 안쪽으로 비율 추정 (대략 표시).
-                      // 정확한 trim 박스는 PageDoc.bleedMm / totalSize 비율로 계산되지만
-                      // dataURL 만으론 알 수 없어 보수적으로 외곽 1.5% 안쪽 표시.
-                      boxShadow:
-                        "inset 0 0 0 1px rgba(220, 38, 38, 0.7), inset 0 0 0 12px transparent",
-                      outline: "2px dashed rgba(220, 38, 38, 0.5)",
-                      outlineOffset: "-12px",
-                    }}
-                  />
+                  trimGuide ? (
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute border-2 border-dashed border-red-600/60"
+                      style={{
+                        // PNG = trim + 양쪽 bleed → 정확한 trim 박스 비율 계산.
+                        left: `${(trimGuide.bleedMm / (trimGuide.widthMm + trimGuide.bleedMm * 2)) * 100}%`,
+                        right: `${(trimGuide.bleedMm / (trimGuide.widthMm + trimGuide.bleedMm * 2)) * 100}%`,
+                        top: `${(trimGuide.bleedMm / (trimGuide.heightMm + trimGuide.bleedMm * 2)) * 100}%`,
+                        bottom: `${(trimGuide.bleedMm / (trimGuide.heightMm + trimGuide.bleedMm * 2)) * 100}%`,
+                      }}
+                    />
+                  ) : (
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 rounded-md"
+                      style={{
+                        // 치수 미제공 폴백 — 외곽에서 안쪽으로 비율 추정 (대략 표시).
+                        boxShadow:
+                          "inset 0 0 0 1px rgba(220, 38, 38, 0.7), inset 0 0 0 12px transparent",
+                        outline: "2px dashed rgba(220, 38, 38, 0.5)",
+                        outlineOffset: "-12px",
+                      }}
+                    />
+                  )
                 ) : null}
               </div>
             ) : null}
@@ -193,7 +213,7 @@ export default function PagePreviewDialog({
                 checked={showBleed}
                 onChange={(e) => setShowBleed(e.target.checked)}
               />
-              재단선 가이드(2mm)
+              재단선 가이드({trimGuide?.bleedMm ?? 2}mm)
             </label>
             <div className="flex items-center gap-2">
               <Button

@@ -12,6 +12,15 @@ export const MAX_PHOTOS_PER_PROJECT = 100;
 /** 업로드 시 동시성 제한. */
 export const UPLOAD_CONCURRENCY = 6;
 
+/**
+ * 클라이언트 배치 서명 크기 — sign-upload 1회 호출에 묶는 파일 수.
+ * (파일당 1회 호출 시 분당 30회 레이트리밋에 걸리므로 반드시 배치로 서명)
+ */
+export const SIGN_BATCH_SIZE = 20;
+
+/** 업로드 그리드 표시용 클라이언트 썸네일 긴 변(px). */
+export const CLIENT_THUMB_LONG_EDGE = 360;
+
 /** 썸네일 긴 변(px). */
 export const THUMB_LONG_EDGE = 480;
 

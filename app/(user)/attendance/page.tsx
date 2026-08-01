@@ -7,8 +7,9 @@ import { requireUser } from "@/lib/auth/session";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+// 루트 템플릿(%s · 100p Books)이 사이트명을 붙이므로 접미사 없이 표기.
 export const metadata = {
-  title: "출석체크 | 100p Books",
+  title: "출석체크",
   description: "매일 출석체크하고 포인트를 적립하세요.",
 };
 

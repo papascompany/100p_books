@@ -2,8 +2,10 @@
 
 import { Heart, Star } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import * as React from "react";
 
+import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 
 interface ReviewItem {
@@ -41,8 +43,13 @@ export default function GalleryClient({
   >(new Map());
   const [likePending, setLikePending] = React.useState<Set<string>>(new Set());
 
-  // 정렬 변경 시 처음부터 다시 로드
+  // 정렬 변경 시 처음부터 다시 로드.
+  // 첫 마운트에서는 SSR(ISR) 초기 데이터(sort=recent)를 그대로 사용하고,
+  // sort 가 실제로 바뀔 때만 리셋·재요청한다 (깜빡임/중복 요청 방지).
+  const loadedSortRef = React.useRef<SortMode>("recent");
   React.useEffect(() => {
+    if (loadedSortRef.current === sort) return;
+    loadedSortRef.current = sort;
     let mounted = true;
     setFetchError(null);
     setLoading(true);
@@ -210,6 +217,9 @@ export default function GalleryClient({
       {items.length === 0 && !loading ? (
         <div className="mt-12 rounded-2xl border border-hairline bg-soft-cloud p-8 text-center">
           <p className="text-sm text-mute">아직 등록된 후기가 없습니다.</p>
+          <Button asChild variant="coral" className="mt-4">
+            <Link href="/upload">나도 포토북 만들기</Link>
+          </Button>
         </div>
       ) : (
         <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
@@ -243,11 +253,16 @@ export default function GalleryClient({
       {/* 무한 스크롤 sentinel */}
       <div ref={sentinelRef} className="h-4" aria-hidden />
 
-      {/* 더 이상 없을 때 */}
+      {/* 더 이상 없을 때 — 제작 전환 CTA 로 마무리 */}
       {!loading && !nextCursor && items.length > 0 ? (
-        <p className="mt-8 text-center text-xs text-muted-foreground">
-          모든 후기를 불러왔습니다.
-        </p>
+        <div className="mt-8 flex flex-col items-center gap-4">
+          <p className="text-center text-xs text-muted-foreground">
+            모든 후기를 불러왔습니다.
+          </p>
+          <Button asChild size="lg" variant="coral">
+            <Link href="/upload">나도 포토북 만들기</Link>
+          </Button>
+        </div>
       ) : null}
     </div>
   );
@@ -320,7 +335,7 @@ function ReviewCard(props: {
             disabled={isPending}
             aria-label={isLiked ? `좋아요 취소 (${likesCount})` : `좋아요 (${likesCount})`}
             aria-pressed={isLiked}
-            className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            className="-my-2.5 flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-md px-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
             <Heart
               className={

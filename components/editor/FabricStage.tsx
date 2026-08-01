@@ -286,6 +286,12 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
               wrapperEl.style.height = `${cssH}px`;
             }
           }
+          // 선택 핸들 CSS 축소 역보정 — 화면 기준 시각 ~13px / 터치 판정 ≥44px 유지
+          const inv = 1 / scale;
+          fabric.FabricObject.prototype.cornerSize = Math.round(13 * inv);
+          fabric.FabricObject.prototype.touchCornerSize = Math.round(44 * inv);
+          fabric.FabricObject.prototype.padding = Math.round(4 * inv);
+          canvas.requestRenderAll();
         }, 150);
       });
       ro.observe(wrapper);

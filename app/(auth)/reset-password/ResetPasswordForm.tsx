@@ -141,7 +141,7 @@ export default function ResetPasswordForm() {
         </CardHeader>
         <CardContent>
           <Button asChild size="lg" variant="coral" className="w-full">
-            <Link href="/login">비밀번호 찾기 다시 하기</Link>
+            <Link href="/login?mode=forgot">비밀번호 찾기 다시 하기</Link>
           </Button>
         </CardContent>
       </Card>

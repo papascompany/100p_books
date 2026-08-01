@@ -66,6 +66,21 @@ export default function HeaderClient({ nav }: { nav?: NavItem[] }) {
     setOpen(false);
   }, [pathname]);
 
+  // 드로어 열림 동안: Escape 로 닫기 + body 스크롤 락
+  React.useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open]);
+
   return (
     <>
       {/* Desktop nav */}
@@ -83,7 +98,7 @@ export default function HeaderClient({ nav }: { nav?: NavItem[] }) {
                 "relative px-3 py-2 text-sm font-medium transition-colors",
                 "after:absolute after:bottom-0 after:left-3 after:right-3 after:h-0.5 after:bg-coral after:transition-opacity",
                 active
-                  ? "text-coral after:opacity-100"
+                  ? "text-coral-700 after:opacity-100 dark:text-coral"
                   : "text-mute hover:text-foreground after:opacity-0",
               )}
             >
@@ -127,48 +142,59 @@ export default function HeaderClient({ nav }: { nav?: NavItem[] }) {
 
       {/* Mobile drawer */}
       {open ? (
-        <div
-          id="mobile-nav"
-          className="absolute inset-x-0 top-14 z-50 border-b border-hairline bg-card/95 backdrop-blur-md animate-fade-in md:hidden"
-        >
-          <nav
-            aria-label="모바일 네비게이션"
-            className="container flex flex-col py-2"
+        <>
+          {/* 스크림 — 헤더 아래 전체를 덮고, 탭하면 드로어 닫힘.
+              (헤더의 backdrop-blur 가 fixed 의 containing block 을 만들므로
+              헤더 기준 absolute + top-full 로 뷰포트 아래 영역을 덮는다.) */}
+          <div
+            aria-hidden
+            onClick={() => setOpen(false)}
+            className="absolute inset-x-0 top-full z-40 h-[100dvh] bg-black/40 animate-fade-in md:hidden"
+          />
+          <div
+            id="mobile-nav"
+            className="absolute inset-x-0 top-14 z-50 border-b border-hairline bg-card animate-fade-in md:hidden"
           >
-            {NAV.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(item.href + "/");
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "px-3 py-4 text-base font-medium border-b border-hairline last:border-0 transition-colors",
-                    active
-                      ? "text-coral"
-                      : "text-mute hover:text-foreground",
-                  )}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-            <div className="py-4">
-              {isAuthed ? (
-                <Link
-                  href="/mypage"
-                  className="flex items-center gap-2 px-3 py-3 text-base font-medium text-ink"
-                >
-                  <UserRound className="size-4" />
-                  내 프로필
-                </Link>
-              ) : (
-                <Button asChild className="w-full">
-                  <Link href="/login">로그인</Link>
-                </Button>
-              )}
-            </div>
-          </nav>
-        </div>
+            <nav
+              aria-label="모바일 네비게이션"
+              className="container flex flex-col py-2"
+            >
+              {NAV.map((item) => {
+                const active = pathname === item.href || pathname.startsWith(item.href + "/");
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "px-3 py-4 text-base font-medium border-b border-hairline last:border-0 transition-colors",
+                      active
+                        ? "text-coral-700 dark:text-coral"
+                        : "text-mute hover:text-foreground",
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+              <div className="flex items-center justify-between gap-3 py-4">
+                {isAuthed ? (
+                  <Link
+                    href="/mypage"
+                    className="flex items-center gap-2 px-3 py-3 text-base font-medium text-ink"
+                  >
+                    <UserRound className="size-4" />
+                    내 프로필
+                  </Link>
+                ) : (
+                  <Button asChild className="flex-1">
+                    <Link href="/login">로그인</Link>
+                  </Button>
+                )}
+                <ThemeToggle />
+              </div>
+            </nav>
+          </div>
+        </>
       ) : null}
     </>
   );
