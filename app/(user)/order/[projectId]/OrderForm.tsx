@@ -61,6 +61,89 @@ const KRW = new Intl.NumberFormat("ko-KR");
 const PHONE_REGEX = /^(\+?82-?|0)1[016789]-?\d{3,4}-?\d{4}$/;
 const ZIP_REGEX = /^\d{5}$/;
 
+/** 필수 배송지 필드 — blur 검증·비활성 사유 표시에 사용. */
+type RequiredAddressField = "name" | "phone" | "zip" | "addr1";
+
+const REQUIRED_ADDRESS_FIELDS: { key: RequiredAddressField; label: string }[] = [
+  { key: "name", label: "받는 분" },
+  { key: "phone", label: "전화번호" },
+  { key: "zip", label: "우편번호" },
+  { key: "addr1", label: "주소" },
+];
+
+/** 필드별 검증 메시지 — 서버 스키마(app/api/orders/create)와 동일 문구 기반. */
+function addressFieldError(
+  k: RequiredAddressField,
+  v: AddressState,
+): string | null {
+  switch (k) {
+    case "name":
+      return v.name.trim().length > 0 ? null : "받는 분 이름을 입력하세요.";
+    case "phone":
+      return PHONE_REGEX.test(v.phone.trim())
+        ? null
+        : "전화번호 형식이 올바르지 않습니다. (예: 010-1234-5678)";
+    case "zip":
+      return ZIP_REGEX.test(v.zip.trim()) ? null : "우편번호는 5자리 숫자입니다.";
+    case "addr1":
+      return v.addr1.trim().length > 0 ? null : "주소를 입력하세요.";
+  }
+}
+
+/**
+ * 주문서 입력 드래프트 — 모바일 카드 결제는 토스로 전체 리다이렉트되므로
+ * 실패 복귀 시 useState 가 전부 초기화된다. sessionStorage 에 배송지·연락처
+ * 수준만 지속해 재입력을 막는다 (카드 정보 등 결제 수단 데이터는 없음).
+ * SuccessClient 가 결제 확정 성공 시 같은 키를 제거한다.
+ */
+const ORDER_DRAFT_VERSION = 1;
+
+function orderDraftKey(projectId: string): string {
+  return `order-draft:${projectId}`;
+}
+
+interface OrderDraftV1 {
+  v: typeof ORDER_DRAFT_VERSION;
+  qty: number;
+  address: AddressState;
+  /** 검증 성공했던 할인 코드 — 복원 시 서버 재검증을 거친다. */
+  discountCode: string | null;
+  pointsInput: string;
+}
+
+function parseOrderDraft(raw: string): OrderDraftV1 | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    const o = parsed as Record<string, unknown>;
+    if (o.v !== ORDER_DRAFT_VERSION) return null;
+    if (typeof o.qty !== "number" || !Number.isFinite(o.qty)) return null;
+    if (typeof o.pointsInput !== "string") return null;
+    if (o.discountCode !== null && typeof o.discountCode !== "string") return null;
+    const a = o.address;
+    if (!a || typeof a !== "object") return null;
+    const addr = a as Record<string, unknown>;
+    const keys: (keyof AddressState)[] = ["name", "phone", "zip", "addr1", "addr2", "memo"];
+    if (!keys.every((k) => typeof addr[k] === "string")) return null;
+    return {
+      v: ORDER_DRAFT_VERSION,
+      qty: o.qty,
+      address: {
+        name: addr.name as string,
+        phone: addr.phone as string,
+        zip: addr.zip as string,
+        addr1: addr.addr1 as string,
+        addr2: addr.addr2 as string,
+        memo: addr.memo as string,
+      },
+      discountCode: o.discountCode as string | null,
+      pointsInput: o.pointsInput as string,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function OrderForm(props: OrderFormProps) {
   const { toast } = useToast();
   const postcode = usePostcode();
@@ -95,6 +178,15 @@ export default function OrderForm(props: OrderFormProps) {
     loading: true,
   });
 
+  /** blur 를 거친 필수 배송지 필드 — 검증 메시지는 touched 필드에만 표시. */
+  const [touched, setTouched] = useState<
+    Partial<Record<RequiredAddressField, boolean>>
+  >({});
+
+  function markTouched(k: RequiredAddressField) {
+    setTouched((s) => (s[k] ? s : { ...s, [k]: true }));
+  }
+
   // 포인트 잔액 로드
   useEffect(() => {
     fetch("/api/points")
@@ -108,6 +200,58 @@ export default function OrderForm(props: OrderFormProps) {
       })
       .catch(() => setPoints((s) => ({ ...s, loading: false })));
   }, []);
+
+  // 결제 실패 등 전체 리다이렉트 복귀 시 주문서 입력 복원 (마운트 1회).
+  // 할인 코드는 저장값을 그대로 믿지 않고 복원 시점 소계로 서버 재검증한다.
+  const draftRestoredRef = useRef(false);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(orderDraftKey(props.projectId));
+      const draft = raw ? parseOrderDraft(raw) : null;
+      if (draft) {
+        const restoredQty = Math.min(10, Math.max(1, Math.round(draft.qty)));
+        setQty(restoredQty);
+        setAddress(draft.address);
+        if (draft.pointsInput) {
+          setPoints((s) => ({
+            ...s,
+            inputValue: draft.pointsInput.replace(/\D/g, "").slice(0, 9),
+          }));
+        }
+        if (draft.discountCode) {
+          const code = draft.discountCode;
+          setDiscount((s) => ({ ...s, inputCode: code }));
+          const restoredSubtotal = calcOrderAmount({
+            bookSize: props.bookSizeName,
+            pageCount: props.pageCount,
+            qty: restoredQty,
+          }).total;
+          void validateAndApplyDiscount(code, restoredSubtotal);
+        }
+      }
+    } catch {
+      // 프라이빗 모드 등 sessionStorage 접근 불가 — 복원 생략
+    }
+    draftRestoredRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 입력 지속 (OR-4) — 실패 페이지의 "다시 시도" 복귀 시 재입력 방지.
+  useEffect(() => {
+    if (!draftRestoredRef.current) return;
+    const draft: OrderDraftV1 = {
+      v: ORDER_DRAFT_VERSION,
+      qty,
+      address,
+      discountCode: discount.appliedCode,
+      pointsInput: points.inputValue,
+    };
+    try {
+      sessionStorage.setItem(orderDraftKey(props.projectId), JSON.stringify(draft));
+    } catch {
+      // 저장 불가 환경 — 지속 없이 동작 (기존과 동일)
+    }
+  }, [qty, address, discount.appliedCode, points.inputValue, props.projectId]);
 
   const openPostcode = async () => {
     try {
@@ -192,7 +336,7 @@ export default function OrderForm(props: OrderFormProps) {
     void validateAndApplyDiscount(code);
   }
 
-  async function validateAndApplyDiscount(code: string) {
+  async function validateAndApplyDiscount(code: string, subtotalOverride?: number) {
     const seq = ++validateSeqRef.current;
     setDiscount((s) => ({ ...s, validating: true, error: null }));
 
@@ -200,7 +344,8 @@ export default function OrderForm(props: OrderFormProps) {
       const res = await fetch("/api/discounts/validate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code, subtotal: breakdown.total }),
+        // subtotalOverride: 드래프트 복원처럼 state 반영 전 소계로 검증해야 할 때
+        body: JSON.stringify({ code, subtotal: subtotalOverride ?? breakdown.total }),
       });
       // stale 응답 무시
       if (seq !== validateSeqRef.current) return;
@@ -266,11 +411,21 @@ export default function OrderForm(props: OrderFormProps) {
     });
   }
 
-  const addressValid =
-    address.name.trim().length > 0 &&
-    PHONE_REGEX.test(address.phone.trim()) &&
-    ZIP_REGEX.test(address.zip.trim()) &&
-    address.addr1.trim().length > 0;
+  // 필드별 검증 — touched 필드에는 인라인 메시지, CTA 아래에는 실패 필드명 안내.
+  const addressErrors = useMemo(() => {
+    const out: Partial<Record<RequiredAddressField, string>> = {};
+    for (const f of REQUIRED_ADDRESS_FIELDS) {
+      const msg = addressFieldError(f.key, address);
+      if (msg) out[f.key] = msg;
+    }
+    return out;
+  }, [address]);
+
+  const invalidAddressLabels = REQUIRED_ADDRESS_FIELDS.filter(
+    (f) => addressErrors[f.key],
+  ).map((f) => f.label);
+
+  const addressValid = invalidAddressLabels.length === 0;
 
   const allAgreed = agreeService && agreePrivacy && agreeRefund;
 
@@ -430,32 +585,63 @@ export default function OrderForm(props: OrderFormProps) {
         <section className="rounded-2xl border border-hairline bg-card p-4 sm:p-5 shadow-soft">
           <h2 className="text-sm font-semibold">배송지</h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <Field label="받는 분" required>
+            <Field
+              label="받는 분"
+              required
+              error={touched.name ? addressErrors.name : null}
+              errorId="order-name-error"
+            >
               <Input
                 value={address.name}
                 onChange={(e) => update("name", e.target.value)}
+                onBlur={() => markTouched("name")}
                 autoComplete="name"
                 required
+                aria-invalid={touched.name && addressErrors.name ? true : undefined}
+                aria-describedby={
+                  touched.name && addressErrors.name ? "order-name-error" : undefined
+                }
               />
             </Field>
-            <Field label="전화번호" required hint="예: 010-1234-5678">
+            <Field
+              label="전화번호"
+              required
+              hint="예: 010-1234-5678"
+              error={touched.phone ? addressErrors.phone : null}
+              errorId="order-phone-error"
+            >
               <Input
                 value={address.phone}
                 onChange={(e) => update("phone", e.target.value)}
+                onBlur={() => markTouched("phone")}
                 autoComplete="tel"
                 inputMode="tel"
                 required
+                aria-invalid={touched.phone && addressErrors.phone ? true : undefined}
+                aria-describedby={
+                  touched.phone && addressErrors.phone ? "order-phone-error" : undefined
+                }
               />
             </Field>
-            <Field label="우편번호" required>
+            <Field
+              label="우편번호"
+              required
+              error={touched.zip ? addressErrors.zip : null}
+              errorId="order-zip-error"
+            >
               <div className="flex gap-2">
                 <Input
                   value={address.zip}
                   onChange={(e) => update("zip", e.target.value.replace(/\D/g, "").slice(0, 5))}
+                  onBlur={() => markTouched("zip")}
                   autoComplete="postal-code"
                   inputMode="numeric"
                   required
                   className="flex-1"
+                  aria-invalid={touched.zip && addressErrors.zip ? true : undefined}
+                  aria-describedby={
+                    touched.zip && addressErrors.zip ? "order-zip-error" : undefined
+                  }
                 />
                 <Button
                   type="button"
@@ -474,12 +660,23 @@ export default function OrderForm(props: OrderFormProps) {
                 </Button>
               </div>
             </Field>
-            <Field label="주소" required className="sm:col-span-2">
+            <Field
+              label="주소"
+              required
+              className="sm:col-span-2"
+              error={touched.addr1 ? addressErrors.addr1 : null}
+              errorId="order-addr1-error"
+            >
               <Input
                 value={address.addr1}
                 onChange={(e) => update("addr1", e.target.value)}
+                onBlur={() => markTouched("addr1")}
                 autoComplete="address-line1"
                 required
+                aria-invalid={touched.addr1 && addressErrors.addr1 ? true : undefined}
+                aria-describedby={
+                  touched.addr1 && addressErrors.addr1 ? "order-addr1-error" : undefined
+                }
               />
             </Field>
             <Field label="상세주소" className="sm:col-span-2">
@@ -673,16 +870,19 @@ export default function OrderForm(props: OrderFormProps) {
               checked={agreeService}
               onChange={setAgreeService}
               label="서비스 이용약관 동의"
+              href="/terms"
             />
             <Agree
               checked={agreePrivacy}
               onChange={setAgreePrivacy}
               label="개인정보 수집·이용 동의"
+              href="/privacy"
             />
             <Agree
               checked={agreeRefund}
               onChange={setAgreeRefund}
               label="교환·환불 정책 동의 (사용자 제작 인쇄물 특성상 단순 변심 환불 불가)"
+              href="/refund"
             />
           </div>
         </section>
@@ -710,6 +910,7 @@ export default function OrderForm(props: OrderFormProps) {
             ) : null}
             <hr className="my-2 border-border" />
             <Row label="소계" value={fmtKrw(breakdown.total)} />
+            <Row label="배송비" value="무료" />
             {discount.discountAmount > 0 ? (
               <Row
                 label={`할인 코드 (${discount.appliedCode ?? ""})`}
@@ -754,7 +955,8 @@ export default function OrderForm(props: OrderFormProps) {
 
         {!addressValid ? (
           <p className="text-xs text-muted-foreground">
-            배송지를 모두 입력하면 결제 버튼이 활성화됩니다.
+            {invalidAddressLabels.join(", ")} 항목을 올바르게 입력하면 결제
+            버튼이 활성화됩니다.
           </p>
         ) : !allAgreed ? (
           <p className="text-xs text-muted-foreground">
@@ -783,6 +985,10 @@ function Field(props: {
   label: string;
   required?: boolean;
   hint?: string;
+  /** blur 검증 실패 메시지 — 있으면 hint 대신 표시. */
+  error?: string | null;
+  /** 에러 문구 요소 id — input 의 aria-describedby 와 연결. */
+  errorId?: string;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -793,7 +999,11 @@ function Field(props: {
         {props.required ? <span className="text-coral"> *</span> : null}
       </span>
       {props.children}
-      {props.hint ? (
+      {props.error ? (
+        <span id={props.errorId} role="alert" className="text-xs text-destructive">
+          {props.error}
+        </span>
+      ) : props.hint ? (
         <span className="text-xs text-muted-foreground/80">{props.hint}</span>
       ) : null}
     </label>
@@ -804,17 +1014,32 @@ function Agree(props: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
+  /** 약관 본문 페이지 — "보기" 링크로 새 탭에서 열린다. */
+  href?: string;
 }) {
   return (
-    <label className="flex items-center gap-2 cursor-pointer select-none">
-      <input
-        type="checkbox"
-        checked={props.checked}
-        onChange={(e) => props.onChange(e.target.checked)}
-        className="h-4 w-4 rounded border-hairline accent-coral"
-      />
-      <span>{props.label}</span>
-    </label>
+    <div className="flex items-center gap-2">
+      <label className="flex flex-1 cursor-pointer select-none items-center gap-2">
+        <input
+          type="checkbox"
+          checked={props.checked}
+          onChange={(e) => props.onChange(e.target.checked)}
+          className="h-4 w-4 rounded border-hairline accent-coral"
+        />
+        <span>{props.label}</span>
+      </label>
+      {props.href ? (
+        <a
+          href={props.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`${props.label} 전문 보기 (새 탭)`}
+          className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center px-2 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
+          보기
+        </a>
+      ) : null}
+    </div>
   );
 }
 

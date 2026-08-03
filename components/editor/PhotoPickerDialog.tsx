@@ -2,6 +2,7 @@
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { ImageOff, Loader2, Search, X } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,12 @@ export interface PhotoPickerDialogProps {
   title?: string;
   /** Description (기본 — "캔버스 객체에 적용할 사진을 선택하세요."). */
   description?: string;
+  /**
+   * 빈 상태 "사진 업로드하러 가기" 클릭 시 내비게이션을 호출측에 위임.
+   * 미저장 편집이 있는 에디터(dirty flush 필요)가 저장-후-이동을 보장할 때 사용.
+   * 미지정 시 기본 Link 내비게이션.
+   */
+  onNavigateToUpload?: () => void | Promise<void>;
 }
 
 type Scope = "project" | "library";
@@ -52,6 +59,7 @@ export default function PhotoPickerDialog({
   onPick,
   title = "사진 선택",
   description = "캔버스 객체에 적용할 사진을 선택하세요.",
+  onNavigateToUpload,
 }: PhotoPickerDialogProps) {
   const { toast } = useToast();
 
@@ -190,8 +198,13 @@ export default function PhotoPickerDialog({
         />
         <DialogPrimitive.Content
           className={cn(
-            "fixed left-1/2 top-1/2 z-50 w-[min(94vw,720px)] -translate-x-1/2 -translate-y-1/2",
-            "max-h-[85vh] overflow-hidden rounded-xl border bg-background shadow-soft-lg",
+            // 모바일: 하단 시트 — 소프트 키보드가 올라와도 헤더·검색은 위에 남고
+            // 목록만 가려진다. dvh 로 Safari 동적 툴바 영역 초과 방지.
+            "fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] rounded-t-xl border border-b-0",
+            // sm 이상: 기존 중앙 다이얼로그.
+            "sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:w-[min(94vw,720px)]",
+            "sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:border-b",
+            "overflow-hidden bg-background shadow-soft-lg",
             "data-[state=open]:animate-fade-in",
             "focus:outline-none flex flex-col",
           )}
@@ -207,7 +220,13 @@ export default function PhotoPickerDialog({
             </div>
             <DialogPrimitive.Close
               aria-label="닫기"
-              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className={cn(
+                // 터치 환경 44px 타깃 — hover 지원(데스크톱)에서는 기존 크기 유지.
+                "-m-2 inline-flex size-11 shrink-0 items-center justify-center rounded-md",
+                "[@media(hover:hover)]:m-0 [@media(hover:hover)]:size-auto [@media(hover:hover)]:p-1",
+                "text-muted-foreground transition-colors hover:bg-accent",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              )}
             >
               <X className="size-4" />
             </DialogPrimitive.Close>
@@ -219,7 +238,9 @@ export default function PhotoPickerDialog({
                 type="button"
                 onClick={() => setScope("project")}
                 className={cn(
-                  "rounded-[5px] px-3 py-1 text-xs font-medium transition-colors",
+                  // 터치 환경 세로 타깃 확대 (h-9 이상) — hover 지원 시 기존 크기.
+                  "rounded-[5px] px-3 py-2.5 text-xs font-medium transition-colors",
+                  "[@media(hover:hover)]:py-1",
                   scope === "project"
                     ? "bg-background shadow"
                     : "text-muted-foreground",
@@ -231,7 +252,8 @@ export default function PhotoPickerDialog({
                 type="button"
                 onClick={() => setScope("library")}
                 className={cn(
-                  "rounded-[5px] px-3 py-1 text-xs font-medium transition-colors",
+                  "rounded-[5px] px-3 py-2.5 text-xs font-medium transition-colors",
+                  "[@media(hover:hover)]:py-1",
                   scope === "library"
                     ? "bg-background shadow"
                     : "text-muted-foreground",
@@ -256,7 +278,7 @@ export default function PhotoPickerDialog({
             </label>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-3">
+          <div className="flex-1 overflow-y-auto p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-3">
             {loading ? (
               <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
                 <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
@@ -264,11 +286,43 @@ export default function PhotoPickerDialog({
               </div>
             ) : filtered.length === 0 ? (
               <div className="rounded-xl border border-dashed bg-muted/30 p-8 text-center text-sm text-muted-foreground">
-                {photos.length === 0
-                  ? scope === "project"
-                    ? "이 프로젝트에 사진이 없어요. 라이브러리에서 가져와 보세요."
-                    : "라이브러리에 사진이 없어요."
-                  : "조건에 맞는 사진이 없어요."}
+                <p>
+                  {photos.length === 0
+                    ? scope === "project"
+                      ? "이 프로젝트에 사진이 없어요. 라이브러리에서 가져와 보세요."
+                      : "라이브러리에 사진이 없어요."
+                    : "조건에 맞는 사진이 없어요."}
+                </p>
+                {photos.length === 0 ? (
+                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                    {scope === "project" ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setScope("library")}
+                      >
+                        전체 라이브러리 보기
+                      </Button>
+                    ) : null}
+                    {onNavigateToUpload ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void onNavigateToUpload()}
+                      >
+                        사진 업로드하러 가기
+                      </Button>
+                    ) : (
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/upload?projectId=${currentProjectId}`}>
+                          사진 업로드하러 가기
+                        </Link>
+                      </Button>
+                    )}
+                  </div>
+                ) : null}
               </div>
             ) : (
               <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">

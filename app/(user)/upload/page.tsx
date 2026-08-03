@@ -4,11 +4,16 @@ import { redirect } from "next/navigation";
 import UploadClient from "./UploadClient";
 import { trackFunnelEvent } from "@/lib/analytics/funnel";
 import { requireUser } from "@/lib/auth/session";
+import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize } from "@/lib/db/types";
+import { THUMBS_BUCKET } from "@/lib/image/constants";
+import type { ServerPhotoSeed } from "@/lib/image/upload-queue";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const THUMB_SIGNED_TTL_SEC = 3600;
 
 interface PageProps {
   searchParams: { projectId?: string };
@@ -53,6 +58,29 @@ export default async function UploadPage({ searchParams }: PageProps) {
           </p>
         </div>
       );
+    }
+
+    // 빈 draft 재사용 (UP-14) — 방문마다 Untitled draft 가 무한 누적되지 않도록,
+    // 미수정(Untitled·표지 없음)이고 active 사진이 0장인 최근 draft 가 있으면 그리로 보낸다.
+    const { data: draftCandidates } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("status", "draft")
+      .eq("title", "Untitled")
+      .is("cover_json", null)
+      .order("created_at", { ascending: false })
+      .limit(3);
+
+    for (const cand of draftCandidates ?? []) {
+      const { count: photoCount } = await supabase
+        .from("photos")
+        .select("id", { count: "exact", head: true })
+        .eq("project_id", cand.id)
+        .is("deleted_at", null);
+      if ((photoCount ?? 0) === 0) {
+        redirect(`/upload?projectId=${cand.id}`);
+      }
     }
 
     const { data: project, error } = await supabase
@@ -104,6 +132,38 @@ export default async function UploadPage({ searchParams }: PageProps) {
     redirect("/upload");
   }
 
+  // 이미 업로드된 active 사진 — 재진입/새로고침 시 그리드·'다음' CTA 복원 (UP-2).
+  const { data: photoRows } = await supabase
+    .from("photos")
+    .select("id, filename, mime, width, height, thumb_key, order_idx")
+    .eq("project_id", project.id)
+    .is("deleted_at", null)
+    .order("order_idx", { ascending: true });
+
+  const rows = photoRows ?? [];
+  const thumbUrlByKey = new Map<string, string>();
+  const thumbKeys = rows
+    .map((r) => r.thumb_key)
+    .filter((k): k is string => !!k);
+  if (thumbKeys.length > 0) {
+    const admin = createAdminSupabase();
+    const { data: signed } = await admin.storage
+      .from(THUMBS_BUCKET)
+      .createSignedUrls(thumbKeys, THUMB_SIGNED_TTL_SEC);
+    for (const s of signed ?? []) {
+      if (s.path && s.signedUrl) thumbUrlByKey.set(s.path, s.signedUrl);
+    }
+  }
+  const serverPhotos: ServerPhotoSeed[] = rows.map((r) => ({
+    photoId: r.id,
+    filename: r.filename,
+    mime: r.mime,
+    width: r.width,
+    height: r.height,
+    thumbUrl: r.thumb_key ? thumbUrlByKey.get(r.thumb_key) ?? null : null,
+    orderIdx: r.order_idx,
+  }));
+
   return (
     <div className="container py-8 md:py-12">
       <header className="mx-auto max-w-3xl text-center">
@@ -124,6 +184,7 @@ export default async function UploadPage({ searchParams }: PageProps) {
           initialTitle={project.title}
           initialBookSizeId={project.book_size_id}
           bookSizes={bookSizes}
+          serverPhotos={serverPhotos}
         />
       </div>
     </div>

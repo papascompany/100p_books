@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, Gift, Loader2, Users } from "lucide-react";
+import { Check, Copy, Gift, Loader2, RefreshCw, Users } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -30,31 +30,30 @@ export default function ReferralCard() {
   const [loading, setLoading] = React.useState(true);
   const [copied, setCopied] = React.useState(false);
 
-  React.useEffect(() => {
-    let mounted = true;
-    async function load() {
-      try {
-        const [codeRes, statsRes] = await Promise.all([
-          fetch("/api/referrals/my-code"),
-          fetch("/api/referrals/stats"),
-        ]);
-        const [codeJson, statsJson] = await Promise.all([
-          codeRes.json() as Promise<{ ok: boolean; data: ReferralData }>,
-          statsRes.json() as Promise<{ ok: boolean; data: StatsData }>,
-        ]);
-        if (mounted && codeJson.ok) setReferral(codeJson.data);
-        if (mounted && statsJson.ok) setStats(statsJson.data);
-      } catch {
-        // 네트워크 오류는 silent — 로딩 실패 UI 에서 처리
-      } finally {
-        if (mounted) setLoading(false);
-      }
+  // 데이터 로드 — 실패 상태의 "다시 시도" 버튼에서 재호출할 수 있게 useCallback 으로 추출
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const [codeRes, statsRes] = await Promise.all([
+        fetch("/api/referrals/my-code"),
+        fetch("/api/referrals/stats"),
+      ]);
+      const [codeJson, statsJson] = await Promise.all([
+        codeRes.json() as Promise<{ ok: boolean; data: ReferralData }>,
+        statsRes.json() as Promise<{ ok: boolean; data: StatsData }>,
+      ]);
+      if (codeJson.ok) setReferral(codeJson.data);
+      if (statsJson.ok) setStats(statsJson.data);
+    } catch {
+      // 네트워크 오류는 silent — 로딩 실패 UI 에서 처리
+    } finally {
+      setLoading(false);
     }
-    void load();
-    return () => {
-      mounted = false;
-    };
   }, []);
+
+  React.useEffect(() => {
+    void load();
+  }, [load]);
 
   async function copyLink() {
     if (!referral?.referralUrl) return;
@@ -81,8 +80,17 @@ export default function ReferralCard() {
 
   if (!referral) {
     return (
-      <div className="rounded-2xl border bg-card p-5">
+      <div className="rounded-2xl border bg-card p-5 space-y-3">
         <p className="text-sm text-muted-foreground">추천 링크를 불러오지 못했습니다.</p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void load()}
+        >
+          <RefreshCw className="h-4 w-4" aria-hidden />
+          다시 시도
+        </Button>
       </div>
     );
   }

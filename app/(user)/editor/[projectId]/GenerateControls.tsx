@@ -1,6 +1,8 @@
 "use client";
 
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Sparkles } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -126,7 +128,7 @@ export default function GenerateControls({
   return (
     <section
       aria-labelledby="generate-heading"
-      className="rounded-xl border bg-white/70 p-5 shadow-soft"
+      className="rounded-xl border bg-white/70 p-5 shadow-soft dark:bg-white/[0.03]"
     >
       <div className="mb-5 flex items-baseline justify-between gap-3">
         <h2
@@ -157,8 +159,8 @@ export default function GenerateControls({
                   "flex min-h-[44px] cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm transition-colors",
                   "focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
                   selected
-                    ? "border-coral-400 bg-coral-50/60 ring-1 ring-coral-300"
-                    : "border-input hover:border-coral-200 hover:bg-coral-50/20",
+                    ? "border-coral-400 bg-coral-50/60 ring-1 ring-coral-300 dark:border-coral-500/60 dark:bg-coral-500/10 dark:ring-coral-500/40"
+                    : "border-input hover:border-coral-200 hover:bg-coral-50/20 dark:hover:border-coral-500/40 dark:hover:bg-coral-500/[0.06]",
                 )}
               >
                 <input
@@ -198,8 +200,8 @@ export default function GenerateControls({
                   "flex min-h-[44px] cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm transition-colors",
                   "focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
                   selected
-                    ? "border-coral-400 bg-coral-50/60 ring-1 ring-coral-300"
-                    : "border-input hover:border-coral-200 hover:bg-coral-50/20",
+                    ? "border-coral-400 bg-coral-50/60 ring-1 ring-coral-300 dark:border-coral-500/60 dark:bg-coral-500/10 dark:ring-coral-500/40"
+                    : "border-input hover:border-coral-200 hover:bg-coral-50/20 dark:hover:border-coral-500/40 dark:hover:bg-coral-500/[0.06]",
                 )}
               >
                 <input
@@ -242,8 +244,8 @@ export default function GenerateControls({
                     "group flex cursor-pointer flex-col items-center gap-1 rounded-lg border p-2 text-xs transition-colors",
                     "focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
                     selected
-                      ? "border-rose-400 bg-rose-50/60 ring-1 ring-rose-300"
-                      : "border-input hover:border-rose-200 hover:bg-rose-50/20",
+                      ? "border-rose-400 bg-rose-50/60 ring-1 ring-rose-300 dark:border-rose-500/60 dark:bg-rose-950/40 dark:ring-rose-500/40"
+                      : "border-input hover:border-rose-200 hover:bg-rose-50/20 dark:hover:border-rose-500/40 dark:hover:bg-rose-950/20",
                   )}
                   aria-label={`${meta.label} (사진 ${meta.slotCount}장)`}
                 >
@@ -289,9 +291,15 @@ export default function GenerateControls({
           {submitting ? "생성 중…" : "자동 편집하기"}
         </Button>
         {photoCount === 0 ? (
-          <p className="text-sm text-muted-foreground">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
             사진이 없어요. 업로드부터 시작해 주세요.
-          </p>
+            <Link
+              href={`/upload?projectId=${projectId}`}
+              className="inline-flex min-h-[44px] items-center font-medium text-coral underline underline-offset-4 hover:text-coral-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              사진 업로드하러 가기
+            </Link>
+          </span>
         ) : (
           <p className="text-xs text-muted-foreground">
             사진 {photoCount}장 기준으로 페이지를 생성합니다.
@@ -299,48 +307,61 @@ export default function GenerateControls({
         )}
       </div>
 
-      {/* 재생성 경고 다이얼로그 */}
+      {/* 재생성 경고 다이얼로그 — Radix Dialog (포커스 트랩·초기 포커스·ESC·오버레이 닫기) */}
       {confirming ? (
-        <div
-          role="alertdialog"
-          aria-modal="true"
-          aria-labelledby="regen-title"
-          aria-describedby="regen-desc"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        <DialogPrimitive.Root
+          open
+          onOpenChange={(o) => {
+            // 생성 중에는 닫기 차단 — 완료 시 runGenerate 의 finally 가 닫는다.
+            if (!o && !submitting) setConfirming(false);
+          }}
         >
-          <div className="w-full max-w-md rounded-xl bg-card p-5 shadow-soft-lg">
-            <h3
-              id="regen-title"
-              className="font-display text-lg font-semibold tracking-tight"
+          <DialogPrimitive.Portal>
+            <DialogPrimitive.Overlay
+              className={cn(
+                "fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px]",
+                "data-[state=open]:animate-in data-[state=open]:fade-in-0",
+                "data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
+              )}
+            />
+            <DialogPrimitive.Content
+              role="alertdialog"
+              className={cn(
+                "fixed left-1/2 top-1/2 z-50 w-[min(92vw,448px)] -translate-x-1/2 -translate-y-1/2",
+                "rounded-xl border bg-card p-5 shadow-soft-lg",
+                "focus:outline-none",
+              )}
             >
-              기존 편집 내용을 덮어쓸까요?
-            </h3>
-            <p id="regen-desc" className="mt-2 text-sm text-muted-foreground">
-              이미 {currentPageCount}페이지가 만들어져 있어요. 자동 편집을 다시
-              실행하면 기존에 편집한 내용이 모두 사라지고 새로 생성됩니다.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setConfirming(false)}
-                disabled={submitting}
-              >
-                취소
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                onClick={() => void runGenerate()}
-                disabled={submitting}
-              >
-                {submitting ? "생성 중…" : "덮어쓰고 다시 만들기"}
-              </Button>
-            </div>
-          </div>
-        </div>
+              <DialogPrimitive.Title className="font-display text-lg font-semibold tracking-tight">
+                기존 편집 내용을 덮어쓸까요?
+              </DialogPrimitive.Title>
+              <DialogPrimitive.Description className="mt-2 text-sm text-muted-foreground">
+                이미 {currentPageCount}페이지가 만들어져 있어요. 자동 편집을 다시
+                실행하면 기존에 편집한 내용이 모두 사라지고 새로 생성됩니다.
+              </DialogPrimitive.Description>
+              <div className="mt-5 flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConfirming(false)}
+                  disabled={submitting}
+                >
+                  취소
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => void runGenerate()}
+                  disabled={submitting}
+                >
+                  {submitting ? "생성 중…" : "덮어쓰고 다시 만들기"}
+                </Button>
+              </div>
+            </DialogPrimitive.Content>
+          </DialogPrimitive.Portal>
+        </DialogPrimitive.Root>
       ) : null}
     </section>
   );

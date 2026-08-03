@@ -262,14 +262,31 @@ export default async function GiftTokenPage({ params }: PageProps) {
   // ── 로그인 여부 확인 ──────────────────────────────────────────────────────
   // getSession 은 server-only (lib/auth/session.ts) — createServerSupabase 사용
   let isLoggedIn = false;
+  let currentUserId: string | null = null;
   try {
     const supabase = createServerSupabase();
     const {
       data: { session },
     } = await supabase.auth.getSession();
     isLoggedIn = !!session;
+    currentUserId = session?.user.id ?? null;
   } catch {
     isLoggedIn = false;
+  }
+
+  // ── 수령자 본인 여부 판정 ─────────────────────────────────────────────────
+  // claimed_project_id 는 claim 시 수령자 소유로 복제된 프로젝트 —
+  // 그 프로젝트의 user_id 가 현재 사용자와 일치할 때만 "내 책장 열기"를 보여준다.
+  // (보낸 사람이 자기 링크를 다시 열어도 남의 에디터로 유도하지 않는다.)
+  let isClaimOwner = false;
+  if (gift.status === "claimed" && gift.claimedProjectId && currentUserId) {
+    const admin = createAdminSupabase();
+    const { data: claimedProject } = await admin
+      .from("projects")
+      .select("user_id")
+      .eq("id", gift.claimedProjectId)
+      .maybeSingle();
+    isClaimOwner = claimedProject?.user_id === currentUserId;
   }
 
   const loginUrl = `/login?next=${encodeURIComponent(`/gift/${params.token}`)}`;
@@ -361,11 +378,25 @@ export default async function GiftTokenPage({ params }: PageProps) {
                       이미 수령한 선물입니다
                     </p>
                   </div>
-                  {isLoggedIn && gift.claimedProjectId ? (
+                  {isClaimOwner && gift.claimedProjectId ? (
+                    /* 수령자 본인 — 내 책장으로 바로 이동 */
                     <GiftClaimButton
                       token={params.token}
                       claimedProjectId={gift.claimedProjectId}
                     />
+                  ) : !isLoggedIn ? (
+                    /* 비로그인 — 세션 만료 후 재방문한 수령자를 위한 로그인 동선 */
+                    <Button
+                      asChild
+                      variant="gradient"
+                      size="lg"
+                      className="w-full gap-2"
+                    >
+                      <Link href={loginUrl}>
+                        <BookOpen className="h-4 w-4" aria-hidden="true" />
+                        로그인하고 내 책장 열기
+                      </Link>
+                    </Button>
                   ) : null}
                 </div>
               ) : isLoggedIn ? (

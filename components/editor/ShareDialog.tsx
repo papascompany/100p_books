@@ -63,6 +63,10 @@ export default function ShareDialog({ open, onOpenChange, projectId }: ShareDial
   const [loadingTokens, setLoadingTokens] = useState(false);
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  /** 삭제 confirm 단계 — 오탭 방지 (즉시 삭제 금지). */
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(
+    null,
+  );
   const [expiry, setExpiry] = useState<ExpiryOption>("unlimited");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -207,7 +211,13 @@ export default function ShareDialog({ open, onOpenChange, projectId }: ShareDial
             </div>
             <DialogPrimitive.Close
               aria-label="닫기"
-              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className={cn(
+                // 터치 환경 44px 타깃 — hover 지원(데스크톱)에서는 기존 크기 유지.
+                "-m-2 inline-flex size-11 shrink-0 items-center justify-center rounded-md",
+                "[@media(hover:hover)]:m-0 [@media(hover:hover)]:size-auto [@media(hover:hover)]:p-1",
+                "text-muted-foreground transition-colors hover:bg-accent",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              )}
             >
               <X className="size-4" />
             </DialogPrimitive.Close>
@@ -303,7 +313,7 @@ export default function ShareDialog({ open, onOpenChange, projectId }: ShareDial
                               readOnly
                               value={token.shareUrl}
                               aria-label={`공유 링크 ${token.expiresAt ? `(${formatExpiry(token.expiresAt)} 만료)` : "(무기한)"}`}
-                              className="h-8 flex-1 truncate text-xs"
+                              className="h-8 min-w-0 flex-1 truncate text-xs"
                               onFocus={(e) => e.currentTarget.select()}
                             />
                             <button
@@ -312,7 +322,7 @@ export default function ShareDialog({ open, onOpenChange, projectId }: ShareDial
                               disabled={expired || isDeleting}
                               aria-label="링크 복사"
                               className={cn(
-                                "flex size-8 shrink-0 items-center justify-center rounded-md transition-colors",
+                                "flex size-11 shrink-0 items-center justify-center rounded-md transition-colors [@media(hover:hover)]:size-8",
                                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                                 "border border-input bg-background hover:bg-accent disabled:pointer-events-none disabled:opacity-50",
                               )}
@@ -329,7 +339,7 @@ export default function ShareDialog({ open, onOpenChange, projectId }: ShareDial
                               rel="noopener noreferrer"
                               aria-label="새 탭에서 열기"
                               className={cn(
-                                "flex size-8 shrink-0 items-center justify-center rounded-md transition-colors",
+                                "flex size-11 shrink-0 items-center justify-center rounded-md transition-colors [@media(hover:hover)]:size-8",
                                 "border border-input bg-background hover:bg-accent",
                                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                                 expired && "pointer-events-none opacity-40",
@@ -340,11 +350,11 @@ export default function ShareDialog({ open, onOpenChange, projectId }: ShareDial
                             </a>
                             <button
                               type="button"
-                              onClick={() => void handleDelete(token.id)}
+                              onClick={() => setConfirmingDeleteId(token.id)}
                               disabled={isDeleting}
                               aria-label="링크 삭제"
                               className={cn(
-                                "flex size-8 shrink-0 items-center justify-center rounded-md transition-colors",
+                                "flex size-11 shrink-0 items-center justify-center rounded-md transition-colors [@media(hover:hover)]:size-8",
                                 "border border-input bg-background text-muted-foreground hover:border-destructive/50 hover:bg-destructive/5 hover:text-destructive",
                                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                                 "disabled:pointer-events-none disabled:opacity-50",
@@ -357,6 +367,35 @@ export default function ShareDialog({ open, onOpenChange, projectId }: ShareDial
                               )}
                             </button>
                           </div>
+
+                          {/* 삭제 confirm — 오탭으로 즉시 삭제되지 않게 한 단계 확인 */}
+                          {confirmingDeleteId === token.id ? (
+                            <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                이 링크를 삭제할까요?
+                              </span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setConfirmingDeleteId(null)}
+                              >
+                                취소
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                disabled={isDeleting}
+                                onClick={() => {
+                                  setConfirmingDeleteId(null);
+                                  void handleDelete(token.id);
+                                }}
+                              >
+                                삭제
+                              </Button>
+                            </div>
+                          ) : null}
 
                           {/* 메타 정보 */}
                           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">

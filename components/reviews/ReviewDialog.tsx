@@ -197,7 +197,8 @@ export default function ReviewDialog({ orderId, trigger, onSuccess }: ReviewDial
                   onClick={() => setRating(n)}
                   onMouseEnter={() => setHovered(n)}
                   onMouseLeave={() => setHovered(0)}
-                  className="rounded p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  /* p-1.5 → 32px 아이콘 + 12px 패딩 = 44px 터치 타깃 */
+                  className="rounded p-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <Star
                     className={
@@ -279,7 +280,11 @@ export default function ReviewDialog({ orderId, trigger, onSuccess }: ReviewDial
                 multiple
                 className="sr-only"
                 aria-hidden
-                onChange={(e) => handleFiles(e.target.files)}
+                onChange={(e) => {
+                  handleFiles(e.target.files);
+                  // 제거 후 같은 사진을 다시 선택해도 change 가 발화하도록 리셋
+                  e.target.value = "";
+                }}
               />
             </div>
           </div>

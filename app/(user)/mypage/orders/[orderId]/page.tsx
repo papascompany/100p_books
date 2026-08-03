@@ -35,6 +35,8 @@ interface OrderDetailRow {
   project_id: string;
   qty: number;
   amount: number;
+  discount_amount: number | null;
+  points_used: number | null;
   address: OrderAddress;
   status: OrderStatus;
   toss_payment_key: string | null;
@@ -65,7 +67,7 @@ export default async function OrderDetailPage({ params }: PageProps) {
   const { data: row, error } = await supabase
     .from("orders")
     .select(
-      "id, project_id, qty, amount, address, status, toss_payment_key, toss_order_id, cover_pdf_key, interior_pdf_key, storige_cover_file_id, storige_interior_file_id, paid_at, created_at, projects(id, title, book_sizes(name)), reviews(id)",
+      "id, project_id, qty, amount, discount_amount, points_used, address, status, toss_payment_key, toss_order_id, cover_pdf_key, interior_pdf_key, storige_cover_file_id, storige_interior_file_id, paid_at, created_at, projects(id, title, book_sizes(name)), reviews(id)",
     )
     .eq("id", params.orderId)
     .maybeSingle();
@@ -137,6 +139,19 @@ export default async function OrderDetailPage({ params }: PageProps) {
           <dl className="mt-3 space-y-2 text-sm">
             <Row label="책 사이즈" value={order.projects?.book_sizes?.name ?? "—"} />
             <Row label="수량" value={`${order.qty}권`} />
+            <Row label="배송비" value="무료" />
+            {(order.discount_amount ?? 0) > 0 ? (
+              <Row
+                label="할인 코드"
+                value={`-${KRW.format(order.discount_amount ?? 0)}원`}
+              />
+            ) : null}
+            {(order.points_used ?? 0) > 0 ? (
+              <Row
+                label="포인트 사용"
+                value={`-${KRW.format(order.points_used ?? 0)}P`}
+              />
+            ) : null}
             <Row label="결제 금액" value={`${KRW.format(order.amount)}원`} />
             <Row label="주문 일시" value={DT.format(new Date(order.created_at))} />
             {order.paid_at ? (

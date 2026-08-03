@@ -9,13 +9,14 @@ import {
 } from "./cover";
 import { PAGEDOC_VERSION } from "./types";
 
+// 시드 정본(0003_seed.sql): cover_width_mm 은 "펼친(앞+뒤) 전체 폭 — 책등 제외".
 const A5: BookSize = {
   id: "bs-a5",
   name: "A5",
   width_mm: 148,
   height_mm: 210,
-  cover_width_mm: 150,
-  cover_height_mm: 212,
+  cover_width_mm: 302,
+  cover_height_mm: 214,
   spine_formula_per_page: 0.09,
   active: true,
   display_order: 1,
@@ -28,8 +29,8 @@ const SQUARE_145: BookSize = {
   name: "14.5²",
   width_mm: 145,
   height_mm: 145,
-  cover_width_mm: 147,
-  cover_height_mm: 147,
+  cover_width_mm: 296,
+  cover_height_mm: 149,
 };
 
 const SQUARE_200: BookSize = {
@@ -38,36 +39,37 @@ const SQUARE_200: BookSize = {
   name: "20²",
   width_mm: 200,
   height_mm: 200,
-  cover_width_mm: 202,
-  cover_height_mm: 202,
+  cover_width_mm: 406,
+  cover_height_mm: 204,
 };
 
 describe("calcCoverDimensions", () => {
   it("A5 100p: spine = 100 × 0.09 = 9mm", () => {
     const d = calcCoverDimensions({ bookSize: A5, pageCount: 100 });
     expect(d.spineMm).toBeCloseTo(9, 5);
-    expect(d.bookWidthMm).toBe(150);
-    expect(d.bookHeightMm).toBe(212);
-    expect(d.totalWidthMm).toBeCloseTo(150 * 2 + 9, 5);
-    expect(d.totalHeightMm).toBe(212);
+    expect(d.bookWidthMm).toBe(302 / 2);
+    expect(d.bookHeightMm).toBe(214);
+    expect(d.totalWidthMm).toBeCloseTo(302 + 9, 5);
+    expect(d.totalHeightMm).toBe(214);
   });
 
   it("14.5² 50p: spine = 4.5mm", () => {
     const d = calcCoverDimensions({ bookSize: SQUARE_145, pageCount: 50 });
     expect(d.spineMm).toBeCloseTo(4.5, 5);
-    expect(d.totalWidthMm).toBeCloseTo(147 * 2 + 4.5, 5);
+    expect(d.bookWidthMm).toBe(296 / 2);
+    expect(d.totalWidthMm).toBeCloseTo(296 + 4.5, 5);
   });
 
   it("20² 1p: spine = 0.09mm (양수, 매우 얇음)", () => {
     const d = calcCoverDimensions({ bookSize: SQUARE_200, pageCount: 1 });
     expect(d.spineMm).toBeCloseTo(0.09, 5);
-    expect(d.totalWidthMm).toBeCloseTo(202 * 2 + 0.09, 5);
+    expect(d.totalWidthMm).toBeCloseTo(406 + 0.09, 5);
   });
 
   it("0p 도 음수 없이 0 반환", () => {
     const d = calcCoverDimensions({ bookSize: A5, pageCount: 0 });
     expect(d.spineMm).toBe(0);
-    expect(d.totalWidthMm).toBe(150 * 2);
+    expect(d.totalWidthMm).toBe(302);
   });
 
   it("커스텀 spine_formula 반영", () => {

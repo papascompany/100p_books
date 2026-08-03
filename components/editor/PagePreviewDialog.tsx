@@ -145,7 +145,13 @@ export default function PagePreviewDialog({
             </div>
             <DialogPrimitive.Close
               aria-label="닫기"
-              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className={cn(
+                // 터치 환경 44px 타깃 — hover 지원(데스크톱)에서는 기존 크기 유지.
+                "-m-2 inline-flex size-11 shrink-0 items-center justify-center rounded-md",
+                "[@media(hover:hover)]:m-0 [@media(hover:hover)]:size-auto [@media(hover:hover)]:p-1",
+                "text-muted-foreground transition-colors hover:bg-accent",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              )}
             >
               <X className="size-4" />
             </DialogPrimitive.Close>

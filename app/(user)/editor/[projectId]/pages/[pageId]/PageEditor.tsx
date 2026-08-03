@@ -1069,6 +1069,9 @@ export default function PageEditor({
             ? "현재 선택된 사진을 다른 사진으로 교체합니다."
             : "페이지에 추가할 사진을 선택하세요."
         }
+        onNavigateToUpload={() =>
+          navigateTo(`/upload?projectId=${projectId}`)
+        }
         onPick={async (photoId, url) => {
           const handle = stageRef.current;
           if (!handle) return;

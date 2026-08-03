@@ -103,6 +103,12 @@ export default async function MyOrdersPage() {
           <p className="text-sm text-muted-foreground">
             아직 주문 내역이 없습니다.
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            사진을 업로드하면 포토북 제작이 바로 시작돼요.
+          </p>
+          <Button asChild variant="coral" className="mt-4">
+            <Link href="/upload">포토북 만들기 시작</Link>
+          </Button>
         </div>
       ) : (
         <ul className="space-y-3">

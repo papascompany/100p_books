@@ -117,10 +117,11 @@ describeNative("buildInteriorPdf (native)", () => {
       bookSize: {
         id: doc.bookSizeId,
         name: "test",
+        // 시드 정본(0003_seed.sql) 14.5²: cover_width_mm = 펼친(앞+뒤) 폭.
         width_mm: 145,
         height_mm: 145,
-        cover_width_mm: 150,
-        cover_height_mm: 150,
+        cover_width_mm: 296,
+        cover_height_mm: 149,
         spine_formula_per_page: 0.09,
         active: true,
         display_order: 0,

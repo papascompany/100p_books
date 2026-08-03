@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, Check, Loader2 } from "lucide-react";
+import { CalendarDays, Check, Loader2, RefreshCw } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,24 @@ interface CheckResponse {
  */
 function kstTodayStr(): string {
   return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+/**
+ * API 표준 실패 응답의 error 는 { code, message } 객체다.
+ * 어떤 형태가 오더라도 message 문자열만 안전하게 추출한다
+ * (객체를 React child 로 렌더하면 크래시).
+ */
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (typeof err === "string" && err.length > 0) return err;
+  if (
+    err &&
+    typeof err === "object" &&
+    "message" in err &&
+    typeof (err as { message?: unknown }).message === "string"
+  ) {
+    return (err as { message: string }).message;
+  }
+  return fallback;
 }
 
 /**
@@ -65,29 +83,34 @@ export default function AttendanceWidget() {
   const [checking, setChecking] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // 데이터 로드
-  React.useEffect(() => {
-    let mounted = true;
-    fetch(`/api/attendance/me?month=${currentMonth}`)
-      .then((r) => r.json() as Promise<{ ok: boolean; data: AttendanceData }>)
-      .then((json) => {
-        if (!mounted) return;
-        if (json.ok) {
-          setData(json.data);
-        } else {
-          setError("출석 정보를 불러오지 못했습니다.");
-        }
-      })
-      .catch(() => {
-        if (mounted) setError("네트워크 오류가 발생했습니다.");
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-    return () => {
-      mounted = false;
-    };
+  // 데이터 로드 — 에러 상태의 "다시 시도" 버튼에서 재호출할 수 있게 useCallback 으로 추출
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/attendance/me?month=${currentMonth}`);
+      const json = (await res.json()) as {
+        ok: boolean;
+        data?: AttendanceData;
+        error?: { code?: string; message?: string };
+      };
+      if (json.ok && json.data) {
+        setData(json.data);
+      } else {
+        setError(
+          extractErrorMessage(json.error, "출석 정보를 불러오지 못했습니다."),
+        );
+      }
+    } catch {
+      setError("네트워크 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
+    }
   }, [currentMonth]);
+
+  React.useEffect(() => {
+    void load();
+  }, [load]);
 
   const checkedSet = React.useMemo(
     () => new Set(data?.checkedDates ?? []),
@@ -116,7 +139,11 @@ export default function AttendanceWidget() {
 
     try {
       const res = await fetch("/api/attendance/check", { method: "POST" });
-      const json = (await res.json()) as { ok: boolean; data: CheckResponse; error?: string };
+      const json = (await res.json()) as {
+        ok: boolean;
+        data: CheckResponse;
+        error?: { code?: string; message?: string };
+      };
 
       if (!json.ok) {
         // 롤백
@@ -132,7 +159,10 @@ export default function AttendanceWidget() {
         toast({
           variant: "destructive",
           title: "출석 실패",
-          description: json.error ?? "잠시 후 다시 시도해 주세요.",
+          description: extractErrorMessage(
+            json.error,
+            "잠시 후 다시 시도해 주세요.",
+          ),
         });
         return;
       }
@@ -182,7 +212,8 @@ export default function AttendanceWidget() {
           particleCount: 80,
           spread: 70,
           origin: { y: 0.6 },
-          colors: ["#3b82f6", "#60a5fa", "#93c5fd", "#fbbf24", "#f472b6"],
+          // 브랜드 팔레트 — coral / coral-400 / coral-300 / star-amber / peach
+          colors: ["#FF6B5E", "#FF8678", "#FFA89C", "#FFB23E", "#FFD9D2"],
         });
       } catch {
         // canvas-confetti 미설치 시 무시
@@ -223,8 +254,17 @@ export default function AttendanceWidget() {
   // ── 에러 상태 ─────────────────────────────────────────────
   if (error) {
     return (
-      <div className="rounded-2xl border bg-card p-5">
+      <div className="rounded-2xl border bg-card p-5 space-y-3">
         <p className="text-sm text-muted-foreground">{error}</p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void load()}
+        >
+          <RefreshCw className="h-4 w-4" aria-hidden />
+          다시 시도
+        </Button>
       </div>
     );
   }
@@ -241,7 +281,7 @@ export default function AttendanceWidget() {
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <CalendarDays className="h-5 w-5 text-blue-500" aria-hidden />
+          <CalendarDays className="h-5 w-5 text-coral" aria-hidden />
           <h2 className="font-semibold text-base">출석체크</h2>
         </div>
         <span className="text-xs text-muted-foreground">{monthLabel}</span>
@@ -295,9 +335,9 @@ export default function AttendanceWidget() {
                   className={[
                     "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium select-none transition-colors",
                     isChecked
-                      ? "bg-blue-500 text-white"
+                      ? "bg-coral text-night"
                       : isToday
-                        ? "border-2 border-blue-500 text-blue-600 dark:text-blue-400"
+                        ? "border-2 border-coral text-coral-600 dark:text-coral-400"
                         : isFuture
                           ? "text-muted-foreground/30"
                           : "border border-dashed border-border text-muted-foreground",
@@ -343,7 +383,7 @@ export default function AttendanceWidget() {
           "w-full h-11 rounded-lg text-sm font-semibold transition-all",
           todayChecked
             ? "bg-muted text-muted-foreground cursor-default"
-            : "bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white shadow-sm",
+            : "bg-coral hover:bg-coral-600 active:scale-[0.98] text-night shadow-sm",
         ]
           .filter(Boolean)
           .join(" ")}

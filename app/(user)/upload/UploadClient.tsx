@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, CheckSquare, Square, Trash2 } from "lucide-react";
+import { ArrowRight, CheckSquare, Square, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -10,7 +10,11 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import type { BookSize } from "@/lib/db/types";
 import { MAX_PHOTOS_PER_PROJECT } from "@/lib/image/constants";
-import { UploadQueue, useUploadStore } from "@/lib/image/upload-queue";
+import {
+  UploadQueue,
+  useUploadStore,
+  type ServerPhotoSeed,
+} from "@/lib/image/upload-queue";
 import { cn } from "@/lib/utils";
 
 interface UploadClientProps {
@@ -18,12 +22,15 @@ interface UploadClientProps {
   initialTitle: string;
   initialBookSizeId: string;
   bookSizes: BookSize[];
+  /** 이 프로젝트에 이미 업로드된 active 사진 (재진입/새로고침 복원용, UP-2). */
+  serverPhotos: ServerPhotoSeed[];
 }
 
 export default function UploadClient({
   projectId,
   initialBookSizeId,
   bookSizes,
+  serverPhotos,
 }: UploadClientProps) {
   const items = useUploadStore((s) => s.items);
   const overall = useUploadStore((s) => s.overall);
@@ -35,6 +42,8 @@ export default function UploadClient({
   const removeMany = useUploadStore((s) => s.removeMany);
   const retryItem = useUploadStore((s) => s.retry);
   const cancelAll = useUploadStore((s) => s.cancelAll);
+  const resetStore = useUploadStore((s) => s.reset);
+  const seedServerPhotos = useUploadStore((s) => s.seedServerPhotos);
   const toggleSelected = useUploadStore((s) => s.toggleSelected);
   const selectAll = useUploadStore((s) => s.selectAll);
   const clearSelection = useUploadStore((s) => s.clearSelection);
@@ -47,13 +56,20 @@ export default function UploadClient({
   const [bookSizeError, setBookSizeError] = useState<string | null>(null);
   const [topLevelError, setTopLevelError] = useState<string | null>(null);
 
-  // 큐 인스턴스 마운트당 1회
+  // 프로젝트 진입 시 store 리셋(UP-3 — 이전 프로젝트 항목 잔류 방지)
+  // → 큐 인스턴스 생성 → 서버에 이미 올라간 사진을 done 항목으로 복원(UP-2).
   useEffect(() => {
+    resetStore();
     queueRef.current = new UploadQueue({ projectId });
+    if (serverPhotos.length > 0) {
+      seedServerPhotos(serverPhotos);
+    }
     return () => {
       queueRef.current?.destroy();
       queueRef.current = null;
     };
+    // serverPhotos 는 서버 렌더 시점 스냅샷 — projectId 단위로만 재실행.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   const counts = useMemo(() => {
@@ -71,6 +87,17 @@ export default function UploadClient({
   const remainingSlots = MAX_PHOTOS_PER_PROJECT - items.length;
   const allDone = items.length > 0 && counts.done === items.length;
 
+  // 업로드 진행 중 이탈 경고 — 에디터들과 동일한 beforeunload 패턴 (UP-6).
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (!busy && counts.working === 0) return;
+      e.preventDefault();
+      e.returnValue = "업로드가 진행 중이에요. 지금 나가면 진행 중인 사진이 사라져요.";
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [busy, counts.working]);
+
   function handleAddFiles(files: File[]) {
     setTopLevelError(null);
     if (files.length > remainingSlots) {
@@ -87,6 +114,44 @@ export default function UploadClient({
     items
       .filter((i) => i.status === "error" || i.status === "cancelled")
       .forEach((i) => retryItem(i.id));
+  }
+
+  /**
+   * 개별 X 제거 — 서버에 반영된(done) 사진은 클라 큐에서만 지우면
+   * 에디터 DB 조회에 다시 나타나므로 휴지통 이동을 함께 수행한다 (UP-4).
+   */
+  async function handleRemoveItem(id: string) {
+    const target = items.find((i) => i.id === id);
+    if (!target) return;
+    if (target.status === "done" && target.photoId) {
+      try {
+        const res = await fetch("/api/photos/trash", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ photoIds: [target.photoId] }),
+        });
+        const json = (await res.json()) as {
+          ok: boolean;
+          error?: { message?: string };
+        };
+        if (!res.ok || !json.ok) {
+          throw new Error(json.error?.message ?? "휴지통 이동 실패");
+        }
+        toast({
+          title: "휴지통으로 옮겼어요.",
+          description: "사진은 휴지통에서 복원할 수 있어요.",
+          variant: "success",
+        });
+      } catch (e) {
+        toast({
+          title: "삭제 실패",
+          description: e instanceof Error ? e.message : "알 수 없는 오류",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    removeItem(id);
   }
 
   async function handleDeleteSelected() {
@@ -198,10 +263,10 @@ export default function UploadClient({
         ) : null}
       </section>
 
-      {/* Sticky 진행률 */}
+      {/* Sticky 진행률 — top-16: sticky 헤더(h-14, z-40) 아래에 겹치지 않게 (UP-7) */}
       {started && items.length > 0 ? (
         <div
-          className="sticky top-2 z-10 rounded-xl border bg-card/90 p-3 shadow-soft backdrop-blur"
+          className="sticky top-16 z-10 rounded-xl border bg-card/90 p-3 shadow-soft backdrop-blur"
           role="region"
           aria-label="업로드 진행 상황"
         >
@@ -248,91 +313,101 @@ export default function UploadClient({
 
       {/* 액션 바 */}
       {items.length > 0 ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant={selectionMode ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                if (selectionMode) {
-                  setSelectionMode(false);
-                  clearSelection();
-                } else {
-                  setSelectionMode(true);
-                }
-              }}
-            >
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant={selectionMode ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  if (selectionMode) {
+                    setSelectionMode(false);
+                    clearSelection();
+                  } else {
+                    setSelectionMode(true);
+                  }
+                }}
+              >
+                {selectionMode ? (
+                  <>
+                    <CheckSquare className="size-4" aria-hidden /> 선택 모드 끄기
+                  </>
+                ) : (
+                  <>
+                    <Square className="size-4" aria-hidden /> 선택 모드
+                  </>
+                )}
+              </Button>
+
               {selectionMode ? (
                 <>
-                  <CheckSquare className="size-4" aria-hidden /> 선택 모드 끄기
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => selectAll()}
+                    disabled={items.length === 0}
+                  >
+                    전체 선택 ({items.length})
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => void handleDeleteSelected()}
+                    disabled={selectedIds.size === 0}
+                  >
+                    <Trash2 className="size-4" aria-hidden /> 선택 삭제 ({selectedIds.size})
+                  </Button>
                 </>
               ) : (
                 <>
-                  <Square className="size-4" aria-hidden /> 선택 모드
+                  {/* 라벨을 실제 동작(진행 중 abort + 미완료 항목 제거, done 유지)에 맞춤 (UP-8) */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => cancelAll()}
+                    disabled={!busy && counts.working === 0}
+                  >
+                    <X className="size-4" aria-hidden /> 업로드 취소
+                  </Button>
+                  {counts.error > 0 ? (
+                    <Button type="button" variant="outline" size="sm" onClick={handleRetryAllFailed}>
+                      실패한 항목만 재시도 ({counts.error})
+                    </Button>
+                  ) : null}
                 </>
               )}
-            </Button>
+            </div>
 
-            {selectionMode ? (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => selectAll()}
-                  disabled={items.length === 0}
-                >
-                  전체 선택 ({items.length})
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => void handleDeleteSelected()}
-                  disabled={selectedIds.size === 0}
-                >
-                  <Trash2 className="size-4" aria-hidden /> 선택 삭제 ({selectedIds.size})
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => cancelAll()}
-                  disabled={!busy && counts.working === 0 && items.every((i) => i.status === "done")}
-                >
-                  <Trash2 className="size-4" aria-hidden /> 모두 제거
-                </Button>
-                {counts.error > 0 ? (
-                  <Button type="button" variant="outline" size="sm" onClick={handleRetryAllFailed}>
-                    실패한 항목만 재시도 ({counts.error})
-                  </Button>
-                ) : null}
-              </>
-            )}
+            <Button
+              asChild={allDone}
+              type="button"
+              variant="coral"
+              size="lg"
+              disabled={!allDone}
+              aria-disabled={!allDone}
+            >
+              {allDone ? (
+                <Link href={`/editor/${projectId}`}>
+                  다음 <ArrowRight className="size-4" aria-hidden />
+                </Link>
+              ) : (
+                <span>
+                  다음 <ArrowRight className="size-4" aria-hidden />
+                </span>
+              )}
+            </Button>
           </div>
 
-          <Button
-            asChild={allDone}
-            type="button"
-            variant="coral"
-            size="lg"
-            disabled={!allDone}
-            aria-disabled={!allDone}
-          >
-            {allDone ? (
-              <Link href={`/editor/${projectId}`}>
-                다음 <ArrowRight className="size-4" aria-hidden />
-              </Link>
-            ) : (
-              <span>
-                다음 <ArrowRight className="size-4" aria-hidden />
-              </span>
-            )}
-          </Button>
+          {/* 실패 항목이 '다음' 을 막는 이유 안내 (UP-9) */}
+          {counts.error > 0 && counts.working === 0 && !allDone ? (
+            <p className="text-xs text-muted-foreground" role="status">
+              실패한 사진을 재시도하거나 삭제하면 다음 단계로 진행할 수 있어요.
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -346,7 +421,7 @@ export default function UploadClient({
             <FileGridItem
               key={item.id}
               item={item}
-              onRemove={removeItem}
+              onRemove={(id) => void handleRemoveItem(id)}
               onRetry={retryItem}
               selectionMode={selectionMode}
               selected={selectedIds.has(item.id)}

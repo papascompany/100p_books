@@ -33,7 +33,8 @@ interface ConfirmResponse {
  * 결제 성공 콜백 — confirm API 호출.
  *   - StrictMode 중복 호출 방지: ref guard.
  *   - 응답에 따라 success/failed phase 표시.
- *   - PDF 빌드는 confirm 내부에서 인라인으로 실행되므로 응답이 길어질 수 있음 (최대 5분).
+ *   - PDF 빌드는 confirm 이 waitUntil 백그라운드로 분리해 응답은 즉시 온다 —
+ *     confirming 화면은 수 초만 노출되고, PDF 는 성공 이후에도 만들어지는 중.
  */
 export default function SuccessClient(props: SuccessClientProps) {
   const [phase, setPhase] = useState<Phase>("confirming");
@@ -63,12 +64,18 @@ export default function SuccessClient(props: SuccessClientProps) {
         }
         setPhase("success");
         if (json.data.pdfError) setPdfError(json.data.pdfError);
+        // 결제 완료 — 주문서 입력 드래프트 제거 (키는 OrderForm 의 orderDraftKey 와 동일)
+        try {
+          sessionStorage.removeItem(`order-draft:${props.projectId}`);
+        } catch {
+          // 접근 불가 환경 — 무시
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "결제 확정 실패");
         setPhase("failed");
       }
     })();
-  }, [props.orderId, props.paymentKey, props.amount, props.tossOrderId]);
+  }, [props.orderId, props.paymentKey, props.amount, props.tossOrderId, props.projectId]);
 
   if (phase === "confirming") {
     return (
@@ -78,7 +85,7 @@ export default function SuccessClient(props: SuccessClientProps) {
           결제 확정 중…
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          PDF 파일을 만들고 있습니다. 잠시만 기다려주세요. (최대 1~2분)
+          결제를 확정하고 있습니다. 잠시만 기다려주세요.
         </p>
       </div>
     );
@@ -116,7 +123,8 @@ export default function SuccessClient(props: SuccessClientProps) {
         결제가 완료되었습니다
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        주문이 접수되었습니다. 마이페이지에서 진행 상황을 확인할 수 있습니다.
+        주문이 접수되었습니다. 인쇄용 PDF 파일은 몇 분 내에 주문 상세에서
+        준비됩니다.
       </p>
       {pdfError ? (
         <p className="mx-auto mt-3 max-w-md rounded-md border border-coral-200 bg-coral-50 p-2 text-xs text-coral-700 dark:border-coral-700 dark:bg-coral-950/30 dark:text-coral-300">

@@ -41,6 +41,8 @@ const DialogContent = React.forwardRef<
       ref={ref}
       className={cn(
         "fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2",
+        // 소프트 키보드로 세로 공간이 줄어도 잘리지 않게 — 공용 dialog 와 동일 정책
+        "max-h-[90dvh] overflow-y-auto",
         "rounded-2xl border bg-card p-6 shadow-[0_8px_32px_rgba(0,0,0,0.12)]",
         "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
         "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
@@ -232,16 +234,16 @@ export function GiftDialog({ orderId, children }: GiftDialogProps) {
                 aria-hidden="true"
               />
               <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-                선물 링크가 전송되었습니다
+                선물 링크가 만들어졌습니다
               </p>
               <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
-                {email} 으로 이메일을 발송했습니다
+                {email}(으)로 이메일이 곧 발송됩니다 (수 분 내)
               </p>
             </div>
 
             <div>
               <p className="text-xs text-muted-foreground mb-1.5">
-                직접 링크 공유
+                지금 바로 전하려면 아래 링크를 복사해 공유하세요
               </p>
               <div className="flex items-center gap-2">
                 <input

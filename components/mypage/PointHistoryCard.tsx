@@ -40,6 +40,24 @@ interface PointsResponse {
   totals: { earned: number; spent: number };
 }
 
+/**
+ * API 표준 실패 응답의 error 는 { code, message } 객체다.
+ * 어떤 형태가 오더라도 message 문자열만 안전하게 추출한다
+ * (객체를 React child 로 렌더하면 크래시).
+ */
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (typeof err === "string" && err.length > 0) return err;
+  if (
+    err &&
+    typeof err === "object" &&
+    "message" in err &&
+    typeof (err as { message?: unknown }).message === "string"
+  ) {
+    return (err as { message: string }).message;
+  }
+  return fallback;
+}
+
 function formatRelativeDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -76,10 +94,12 @@ export default function PointHistoryCard({
       const json = (await res.json()) as {
         ok: boolean;
         data?: PointsResponse;
-        error?: string;
+        error?: { code?: string; message?: string };
       };
       if (!json.ok || !json.data) {
-        setError(json.error ?? "포인트 내역을 불러오지 못했어요.");
+        setError(
+          extractErrorMessage(json.error, "포인트 내역을 불러오지 못했어요."),
+        );
         return;
       }
       setData(json.data);

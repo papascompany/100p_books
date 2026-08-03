@@ -168,6 +168,8 @@ export default function DeleteAccountCard({
           <DialogPrimitive.Content
             className={cn(
               "fixed left-1/2 top-1/2 z-50 w-[92vw] max-w-md -translate-x-1/2 -translate-y-1/2",
+              /* 작은 화면(iPhone SE 등)·소프트 키보드 대응 — dvh 기준 상한 + 내부 스크롤 */
+              "max-h-[85dvh] overflow-y-auto",
               "rounded-xl border bg-card p-5 shadow-soft-lg",
               "data-[state=open]:animate-fade-in",
               "focus:outline-none",

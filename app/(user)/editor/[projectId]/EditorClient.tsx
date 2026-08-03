@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import GenerateControls from "./GenerateControls";
 import PdfActions from "./PdfActions";
@@ -34,14 +34,21 @@ export default function EditorClient({
 }: EditorClientProps) {
   const [pages, setPages] = useState<PageSummary[]>([]);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
+  /** 초기 1회 로드 전용 — true 인 동안만 PreviewGrid 가 스켈레톤을 그린다. */
   const [loading, setLoading] = useState<boolean>(true);
+  /** 재조회(insert/delete/재생성 후) — 기존 그리드를 유지한 채 얇은 표시만. */
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [pageCount, setPageCount] = useState<number>(initialPageCount);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(initialLayoutMode);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<boolean>(false);
+  const hasLoadedRef = useRef(false);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    // 초기 로드에만 스켈레톤 — 이후 재조회는 stale-while-revalidate 로
+    // 기존 페이지를 유지해 스크롤 위치가 튀지 않게 한다.
+    if (hasLoadedRef.current) setRefreshing(true);
+    else setLoading(true);
     setLoadError(null);
     try {
       const res = await fetch(`/api/pages?projectId=${projectId}`, {
@@ -58,10 +65,12 @@ export default function EditorClient({
       setPages(json.data.pages);
       setPhotoUrls(json.data.photoUrls ?? {});
       setPageCount(json.data.pages.length);
+      hasLoadedRef.current = true;
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "페이지 로드 실패");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [projectId]);
 
@@ -203,7 +212,9 @@ export default function EditorClient({
           <p className="text-xs text-muted-foreground" aria-live="polite">
             {loading
               ? "불러오는 중…"
-              : `${pageCount}페이지 · ${layoutMode === "polaroid" ? "폴라로이드" : "콜라주"}`}
+              : refreshing
+                ? "갱신 중…"
+                : `${pageCount}페이지 · ${layoutMode === "polaroid" ? "폴라로이드" : "콜라주"}`}
           </p>
         </div>
         {loadError ? (

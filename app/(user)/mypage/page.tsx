@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   ChevronRight,
   Coins,
   Image as ImageIcon,
@@ -58,6 +59,7 @@ export default async function MyPage() {
     | undefined;
 
   const orderCount = counts?.order_count ?? 0;
+  const projectCount = counts?.project_count ?? 0;
   const activePhotoCount = counts?.active_photo_count ?? 0;
   const trashCount = counts?.trash_photo_count ?? 0;
 
@@ -76,6 +78,28 @@ export default async function MyPage() {
       </div>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
+        <Link href="/projects" className="group">
+          <Card className="h-full transition-all hover:-translate-y-1 hover:border-coral hover:shadow-soft-lg">
+            <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <BookOpen className="size-5 text-coral" />
+                  내 포토북
+                </CardTitle>
+                <CardDescription className="mt-1.5">
+                  {projectCount > 0
+                    ? `${projectCount}권을 만드는 중이에요.`
+                    : "첫 포토북을 만들어 보세요."}
+                </CardDescription>
+              </div>
+              <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              편집하던 포토북을 이어서 완성하고 주문까지 진행하세요.
+            </CardContent>
+          </Card>
+        </Link>
+
         <Link href="/mypage/orders" className="group">
           <Card className="h-full transition-all hover:-translate-y-1 hover:border-coral hover:shadow-soft-lg">
             <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">

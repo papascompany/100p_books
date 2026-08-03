@@ -15,7 +15,10 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   selectedPhotoIds: string[];
   projects: PhotoLibraryProject[];
-  onDone: (insertedCount: number) => void;
+  /** 선택한 사진들이 이미 속한 프로젝트 id — 대상 목록에서 비활성 처리 (UP-16). */
+  sourceProjectIds: string[];
+  /** 복사 완료 콜백 — 정원 초과로 제외된 장수(skipped)도 함께 전달 (UP-13). */
+  onDone: (insertedCount: number, skippedCount: number) => void;
 }
 
 /**
@@ -28,14 +31,20 @@ export default function CopyToProjectDialog({
   onOpenChange,
   selectedPhotoIds,
   projects,
+  sourceProjectIds,
   onDone,
 }: Props) {
   const { toast } = useToast();
   const [targetId, setTargetId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const sourceSet = new Set(sourceProjectIds);
+  const hasSelectableTarget = projects.some((p) => !sourceSet.has(p.id));
+
   async function handleConfirm() {
     if (!targetId || selectedPhotoIds.length === 0) return;
+    // 소스 프로젝트로의 복사(같은 프로젝트에 사본 중복) 방어
+    if (sourceSet.has(targetId)) return;
     setBusy(true);
     try {
       const res = await fetch("/api/photos/copy-to-project", {
@@ -54,7 +63,7 @@ export default function CopyToProjectDialog({
       if (!res.ok || !json.ok) {
         throw new Error(json.error?.message ?? "복사 실패");
       }
-      onDone(json.data?.inserted.length ?? 0);
+      onDone(json.data?.inserted.length ?? 0, json.data?.skipped ?? 0);
     } catch (e) {
       toast({
         title: "복사 실패",
@@ -110,25 +119,43 @@ export default function CopyToProjectDialog({
             ) : (
               projects.map((p) => {
                 const sel = targetId === p.id;
+                const isSource = sourceSet.has(p.id);
                 return (
                   <button
                     key={p.id}
                     type="button"
                     onClick={() => setTargetId(p.id)}
                     aria-pressed={sel}
+                    disabled={isSource}
                     className={cn(
                       "block w-full rounded-md border px-3 py-2 text-left text-sm transition-colors",
                       sel
                         ? "border-rose-500 bg-rose-50/60 ring-1 ring-rose-300 dark:bg-rose-950/30"
                         : "border-input bg-background hover:bg-accent",
+                      isSource &&
+                        "cursor-not-allowed opacity-50 hover:bg-background",
                     )}
                   >
-                    {p.title}
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="truncate">{p.title}</span>
+                      {isSource ? (
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          사진이 담긴 프로젝트
+                        </span>
+                      ) : null}
+                    </span>
                   </button>
                 );
               })
             )}
           </div>
+
+          {projects.length > 0 && !hasSelectableTarget ? (
+            <p className="mt-2 text-xs text-muted-foreground" role="status">
+              선택한 사진이 담긴 프로젝트뿐이에요. 다른 프로젝트를 먼저 만들어
+              주세요.
+            </p>
+          ) : null}
 
           <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button
@@ -142,7 +169,7 @@ export default function CopyToProjectDialog({
             <Button
               type="button"
               onClick={handleConfirm}
-              disabled={!targetId || busy}
+              disabled={!targetId || busy || sourceSet.has(targetId)}
             >
               {busy ? "추가 중..." : "추가"}
             </Button>

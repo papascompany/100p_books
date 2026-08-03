@@ -8,12 +8,21 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -85,20 +94,47 @@ function StatusBadge({ status }: { status: string }) {
 
 interface CardMenuProps {
   projectId: string;
+  projectTitle: string | null;
   onDeleted: (id: string) => void;
 }
 
-function CardMenu({ projectId, onDeleted }: CardMenuProps) {
+function CardMenu({ projectId, projectTitle, onDeleted }: CardMenuProps) {
   const { toast } = useToast();
   const [deleting, setDeleting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmInput, setConfirmInput] = useState("");
+  const [photoCount, setPhotoCount] = useState<number | null>(null);
+
+  // 2단계 확인 문구 — 카드에 표시되는 제목 그대로 (제목이 없으면 "제목 없음")
+  const confirmPhrase = projectTitle?.trim() || "제목 없음";
+  const confirmMatches = confirmInput.trim() === confirmPhrase;
+
+  function openConfirm() {
+    setConfirmInput("");
+    setPhotoCount(null);
+    // Radix 드롭다운이 닫힌 다음 틱에 다이얼로그를 연다 (포커스 경합 방지)
+    window.setTimeout(() => setConfirmOpen(true), 0);
+    // 영구 삭제될 사진 수 조회 — 실패해도 다이얼로그 자체는 동작 (best-effort)
+    fetch(`/api/projects/${projectId}`)
+      .then(
+        (r) =>
+          r.json() as Promise<{
+            ok: boolean;
+            data?: { photoCount?: number };
+          }>,
+      )
+      .then((json) => {
+        if (json.ok && typeof json.data?.photoCount === "number") {
+          setPhotoCount(json.data.photoCount);
+        }
+      })
+      .catch(() => {
+        // 무시 — "모든 사진" 문구로 대체 표기
+      });
+  }
 
   async function handleDelete() {
-    if (
-      !confirm(
-        "이 포토북을 삭제할까요? 내부 페이지와 사진이 함께 삭제됩니다.\n이 작업은 되돌릴 수 없어요.",
-      )
-    )
-      return;
+    if (!confirmMatches || deleting) return;
 
     setDeleting(true);
     try {
@@ -110,6 +146,7 @@ function CardMenu({ projectId, onDeleted }: CardMenuProps) {
         throw new Error(json.error?.message ?? "삭제 실패");
       }
       toast({ title: "포토북이 삭제됐어요.", variant: "success" });
+      setConfirmOpen(false);
       onDeleted(projectId);
     } catch (e) {
       toast({
@@ -123,42 +160,100 @@ function CardMenu({ projectId, onDeleted }: CardMenuProps) {
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label="더보기 메뉴"
-          disabled={deleting}
-          className={cn(
-            "absolute right-2 top-2 z-10 flex size-8 items-center justify-center rounded-full",
-            "bg-black/40 text-white backdrop-blur-sm transition-opacity",
-            "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-          )}
-        >
-          <MoreVertical className="size-4" aria-hidden />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem asChild>
-          <Link href={`/editor/${projectId}`}>편집 계속하기</Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href={`/cover/${projectId}`}>표지 편집</Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href={`/order/${projectId}`}>주문하기</Link>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-          onSelect={handleDelete}
-          disabled={deleting}
-        >
-          {deleting ? "삭제 중..." : "삭제"}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="더보기 메뉴"
+            disabled={deleting}
+            className={cn(
+              "absolute right-2 top-2 z-10 flex size-8 items-center justify-center rounded-full",
+              "bg-black/40 text-white backdrop-blur-sm transition-opacity",
+              /* 터치 기기(모바일)에는 hover 가 없으므로 상시 노출, md 이상에서만 hover 노출 */
+              "opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+            )}
+          >
+            <MoreVertical className="size-4" aria-hidden />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem asChild>
+            <Link href={`/editor/${projectId}`}>편집 계속하기</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href={`/cover/${projectId}`}>표지 편집</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href={`/order/${projectId}`}>주문하기</Link>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+            onSelect={openConfirm}
+            disabled={deleting}
+          >
+            {deleting ? "삭제 중..." : "삭제"}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* 2단계 삭제 확인 — 프로젝트 삭제는 휴지통 없이 즉시 영구 삭제라 강한 확인이 필요 */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        {/* 모바일: 상단 정렬 — 제목 입력 시 소프트 키보드가 하단 버튼을 가리지 않게 */}
+        <DialogContent className="top-[8%] max-w-md translate-y-0 sm:top-1/2 sm:-translate-y-1/2">
+          <DialogHeader>
+            <DialogTitle>포토북을 완전히 삭제할까요?</DialogTitle>
+            <DialogDescription>
+              {photoCount !== null
+                ? `내부 페이지와 사진 ${photoCount}장이 즉시 영구 삭제돼요.`
+                : "내부 페이지와 모든 사진이 즉시 영구 삭제돼요."}{" "}
+              휴지통으로 가지 않으며, 복구할 수 없어요.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-4 flex flex-col gap-1.5">
+            <label
+              htmlFor={`confirm-delete-${projectId}`}
+              className="text-sm font-medium"
+            >
+              삭제하려면{" "}
+              <span className="font-bold text-destructive">{confirmPhrase}</span>
+              을(를) 정확히 입력하세요
+            </label>
+            <Input
+              id={`confirm-delete-${projectId}`}
+              type="text"
+              autoComplete="off"
+              placeholder={confirmPhrase}
+              value={confirmInput}
+              onChange={(e) => setConfirmInput(e.target.value)}
+              disabled={deleting}
+            />
+          </div>
+
+          <DialogFooter className="mt-5">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setConfirmOpen(false)}
+              disabled={deleting}
+            >
+              취소
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={!confirmMatches || deleting}
+              onClick={() => void handleDelete()}
+            >
+              {deleting ? "삭제 중..." : "영구 삭제"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -200,7 +295,11 @@ function ProjectCard({ project, onDeleted }: ProjectCardProps) {
       </button>
 
       {/* 점 메뉴 */}
-      <CardMenu projectId={project.id} onDeleted={onDeleted} />
+      <CardMenu
+        projectId={project.id}
+        projectTitle={project.title}
+        onDeleted={onDeleted}
+      />
 
       {/* 정보 영역 */}
       <div className="flex flex-col gap-0.5 px-3 py-3">

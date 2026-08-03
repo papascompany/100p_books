@@ -8,9 +8,10 @@ import {
   type CoverTemplateId,
 } from "./cover-templates";
 
+// 시드 정본(0003_seed.sql) A5: cover_width_mm = 펼친(앞+뒤) 전체 폭 302mm.
 const BOOK_SIZE = {
-  cover_width_mm: 150,
-  cover_height_mm: 212,
+  cover_width_mm: 302,
+  cover_height_mm: 214,
   spine_formula_per_page: 0.09,
 };
 

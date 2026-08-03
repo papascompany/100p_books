@@ -121,7 +121,10 @@ export default function BookSizeForm({
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="표지 width (mm)">
+        <Field
+          label="표지 펼침 폭 (앞+뒤, 책등 제외, mm)"
+          hint="펼친 전체 폭 — 책등 두께는 주문 시점에 페이지수로 더해짐. 예: A5 = 302"
+        >
           <Input
             type="number"
             value={v.cover_width_mm}

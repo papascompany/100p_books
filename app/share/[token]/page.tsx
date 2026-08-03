@@ -228,8 +228,9 @@ export default async function SharePage({ params }: PageProps) {
                 </div>
               </div>
 
+              {/* /upload 는 빈 업로드 화면 — "이 책을 복제한다"는 오해를 주지 않는 카피 사용 */}
               <Button asChild variant="coral" size="sm" className="shrink-0">
-                <Link href="/upload">이 책 만들기</Link>
+                <Link href="/upload">나도 만들어 보기</Link>
               </Button>
             </div>
           </div>

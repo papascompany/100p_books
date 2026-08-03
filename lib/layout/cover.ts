@@ -63,16 +63,18 @@ export interface CalcCoverDimensionsArgs {
  * book_size 와 페이지 수로부터 표지 차원을 계산.
  *
  *   spineMm = pageCount × spine_formula_per_page (음수 방지)
- *   totalWidthMm = cover_width_mm × 2 + spineMm
+ *   bookWidthMm = cover_width_mm / 2          (한 면 — 앞 또는 뒤)
+ *   totalWidthMm = cover_width_mm + spineMm   (앞+뒤 펼침 + 책등)
  *   totalHeightMm = cover_height_mm
  *
- * cover_width_mm 은 book_sizes 에 "한 면(앞/뒤) 폭" 으로 등록되어 있다고 가정.
+ * cover_width_mm 은 DB 정본(0003_seed.sql) 의미 그대로
+ * "펼친(앞+뒤) 전체 폭 — 책등 제외, 재단 여유 포함" 이다. (예: A5 = 302mm)
  * (M5 PDF 빌드시에도 이 함수를 단일 소스로 사용한다.)
  */
 export function calcCoverDimensions(
   args: CalcCoverDimensionsArgs,
 ): CoverDimensions {
-  const bookWidthMm = args.bookSize.cover_width_mm;
+  const bookWidthMm = args.bookSize.cover_width_mm / 2;
   const bookHeightMm = args.bookSize.cover_height_mm;
   const spinePerPage = args.bookSize.spine_formula_per_page ?? 0.09;
   const spineMm = Math.max(0, args.pageCount * spinePerPage);
@@ -80,7 +82,7 @@ export function calcCoverDimensions(
     bookWidthMm,
     bookHeightMm,
     spineMm,
-    totalWidthMm: bookWidthMm * 2 + spineMm,
+    totalWidthMm: args.bookSize.cover_width_mm + spineMm,
     totalHeightMm: bookHeightMm,
   };
 }

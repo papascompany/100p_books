@@ -9,6 +9,7 @@ import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize, OrderAddress } from "@/lib/db/types";
 import { reasonMessage, validateDiscount } from "@/lib/discounts/validate";
+import { calcCoverDimensions } from "@/lib/layout/cover";
 import { isPageDoc } from "@/lib/layout/types";
 import {
   calcOrderAmount,
@@ -136,6 +137,18 @@ export async function POST(req: Request) {
     const stored = project.cover_json as unknown;
     if (!stored || !isPageDoc(stored) || stored.layoutMode !== "cover") {
       return fail("NO_COVER", "표지를 먼저 편집하세요.", 400);
+    }
+
+    // 2-1) 표지 규격 게이트 — 규격 개정 이전(2배 폭 등) cover_json 이면
+    // 크롭마크가 어긋난 인쇄 PDF 가 생성되므로 주문 전에 재생성을 요구한다.
+    // (표지 에디터가 동일 조건에서 "새 규격으로 다시 만들기" 배너를 띄운다.)
+    const expectedCover = calcCoverDimensions({ bookSize, pageCount: pages });
+    if (Math.abs(expectedCover.totalWidthMm - stored.widthMm) > 0.5) {
+      return fail(
+        "COVER_FORMAT_OUTDATED",
+        "표지 규격이 갱신되었어요. 표지 편집기에서 '새 규격으로 다시 만들기'를 실행한 뒤 다시 주문해주세요.",
+        409,
+      );
     }
 
     // 3) 가격 계산

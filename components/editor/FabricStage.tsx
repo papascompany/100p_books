@@ -100,6 +100,12 @@ export interface FabricStageProps {
   bleedMm?: number;
   /** 미리보기 DPI. */
   dpi?: number;
+  /**
+   * 부모 폭 fit 시 허용 최대 스케일. 기본 1(논리 px 초과 업스케일 금지).
+   * 표지 책등처럼 좁은 영역을 확대 편집할 때만 1 초과 값을 준다
+   * (벡터 렌더 + retina 스케일링이라 ~DPR 배까지는 선명도 유지).
+   */
+  maxFitScale?: number;
   /** 페이지 ID — url-refresher 용. */
   pageId?: string;
   /** 객체 선택/수정 콜백. */
@@ -134,6 +140,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       heightMm,
       bleedMm = 2,
       dpi = PREVIEW_DPI,
+      maxFitScale = 1,
       pageId,
       onSelectionChange,
       onModified,
@@ -158,6 +165,9 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
     const onHistoryChangeRef = useRef(onHistoryChange);
     const onReadyRef = useRef(onReady);
     const readyCalledRef = useRef(false);
+    const maxFitScaleRef = useRef(maxFitScale);
+    /** 현재 캔버스의 fit 재계산 함수 — maxFitScale 변경 시 즉시 재적용용. */
+    const refitRef = useRef<(() => void) | null>(null);
     useEffect(() => {
       onSelectionChangeRef.current = onSelectionChange;
     }, [onSelectionChange]);
@@ -173,6 +183,10 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
     useEffect(() => {
       onReadyRef.current = onReady;
     }, [onReady]);
+    useEffect(() => {
+      maxFitScaleRef.current = maxFitScale;
+      refitRef.current?.();
+    }, [maxFitScale]);
 
     // 캔버스 논리 크기(px) — bleed 포함
     const stagePxSize = useMemo(() => {
@@ -265,12 +279,10 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
 
       // 리사이즈: 부모 폭에 맞춰 viewport scale fit (debounce 150ms)
       let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-      const ro = new ResizeObserver(() => {
-        if (resizeTimer) clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(() => {
+      const applyFit = () => {
           const w = wrapper.clientWidth;
           if (!w) return;
-          const scale = Math.min(1, w / stagePxSize.w);
+          const scale = Math.min(maxFitScaleRef.current, w / stagePxSize.w);
           const cssW = stagePxSize.w * scale;
           const cssH = stagePxSize.h * scale;
           const upperEl = canvas.upperCanvasEl;
@@ -292,7 +304,11 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
           fabric.FabricObject.prototype.touchCornerSize = Math.round(44 * inv);
           fabric.FabricObject.prototype.padding = Math.round(4 * inv);
           canvas.requestRenderAll();
-        }, 150);
+      };
+      refitRef.current = applyFit;
+      const ro = new ResizeObserver(() => {
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(applyFit, 150);
       });
       ro.observe(wrapper);
 
@@ -304,6 +320,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
 
       return () => {
         if (resizeTimer) clearTimeout(resizeTimer);
+        refitRef.current = null;
         ro.disconnect();
         snapHandle.detach();
         detachGestures();

@@ -16,6 +16,7 @@ import CopyToProjectDialog from "./CopyToProjectDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
+import { MAX_PHOTOS_PER_PROJECT } from "@/lib/image/constants";
 import { cn } from "@/lib/utils";
 
 import type {
@@ -91,6 +92,15 @@ export default function PhotoLibraryClient({ photos, projects }: Props) {
 
   const allSelectedInView =
     filtered.length > 0 && filtered.every((p) => selected.has(p.id));
+
+  // 선택된 사진들이 속한 프로젝트 — 복사 다이얼로그에서 자기 자신 제외용 (UP-16)
+  const sourceProjectIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of photos) {
+      if (selected.has(p.id)) set.add(p.projectId);
+    }
+    return Array.from(set);
+  }, [photos, selected]);
 
   function toggleAll() {
     if (allSelectedInView) {
@@ -176,7 +186,13 @@ export default function PhotoLibraryClient({ photos, projects }: Props) {
   }
 
   return (
-    <div className="container mx-auto max-w-6xl px-4 py-8 md:py-10">
+    <div
+      className={cn(
+        "container mx-auto max-w-6xl px-4 py-8 md:py-10",
+        // 하단 고정 액션 바가 그리드 마지막 줄을 가리지 않도록 여백 확보 (UP-12)
+        selected.size > 0 && "pb-32",
+      )}
+    >
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <Link
@@ -241,8 +257,8 @@ export default function PhotoLibraryClient({ photos, projects }: Props) {
         </select>
       </section>
 
-      {/* 액션 바 */}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border bg-white/60 p-3 dark:bg-white/40">
+      {/* 상단 바 — 전체 선택 + 표시 상태 */}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border bg-white/60 p-3 dark:bg-card">
         <div className="flex items-center gap-2 text-sm">
           <Button
             type="button"
@@ -259,32 +275,11 @@ export default function PhotoLibraryClient({ photos, projects }: Props) {
               : `${filtered.length}장 표시 중 (총 ${photos.length})`}
           </span>
         </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={selected.size === 0 || busy}
-            onClick={() => setCopyDialogOpen(true)}
-          >
-            <Copy className="size-4" aria-hidden /> 다른 프로젝트에 추가
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            disabled={selected.size === 0 || busy}
-            onClick={handleTrash}
-          >
-            <Trash2 className="size-4" aria-hidden /> 휴지통으로
-          </Button>
-        </div>
       </div>
 
       {/* 그리드 */}
       {filtered.length === 0 ? (
-        <div className="mt-10 rounded-xl border border-dashed bg-white/40 p-10 text-center text-sm text-muted-foreground dark:bg-white/40">
+        <div className="mt-10 rounded-xl border border-dashed bg-white/40 p-10 text-center text-sm text-muted-foreground dark:bg-card">
           {photos.length === 0
             ? "아직 업로드된 사진이 없어요."
             : "조건에 맞는 사진이 없어요."}
@@ -361,15 +356,61 @@ export default function PhotoLibraryClient({ photos, projects }: Props) {
         </ul>
       )}
 
+      {/* 선택 액션 바 — 긴 그리드에서도 항상 닿는 하단 고정 (UP-12) */}
+      {selected.size > 0 ? (
+        <div
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-hairline bg-card/95 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-soft backdrop-blur"
+          role="region"
+          aria-label="선택한 사진 작업"
+        >
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2">
+            <span className="text-sm font-medium">{selected.size}장 선택됨</span>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={clearSelection}
+                disabled={busy}
+              >
+                선택 해제
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => setCopyDialogOpen(true)}
+              >
+                <Copy className="size-4" aria-hidden /> 다른 프로젝트에 추가
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={busy}
+                onClick={handleTrash}
+              >
+                <Trash2 className="size-4" aria-hidden /> 휴지통으로
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <CopyToProjectDialog
         open={copyDialogOpen}
         onOpenChange={setCopyDialogOpen}
         selectedPhotoIds={Array.from(selected)}
         projects={projects}
-        onDone={(insertedCount) => {
+        sourceProjectIds={sourceProjectIds}
+        onDone={(insertedCount, skippedCount) => {
           toast({
             title: "프로젝트에 추가했어요.",
-            description: `${insertedCount}장이 새 프로젝트에 추가됐어요.`,
+            description:
+              skippedCount > 0
+                ? `${insertedCount}장 추가, ${skippedCount}장은 정원(${MAX_PHOTOS_PER_PROJECT}장) 초과로 제외됐어요.`
+                : `${insertedCount}장이 선택한 프로젝트에 추가됐어요.`,
             variant: "success",
           });
           clearSelection();

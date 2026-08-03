@@ -73,7 +73,7 @@ export default function KeyboardShortcutsHelp({
     {
       title: "선택",
       items: [
-        { keys: [["Tab"]], label: "다음 객체 선택" },
+        // Tab(다음 객체 선택)은 미구현 — 구현 전까지 표기하지 않는다 (EC-18).
         { keys: [["Esc"]], label: "선택 해제" },
       ],
     },
@@ -180,6 +180,9 @@ export default function KeyboardShortcutsHelp({
 /**
  * 첫 방문 자동 노출 헬퍼. localStorage 에 SEEN_KEY 가 없으면 true 를 반환.
  * 호출 측에서 다이얼로그 open 직후 mark() 로 표시.
+ *
+ * 데스크탑(fine pointer)에서만 자동 노출한다 — 모바일은 단축키 트리거 버튼도
+ * 숨겨져 있어, 쓸 수 없는 키보드 안내로 첫 편집을 가로막지 않는다 (EC-12).
  */
 export function useShortcutsAutoShow(): {
   shouldShow: boolean;
@@ -188,6 +191,7 @@ export function useShortcutsAutoShow(): {
   const [shouldShow, setShouldShow] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!window.matchMedia("(pointer: fine)").matches) return;
     try {
       const seen = window.localStorage.getItem(SEEN_KEY);
       if (!seen) setShouldShow(true);

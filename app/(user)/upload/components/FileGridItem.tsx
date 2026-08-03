@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, Check, Loader2, RotateCcw, X } from "lucide-react";
+import { AlertCircle, Check, ImageOff, Loader2, RotateCcw, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { UploadItem } from "@/lib/image/upload-queue";
@@ -36,13 +36,21 @@ export default function FileGridItem({
   selected,
   onToggleSelect,
 }: FileGridItemProps) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [imgFailed, setImgFailed] = useState(false);
 
-  // 파일 객체 자체가 바뀌었을 때만 새 blob URL 발급. 동일 파일 reference 면 유지.
-  // (Zustand 가 item 객체를 immutable 하게 갱신할 때 file 은 같은 reference 가 보존되어야 함)
+  // 소형 썸네일(thumbDataUrl)이 준비되면 그것을 쓰고, 없을 때만 원본 blob URL 발급 (UP-10).
+  // (풀사이즈 원본을 ~150px 셀 <img> 에 물리면 100장 스크롤 시 풀해상도 디코딩이
+  //  반복되어 모바일 메모리 압박 → 탭 강제 리로드 위험)
   useEffect(() => {
+    if (item.thumbDataUrl) {
+      // 썸네일 확보 — 이전 blob URL 은 cleanup 에서 revoke 됨
+      setBlobUrl(null);
+      return;
+    }
     const file = item.effectiveFile ?? item.file;
-    if (!file) return;
+    // 서버 복원 항목은 빈 placeholder File (size 0) — blob 미리보기 불가
+    if (!file || file.size === 0) return;
     let url: string;
     try {
       url = URL.createObjectURL(file);
@@ -50,7 +58,7 @@ export default function FileGridItem({
       // 파일이 닫혔거나 무효화된 경우 (네비게이션 후 등) — 무시
       return;
     }
-    setPreviewUrl(url);
+    setBlobUrl(url);
     return () => {
       try {
         URL.revokeObjectURL(url);
@@ -58,11 +66,18 @@ export default function FileGridItem({
         /* noop */
       }
     };
-  }, [item.file, item.effectiveFile]);
+  }, [item.file, item.effectiveFile, item.thumbDataUrl]);
 
-  // 이미지 로드 실패 시 (예: blob URL 무효화) 깔끔하게 폴백
+  // 표시 소스가 바뀌면 로드 실패 상태 초기화
+  useEffect(() => {
+    setImgFailed(false);
+  }, [item.thumbDataUrl, blobUrl]);
+
+  const previewUrl = imgFailed ? null : (item.thumbDataUrl ?? blobUrl);
+
+  // 이미지 로드 실패 시 (예: blob URL 무효화, signed URL 만료) 깔끔하게 폴백
   function handleImgError() {
-    setPreviewUrl(null);
+    setImgFailed(true);
   }
 
   const isWorking =
@@ -120,11 +135,12 @@ export default function FileGridItem({
             )}
           />
         ) : (
+          // 상태 중립 폴백 — 상태 표시는 좌상단 배지가 담당 (UP-15)
           <div
             aria-hidden
-            className="flex h-full w-full items-center justify-center text-xs text-muted-foreground"
+            className="flex h-full w-full items-center justify-center text-muted-foreground"
           >
-            완료
+            <ImageOff className="size-6" aria-hidden />
           </div>
         )}
 
@@ -162,10 +178,11 @@ export default function FileGridItem({
 
         {/* Remove button (선택 모드 아닐 때만) */}
         {!selectionMode ? (
+          // hover 가 없는 터치 기기에서는 상시 노출, hover 지원 기기에서만 hover/focus 시 표시 (UP-5)
           <button
             type="button"
             onClick={() => onRemove(item.id)}
-            className="absolute right-2 top-2 inline-flex size-11 items-center justify-center rounded-full bg-black/55 text-white opacity-0 transition-opacity hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus:opacity-100 group-hover:opacity-100"
+            className="absolute right-2 top-2 inline-flex size-11 items-center justify-center rounded-full bg-black/55 text-white transition-opacity hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus:opacity-100 [@media(hover:hover)]:group-hover:opacity-100"
             aria-label={`${item.file.name} 제거`}
           >
             <X className="size-4" aria-hidden />
@@ -185,12 +202,13 @@ export default function FileGridItem({
         ) : null}
 
         {(item.status === "error" || item.status === "cancelled") && (
+          // 실패 복구는 핵심 동작 — 44px 터치 타깃의 풀폭 버튼 (UP-11)
           <button
             type="button"
             onClick={() => onRetry(item.id)}
-            className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-rose-600 hover:underline"
+            className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50/70 px-3 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-rose-500/40 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-950/60"
           >
-            <RotateCcw className="size-3" aria-hidden /> 재시도
+            <RotateCcw className="size-3.5" aria-hidden /> 재시도
           </button>
         )}
       </div>
