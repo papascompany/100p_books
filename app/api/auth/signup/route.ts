@@ -3,6 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
+import { trackFunnelEvent } from "@/lib/analytics/funnel";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { enforceRateLimit } from "@/lib/security/rate-limit";
 
@@ -93,6 +94,13 @@ export async function POST(req: Request) {
       } catch {
         // 무시 — 가입 자체는 성공
       }
+
+      // 퍼널 계측: 가입 완료 (S1-2).
+      // 이 경로(이메일+비밀번호)는 확인 메일도 code 교환도 없어 /api/auth/callback 을
+      // 거치지 않는다 — 여기서 기록하지 않으면 이메일 가입자는 퍼널 1단계에서 통째로
+      // 누락된다. OAuth/매직링크는 callback 에서 기록하며, 중복은 부분 유니크
+      // 인덱스 uq_funnel_signup_once (0029) 가 차단한다.
+      await trackFunnelEvent({ event: "signup_completed", userId });
     }
 
     return ok({ created: true, email });
