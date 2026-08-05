@@ -1,9 +1,10 @@
 # 100p Books — 개발 현황 및 다음 단계
 
-> 최종 업데이트: 2026-08-05
+> 최종 업데이트: 2026-08-06
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `296d02c` (fix(security): 감사 리뷰 fix-forward)
+> 운영 빌드: `efbc746` (docs: 이미지 최적화 결과 기록) — 직전 실코드 커밋 `d1c17ea`
+> 다음 세션 인계: [docs/NEXT-SESSION-PROMPT.md](docs/NEXT-SESSION-PROMPT.md) (붙여넣기 블록 그대로 사용)
 > **정본 로컬 경로**: `/Users/yohan/Developer/claude/100p_books` (Documents 사본은 node_modules 제거됨)
 
 ---
@@ -182,14 +183,13 @@
 | **GitHub (commit author)** | `storigehub` <storige.yohan@gmail.com> | `git config user` | ✅ 정상 |
 | **GitHub CLI (gh)** | `papascompany` (active) + `storigehub` (보조) | keyring 2계정 | ✅ 정상 |
 | **Vercel (project)** | team `team_dOpgsAqfLyl4qNlVgSiFVm6B` | `prj_TRSlQDOz5xZpfc5Bg0YlxTxGFasX` | ✅ 링크됨 |
-| **Vercel (CLI 토큰)** | — | `vercel whoami` 실패 | ⚠️ **토큰 만료 — 재로그인 필요** |
+| **Vercel (CLI 토큰)** | `papas-yohan` | `vercel env ls` 정상 | ✅ 정상 (2026-08-06 재확인 — 과거 '만료' 기록은 stale) |
 | **Supabase (project)** | `100p_books` | ref `vprifnztvlduhpuwgdau` (Seoul) | ✅ 링크됨 |
 | **Supabase (org)** | `rpgjrckrcrxhrbrimjbv` | linked-project.json | ✅ 정상 |
 | **Supabase (CLI 로그인)** | `Storywork` 조직 (타 계정) | `supabase orgs list` | ⚠️ **다른 계정 — 100p 조직 미표시** |
 
 ### 계정 연동 주의사항
-- **Vercel CLI 토큰 만료**: `vercel whoami` → "token is not valid". `vercel login` 으로 재발급 필요.
-  배포는 GitHub auto-deploy 로 정상 동작 중이라 긴급도는 낮으나, 수동 `vercel --prod` / 로그 조회는 불가.
+- ~~Vercel CLI 토큰 만료~~ → **2026-08-06 실측 정상**(`vercel env ls` 동작, papas-yohan 로그인). 이 항목은 해소됨.
 - **Supabase CLI 가 타 계정(Storywork)으로 로그인**: `100p_books`(rpgjrckrcrxhrbrimjbv) 조직이 안 보임.
   → `supabase db push` 직접 적용 불가. 마이그레이션은 SQL Editor 수동 실행으로 진행 중 (0023/0024 완료).
   papascompany 계정 운영 자동화 원하면 `supabase logout && supabase login` 재인증 필요.
@@ -231,7 +231,7 @@
 - 실행: `pnpm e2e` (자동 dev 서버) / `PLAYWRIGHT_BASE_URL=... pnpm e2e` (외부 URL)
 - 커버: 홈, /upload(가드), /gallery, /login, /mypage, /mypage/points
 
-### Lighthouse 모바일 (운영 https://100pbooks.vercel.app/)
+### Lighthouse 모바일 (운영) — ⚠️ **2026-05-13 옛 측정치. 성능 정본은 위 §0-4(2026-08-05)**
 | 지표 | 값 | 점수 | 목표 |
 |---|---|---|---|
 | **Performance** | — | **97/100** | — |
@@ -327,21 +327,35 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ---
 
-## 다음 개발 우선순위 (권고) — 2026-05-30 갱신
+## 다음 개발 우선순위 (권고) — 2026-08-06 갱신
 
 ### 🔴 운영 활성화 (코드 외 — 사용자 콘솔 작업)
 
-1. ~~**Supabase 운영 DB 마이그레이션 적용** — 0023 + 0024~~ ✅ **완료 (2026-05-14)**
-2. **Kakao OAuth 콘솔 등록** — REST API Key + Client Secret → Supabase Provider Enable
-3. **Resend API Key + EMAIL_FROM Vercel 환경변수** — 가입/주문 메일 실 발송
-4. **TossPayments 운영 키** — 라이브 키 + 웹훅 secret 등록
+**운영 env 실측 (2026-08-06, `vercel env ls`)** — Production 11종 설정됨:
+`NEXT_PUBLIC_SUPABASE_URL/ANON_KEY` · `SUPABASE_SERVICE_ROLE_KEY` · `NEXT_PUBLIC_APP_URL` ·
+`TOSS_SECRET_KEY`/`TOSS_CLIENT_KEY`/`NEXT_PUBLIC_TOSS_CLIENT_KEY` ·
+`STORIGE_API_URL`/`STORIGE_API_KEY`/`STORIGE_WORKER_API_KEY` · `CRON_SECRET`
+
+**미설정 3종 — 코드는 대비돼 있으나 기능이 꺼져 있다:**
+
+| 미설정 env | 실제 동작 | 근거 |
+|---|---|---|
+| `TOSS_WEBHOOK_SECRET` | ⚠️ production 에서 **결제 웹훅을 전부 500 `WEBHOOK_NOT_CONFIGURED` 로 거부**(fail-closed) | `app/api/payments/webhook/route.ts:75-84` |
+| `UPSTASH_REDIS_REST_URL`/`TOKEN` | rate limit **전면 fail-open**(가입 라우트 포함) | `lib/security/rate-limit.ts:13,21-23` |
+| `RESEND_API_KEY`/`EMAIL_FROM` | 메일 job **cancelled 처리 → 발송 0** | `lib/email/worker.ts:168-172` |
+
+1. ~~**Supabase 운영 DB 마이그레이션 적용**~~ ✅ **0001~0029 전부 완료**(0029: 2026-07-31)
+2. **`TOSS_WEBHOOK_SECRET` 등록** — 현재 웹훅이 전면 거부되므로 결제 상태 동기화에 영향. **우선순위 최상**
+3. **Kakao OAuth 콘솔 등록** — REST API Key + Client Secret → Supabase Provider Enable
+4. **Resend API Key + EMAIL_FROM** — 가입/주문 메일 실 발송(현재 발송 0)
 5. **(선택) Upstash Redis 구독 + env** — Rate limit 활성화 (미설정 시 fail-open, 보안 권장)
+6. **(로컬) `STORIGE_API_KEY`/`STORIGE_WORKER_API_KEY`** — `.env.local` 에 없어 Storige 연동 로컬 실증 불가
 
 ### 🔧 로컬 개발 환경 — CLI 재인증 (운영 자동화용, 선택)
 
 | 항목 | 증상 | 조치 |
 |---|---|---|
-| Vercel CLI 토큰 만료 | `vercel whoami` 실패 | `vercel login` 재발급 — 수동 배포/로그 조회 복구 |
+| ~~Vercel CLI 토큰 만료~~ | 해소됨(2026-08-06 실측) | 조치 불필요 |
 | Supabase CLI 타 계정 로그인 | `Storywork` 조직만 표시, 100p 안 보임 | `supabase logout && supabase login` (papascompany 계정) |
 
 > 두 항목 모두 **운영에는 영향 없음** (배포=GitHub auto-deploy, 마이그레이션=SQL Editor 수동).
@@ -408,7 +422,7 @@ E2E 스모크 (Playwright):  desktop+mobile chromium 12/12 통과 (22.5s)
 접근성 (axe-core):       WCAG 2.1 AA 25/25 통과 · 위반 0 (2026-08-03)
 PDF 회귀(페이지수+해시): ✅ pnpm test:pdf — 4 케이스 / ~300ms
 PDF 런타임 검증:          pnpm verify:pdf — 40KB / 353ms / PDF 1.7
-Lighthouse 모바일:        Performance 97 · LCP 1.5s · CLS 0
+Lighthouse 모바일:        Performance 81 · LCP 5.2s · TTI 5.2s · CLS 0 (2026-08-05, 3회 중앙값)
 CI (GitHub Actions):     ✅ typecheck·lint·test·pdf·build + e2e + a11y (2026-08-03 신설)
 ```
 
