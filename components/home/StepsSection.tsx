@@ -1,10 +1,21 @@
-"use client";
-
-import { useRef } from "react";
-import { motion, useInView } from "framer-motion";
 import { ArrowRight, Upload, Wand2, ShoppingBag } from "lucide-react";
 import Link from "next/link";
+
 import { Button } from "@/components/ui/button";
+
+/**
+ * 홈 페이지 — "3분 만에 완성되는 포토북" 3단계 섹션.
+ *
+ *   - 진입: CSS @keyframes fade-up + animationDelay stagger.
+ *     framer-motion(motion/useInView) 의존을 제거해 **RSC 서버 컴포넌트**로 SSR 된다
+ *     (FeatureCards / BookSizeCards 와 동일한 패턴).
+ *     framer-motion 은 레포에서 이 컴포넌트가 유일한 사용처였으므로 번들에서 완전히 빠진다.
+ *   - 호버: motion-safe 조건부 translate + CSS transition (기존 whileHover y:-8 대체).
+ *   - 연결선: animate-line-grow-x / -y (기존 scaleX/scaleY variants 대체).
+ *
+ * 주의: 이 컴포넌트를 다시 클라이언트化 하면 홈 First Load JS 가 크게 늘고
+ * (ssr:false 였던 시절 SI/TTI 악화 원인) 섹션이 JS 로드 후에야 보이게 된다.
+ */
 
 const STEPS = [
   {
@@ -36,59 +47,12 @@ const STEPS = [
   },
 ] as const;
 
-/* ─── Animation Variants ──────────────────────────────────────────────────── */
-
-const containerVariants = {
-  hidden: {},
-  visible: {
-    transition: { staggerChildren: 0.2, delayChildren: 0.1 },
-  },
-};
-
-const headingVariants = {
-  hidden: { opacity: 0, y: 24 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } },
-};
-
-const cardVariants = {
-  hidden: { opacity: 0, y: 40 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] },
-  },
-};
-
-const lineVariants = {
-  hidden: { scaleX: 0 },
-  visible: {
-    scaleX: 1,
-    transition: { duration: 1.1, ease: [0.22, 1, 0.36, 1], delay: 0.35 },
-  },
-};
-
-const badgeVariants = {
-  hidden: { scale: 0.6, opacity: 0 },
-  visible: {
-    scale: 1,
-    opacity: 1,
-    transition: { type: "spring", stiffness: 260, damping: 18, delay: 0.1 },
-  },
-};
-
-/* ─── Component ───────────────────────────────────────────────────────────── */
-
 export default function StepsSection() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const isInView = useInView(sectionRef, { once: true, amount: 0.25 });
-
   return (
-    <section
-      ref={sectionRef}
-      className="relative py-12 md:py-20 bg-night overflow-hidden"
-    >
+    <section className="relative py-12 md:py-20 bg-night overflow-hidden">
       {/* 배경 텍스처 그라디언트 */}
       <div
+        aria-hidden
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
@@ -98,111 +62,98 @@ export default function StepsSection() {
 
       <div className="container relative z-10">
         {/* 헤더 */}
-        <motion.div
-          className="mx-auto max-w-xl text-center mb-12"
-          variants={containerVariants}
-          initial="hidden"
-          animate={isInView ? "visible" : "hidden"}
-        >
-          <motion.p
-            variants={headingVariants}
-            className="text-xs font-semibold uppercase tracking-[0.25em] text-white/30 mb-3"
+        <div className="mx-auto max-w-xl text-center mb-12">
+          <p
+            className="text-xs font-semibold uppercase tracking-[0.25em] text-white/30 mb-3 animate-fade-up"
+            style={{ animationDelay: "100ms" }}
           >
             How it works
-          </motion.p>
-          <motion.h2
-            variants={headingVariants}
-            className="text-2xl font-bold tracking-tight text-white md:text-3xl"
+          </p>
+          <h2
+            className="text-2xl font-bold tracking-tight text-white md:text-3xl animate-fade-up"
+            style={{ animationDelay: "180ms" }}
           >
             3분 만에 완성되는 포토북
-          </motion.h2>
-          <motion.p
-            variants={headingVariants}
-            className="mt-2 text-sm text-white/60"
+          </h2>
+          <p
+            className="mt-2 text-sm text-white/60 animate-fade-up"
+            style={{ animationDelay: "260ms" }}
           >
             세 단계만 거치면 나만의 감성 포토북이 완성돼요.
-          </motion.p>
-        </motion.div>
+          </p>
+        </div>
 
         {/* Steps Grid */}
         <div className="relative">
           {/* 데스크탑 연결선 */}
-          <div className="hidden md:block absolute top-[52px] left-[calc(16.66%+40px)] right-[calc(16.66%+40px)] h-px bg-white/8 overflow-hidden">
-            <motion.div
-              className="h-full origin-left"
+          <div
+            aria-hidden
+            className="hidden md:block absolute top-[52px] left-[calc(16.66%+40px)] right-[calc(16.66%+40px)] h-px bg-white/8 overflow-hidden"
+          >
+            <div
+              className="h-full origin-left animate-line-grow-x"
               style={{
                 background:
                   "linear-gradient(90deg, #FF6B5E 0%, #FFD9D2 50%, #FFB23E 100%)",
+                animationDelay: "350ms",
               }}
-              variants={lineVariants}
-              initial="hidden"
-              animate={isInView ? "visible" : "hidden"}
             />
           </div>
 
           {/* 모바일 수직 연결선 */}
-          <div className="md:hidden absolute left-6 top-[52px] bottom-[52px] w-px bg-white/8 overflow-hidden">
-            <motion.div
-              className="w-full origin-top"
+          <div
+            aria-hidden
+            className="md:hidden absolute left-6 top-[52px] bottom-[52px] w-px bg-white/8 overflow-hidden"
+          >
+            <div
+              className="w-full origin-top animate-line-grow-y"
               style={{
                 background:
                   "linear-gradient(180deg, #FF6B5E 0%, #FFD9D2 50%, #FFB23E 100%)",
+                animationDelay: "400ms",
               }}
-              variants={{
-                hidden: { scaleY: 0 },
-                visible: {
-                  scaleY: 1,
-                  transition: { duration: 1.2, ease: [0.22, 1, 0.36, 1], delay: 0.4 },
-                },
-              }}
-              initial="hidden"
-              animate={isInView ? "visible" : "hidden"}
             />
           </div>
 
-          <motion.div
-            className="grid gap-6 md:grid-cols-3"
-            variants={containerVariants}
-            initial="hidden"
-            animate={isInView ? "visible" : "hidden"}
-          >
-            {STEPS.map(({ num, icon: Icon, title, desc, accent, glow, border }) => (
-              <motion.div
+          <div className="grid gap-6 md:grid-cols-3">
+            {STEPS.map(({ num, icon: Icon, title, desc, accent, glow, border }, i) => (
+              <div
                 key={num}
-                variants={cardVariants}
-                whileHover={{ y: -8, transition: { duration: 0.3 } }}
-                className="relative pl-16 md:pl-0 md:flex md:flex-col md:items-center md:text-center group cursor-default"
+                className="relative pl-16 md:pl-0 md:flex md:flex-col md:items-center md:text-center group cursor-default animate-fade-up motion-safe:hover:-translate-y-2 transition-transform duration-300 ease-out"
+                style={{ animationDelay: `${300 + i * 200}ms` }}
               >
                 {/* 번호 배지 */}
-                <motion.div
-                  variants={badgeVariants}
-                  className="relative mb-5 flex-shrink-0"
-                  style={{ alignSelf: "flex-start" }}
+                <div
+                  className="relative mb-5 flex-shrink-0 self-start animate-badge-pop"
+                  style={{ animationDelay: `${400 + i * 200}ms` }}
                 >
-                  {/* Outer glow ring — animates on hover */}
-                  <motion.div
+                  {/* Outer glow ring — 호버 시 */}
+                  <div
+                    aria-hidden
                     className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                     style={{
                       background: `radial-gradient(circle, ${glow} 0%, transparent 70%)`,
                       transform: "scale(2.2)",
                     }}
                   />
-                  {/* Animated border ring */}
-                  <motion.div
-                    className="absolute -inset-2 rounded-full border opacity-0 group-hover:opacity-100 transition-all duration-500 group-hover:scale-110"
+                  {/* Border ring — 호버 시 */}
+                  <div
+                    aria-hidden
+                    className="absolute -inset-2 scale-[0.85] rounded-full border opacity-0 transition-all duration-500 group-hover:scale-110 group-hover:opacity-100"
                     style={{ borderColor: border }}
-                    initial={{ scale: 0.85 }}
                   />
                   {/* Badge body */}
                   <div
                     className="relative z-10 flex size-[80px] items-center justify-center rounded-full border"
                     style={{
-                      background: `linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%)`,
+                      background:
+                        "linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.03) 100%)",
                       borderColor: "rgba(255,255,255,0.1)",
                     }}
                   >
-                    {/* Decorative large faded number */}
+                    {/* 장식용 대형 숫자 */}
                     <span
+                      aria-hidden
                       className="font-display-num absolute text-[72px] font-bold select-none"
                       style={{
                         color: accent,
@@ -216,6 +167,7 @@ export default function StepsSection() {
                       {num}
                     </span>
                     <Icon
+                      aria-hidden
                       className="relative z-10 size-7 transition-transform duration-300 group-hover:scale-110"
                       style={{ color: accent }}
                     />
@@ -223,12 +175,13 @@ export default function StepsSection() {
 
                   {/* Step number label */}
                   <div
+                    aria-hidden
                     className="absolute -top-1 -right-1 z-20 flex size-6 items-center justify-center rounded-full text-[10px] font-bold text-white"
                     style={{ background: accent }}
                   >
                     {parseInt(num, 10)}
                   </div>
-                </motion.div>
+                </div>
 
                 {/* 카드 본문 */}
                 <div
@@ -239,46 +192,51 @@ export default function StepsSection() {
                       "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)",
                   }}
                 >
-                  {/* 호버 시 coral accent 그라디언트 상단 라인 */}
-                  <motion.div
+                  {/* 호버 시 상단 accent 라인 */}
+                  <div
+                    aria-hidden
                     className="absolute inset-x-0 top-0 h-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                    style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }}
+                    style={{
+                      background: `linear-gradient(90deg, transparent, ${accent}, transparent)`,
+                    }}
                   />
 
                   {/* 배경 대형 숫자 (장식) */}
                   <span
+                    aria-hidden
                     className="font-display-num absolute bottom-2 right-3 text-[64px] font-bold leading-none select-none pointer-events-none transition-opacity duration-300 group-hover:opacity-[0.08]"
                     style={{ color: accent, opacity: 0.04 }}
                   >
                     {num}
                   </span>
 
-                  <h3 className="relative text-base font-bold text-white mb-2">{title}</h3>
-                  <p className="relative text-sm text-white/60 leading-relaxed">{desc}</p>
+                  <h3 className="relative text-base font-bold text-white mb-2">
+                    {title}
+                  </h3>
+                  <p className="relative text-sm text-white/60 leading-relaxed">
+                    {desc}
+                  </p>
                 </div>
-              </motion.div>
+              </div>
             ))}
-          </motion.div>
+          </div>
         </div>
 
         {/* CTA */}
-        <motion.div
-          className="mt-10 text-center"
-          initial={{ opacity: 0, y: 20 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.6, delay: 0.8, ease: [0.22, 1, 0.36, 1] }}
+        <div
+          className="mt-10 text-center animate-fade-up"
+          style={{ animationDelay: "800ms" }}
         >
-          <Button
-            asChild
-            size="lg"
-            className="bg-coral text-white hover:bg-coral-600 border-0 font-semibold shadow-coral-glow"
-          >
+          {/* variant="coral" 은 bg-coral + text-night (AA 확보) — 예전의 인라인
+              `bg-coral text-white` 는 대비 2.79:1 로 미달이었고, ssr:false 라
+              접근성 감사에서 검출조차 되지 않았다. */}
+          <Button asChild size="lg" variant="coral" className="font-semibold">
             <Link href="/upload">
               지금 시작하기
               <ArrowRight className="size-4" />
             </Link>
           </Button>
-        </motion.div>
+        </div>
       </div>
     </section>
   );
