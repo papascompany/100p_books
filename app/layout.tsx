@@ -25,7 +25,10 @@ const pretendard = localFont({
   src: "../public/fonts/Pretendard-core.woff2",
   variable: "--font-pretendard",
   display: "swap",
-  preload: true,
+  // preload 하지 않는다 — 폰트 preload 는 <link as="image"> 보다 앞서 삽입되어
+  // LCP 요소(히어로 이미지)의 대역폭을 뺏는다. 운영 실측에서 core 를 preload 했을 때
+  // LCP 가 1.75s → 5.19s 로 악화했다. display:swap + 533KB 라 FOUT 은 짧다.
+  preload: false,
   weight: "45 920",
 });
 
