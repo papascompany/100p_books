@@ -1,6 +1,6 @@
 # 100p Books — 개발 현황 및 다음 단계
 
-> 최종 업데이트: 2026-08-05
+> 최종 업데이트: 2026-08-03
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
 > 운영 빌드: `296d02c` (fix(security): 감사 리뷰 fix-forward)
@@ -8,31 +8,7 @@
 
 ---
 
-## 🆕 최근 작업 (2026-06-13 ~ 2026-08-05)
-
-### 0-4. Lighthouse SI/TTI 개선 — 폰트 분할 + 홈 번들 축소 (2026-08-05) — ⚠️ **미커밋**
-- **실측으로 병목을 재정의**: 기존 기록은 원인을 "클라이언트 JS 사이즈(fabric chunk 등)"로
-  적어 뒀으나, 운영 Lighthouse 실측 결과 **TBT 는 80ms 로 이미 낮고 TTI 만 12.4s** 였다.
-  전송량 1위는 `PretendardVariable.woff2` **2,011KB(전체의 82%)** — 병목은 JS 가 아니라 폰트였다.
-- **폰트 2분할**(`scripts/build-font-subsets.py`): core(라틴·기호·가나 + KS X 1001 한글 2,350자,
-  **533KB**) / ext(나머지 완성형 8,822자, 1,317KB). `next/font` 를 두 번 선언하고
-  tailwind `fontFamily.sans` 에 core → ext 순으로 나열 — 브라우저가 core 에 없는 글리프를
-  만날 때만 ext 를 받는다(unicode-range 없이 폴백 체인만으로. next/font 의 size-adjust 유지).
-  실기 검증: 초기엔 core 만 로드, 희귀 음절(쀍뷁쭭꾧) 삽입 시 ext 자동 로드 확인.
-- **홈 번들 축소**: `StepsSection` 이 레포에서 framer-motion 의 **유일한 사용처**였다.
-  진입 애니메이션을 CSS(`animate-fade-up`/`line-grow`/`badge-pop`)로 옮겨 RSC 서버 컴포넌트화하고
-  `dynamic(ssr:false)` 를 제거했다. framer-motion 의존성 자체를 삭제.
-  → 홈 First Load JS **150kB → 102kB**, 라우트 청크 41.5kB → 190B.
-- **부수 발견(실제 결함)**: `ssr:false` 때문에 axe 가 StepsSection 을 검사하지 못하고 있었다.
-  SSR 로 바꾸자 CTA 의 `bg-coral text-white`(대비 2.79:1, GL-5 와 동일 유형) 위반이 드러나
-  `variant="coral"`(text-night)로 교정. a11y 25/25 통과 회복.
-- **측정치**(로컬 prod 빌드, 모바일 스로틀, 각 3회 중앙값 — 절대값은 운영과 다르므로 상대 비교용):
-  TTI 14,242ms → **6,594ms(-54%)** · LCP 14,189ms → **6,534ms(-54%)** · 전송량 2,524KB → **1,009KB(-60%)**
-  · CLS 0 유지. FCP/SI 는 측정 편차(같은 코드가 46~75점) 범위 안이라 유의한 변화로 보지 않는다.
-- 검증: typecheck 0 · lint 0 · vitest 169p/1s · pdf 회귀 4케이스 · e2e 12p · a11y 25p · build 성공.
-- 남은 것: 운영 배포 후 운영 URL 재측정으로 실사용 지표 확인(로컬 절대값은 원격 이미지에 지배됨).
-
-## 이전 작업 (2026-06-13 ~ 2026-08-03)
+## 🆕 최근 작업 (2026-06-13 ~ 2026-08-03)
 
 ### 0-3. 품질 백로그 착수 — CI 신설 + PDF 회귀 + WCAG AA (2026-08-03) — **CI 전건 green**
 - **CI 파이프라인 신설**(`.github/workflows/ci.yml`) — 그동안 CI 가 아예 없어 "push → Vercel 실패"
@@ -323,10 +299,7 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 5. ~~**WCAG 2.1 AA 접근성 감사**~~ ✅ **완료 (2026-08-03)** — axe-core 자동 감사(`pnpm test:a11y`),
    위반 5종 수정 후 25/25 통과. 잔여: 키보드 only 회귀 시나리오, 로그인 이후 화면(에디터·주문·마이페이지)은
    인증 픽스처가 필요해 7번과 함께 진행.
-6. ~~**Lighthouse Speed Index / TTI 개선**~~ ✅ **1차 완료 (2026-08-05)** — 실측 결과 병목은
-   JS 가 아니라 2MB 폰트였다(운영 TBT 80ms / TTI 12.4s). 폰트 core/ext 분할 + 홈 번들 48kB 감소로
-   로컬 기준 TTI·LCP -54%, 전송량 -60%. 잔여: 배포 후 운영 재측정, 홈 원격 이미지(Unsplash 16장)
-   최적화, ext 폰트가 필요한 페이지의 체감 확인.
+6. **Lighthouse Speed Index / TTI 추가 개선** — 현재 LCP 1.5s / Performance 97 (Core Web Vitals OK), SI 4.8s / TTI 7.3s 노란불 잔존. fabric.js 추가 lazy split, 홈 hydration 분리
 7. **인증된 사용자 E2E 시나리오 확장** — 현재 스모크는 익명/가드만. 업로드 → 에디터 → 주문 골든 플로우.
    **선행 조건(사용자 액션)**: E2E 전용 테스트 계정 + CI 시크릿(`E2E_EMAIL`/`E2E_PASSWORD`) 등록,
    또는 service_role 로 테스트 유저를 만드는 시드 스크립트 승인. 이게 정해지면 착수 가능.

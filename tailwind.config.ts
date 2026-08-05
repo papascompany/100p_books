@@ -111,8 +111,6 @@ const config: Config = {
         /* Pretendard Variable — 한글/UI 기본 폰트 (next/font CSS 변수) */
         sans: [
           "var(--font-pretendard)",
-          /* 희귀 한글 음절 폴백 — core 서브셋에 없는 글리프만 이 폰트에서 받는다 */
-          "var(--font-pretendard-ext)",
           "ui-sans-serif",
           "system-ui",
           "-apple-system",
@@ -122,7 +120,6 @@ const config: Config = {
         ],
         display: [
           "var(--font-pretendard)",
-          "var(--font-pretendard-ext)",
           "ui-sans-serif",
           "sans-serif",
         ],
@@ -176,20 +173,6 @@ const config: Config = {
           "0%, 100%": { transform: "translateY(0)" },
           "50%": { transform: "translateY(-6px)" },
         },
-        /* 스텝 연결선 확장 — framer-motion scaleX/scaleY 대체 */
-        "line-grow-x": {
-          from: { transform: "scaleX(0)" },
-          to: { transform: "scaleX(1)" },
-        },
-        "line-grow-y": {
-          from: { transform: "scaleY(0)" },
-          to: { transform: "scaleY(1)" },
-        },
-        /* 스텝 번호 배지 — framer-motion spring(stiffness 260/damping 18) 근사 */
-        "badge-pop": {
-          from: { opacity: "0", transform: "scale(0.6)" },
-          to: { opacity: "1", transform: "scale(1)" },
-        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -198,9 +181,6 @@ const config: Config = {
         "fade-up": "fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both",
         "scale-in": "scale-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both",
         float: "float 5s ease-in-out infinite",
-        "line-grow-x": "line-grow-x 1.1s cubic-bezier(0.22, 1, 0.36, 1) both",
-        "line-grow-y": "line-grow-y 1.2s cubic-bezier(0.22, 1, 0.36, 1) both",
-        "badge-pop": "badge-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both",
       },
       spacing: {
         /* Nike spacing scale */

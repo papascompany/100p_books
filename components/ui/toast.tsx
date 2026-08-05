@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 /**
  * shadcn 패턴 기반 Toast 프리미티브.
  * - variants: default / success / destructive / warning
- * - rounded-lg + soft shadow + Radix 애니메이션 friendly fade/slide
+ * - rounded-lg + soft shadow + framer-motion friendly fade/slide
  * - 다크모드 토큰 사용
  */
 

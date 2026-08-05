@@ -8,33 +8,11 @@ import InstallPrompt from "@/components/pwa/InstallPrompt";
 
 import "./globals.css";
 
-/**
- * Pretendard 를 2조각으로 나눠 로드한다 (scripts/build-font-subsets.py 로 생성).
- *
- *   core = 라틴·기호·가나 + KS X 1001 한글 2,350자 (533KB) — 실제 화면의 거의 전부를 덮는다.
- *   ext  = 나머지 완성형 한글 8,822자 (1,317KB) — 희귀 음절이 실제로 등장할 때만 받는다.
- *
- * 통짜 2,009KB 를 preload 하던 시절, 운영 Lighthouse 는 TBT 80ms 로 낮은데도
- * TTI 가 12.4s 였다. 병목은 JS 가 아니라 이 폰트의 네트워크 점유였다.
- *
- * unicode-range 를 직접 쓰지 않고 font-family 폴백 체인(tailwind fontFamily.sans)에
- * core → ext 순으로 나열한다. 브라우저는 core 에 없는 글리프를 만날 때만 ext 를 요청하므로
- * next/font 의 자동 fallback 메트릭(size-adjust, CLS 방지)을 그대로 유지할 수 있다.
- */
 const pretendard = localFont({
-  src: "../public/fonts/Pretendard-core.woff2",
+  src: "../public/fonts/PretendardVariable.woff2",
   variable: "--font-pretendard",
   display: "swap",
   preload: true,
-  weight: "45 920",
-});
-
-const pretendardExt = localFont({
-  src: "../public/fonts/Pretendard-ext.woff2",
-  variable: "--font-pretendard-ext",
-  display: "swap",
-  // 희귀 음절 전용 — critical path 에 두지 않는다.
-  preload: false,
   weight: "45 920",
 });
 
@@ -153,7 +131,7 @@ export default function RootLayout({
           />
         ) : null}
       </head>
-      <body className={`${pretendard.variable} ${pretendardExt.variable} ${bebasNeue.variable} min-h-screen font-sans antialiased bg-background text-foreground`}>
+      <body className={`${pretendard.variable} ${bebasNeue.variable} min-h-screen font-sans antialiased bg-background text-foreground`}>
         <ThemeProvider>
           <div className="flex min-h-screen flex-col">{children}</div>
           <Toaster />

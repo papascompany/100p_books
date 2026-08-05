@@ -41,7 +41,7 @@
    - ~~PDF 회귀 테스트 CI 통합~~ ✅ 완료(위 12번) — 잔여는 CI linux-x64 baseline 커밋뿐
    - ~~WCAG 2.1 AA 접근성 감사~~ ✅ 완료(위 12번) — 잔여: 키보드 only 회귀, 로그인 이후 화면(아래 항목과 함께)
    - **인증된 사용자 E2E 골든 플로우**(업로드→에디터→주문) — **선행 조건이 사용자 액션**: E2E 전용 테스트 계정 + CI 시크릿(`E2E_EMAIL`/`E2E_PASSWORD`) 등록, 또는 service_role 시드 스크립트 승인. 정해지면 바로 착수 가능(a11y 감사도 이 픽스처로 로그인 이후 화면까지 확장).
-   - ~~Lighthouse SI/TTI 개선~~ ✅ 1차 완료(2026-08-05) — 병목은 JS 가 아니라 2MB 폰트였다(운영 TBT 80ms·TTI 12.4s 실측). 폰트 core(533KB)/ext(1317KB) 분할 + framer-motion 제거로 홈 150→102kB. 로컬 TTI/LCP -54%. **잔여: 배포 후 운영 URL 재측정**, 홈 Unsplash 이미지 16장 최적화.
+   - Lighthouse SI 4.8s/TTI 7.3s 개선(fabric lazy split)
    - 포인트 홀드/예약 설계 — create 검증↔confirm 차감 사이 이중 사용의 구조적 해소(현재는 confirm 캡처 전 재확인으로 완화, ms TOCTOU 감수). pending 주문 합산 검증 또는 ledger hold RPC.
    - 100% 할인 코드 정책 — 현재 100원 미만 주문은 AMOUNT_BELOW_MINIMUM 으로 차단(무료 주문 경로 없음). 무료 주문 지원 여부 오너 결정.
 3. **[선택] 퍼널 데이터 첫 확인** — 0029 적용(2026-07-31) 이후 실사용 이벤트가 쌓이면 `select event, count(*) from funnel_events group by 1;`로 유입 확인. 필요 시 관리자 콘솔 퍼널 대시보드 착수 여부 결정.

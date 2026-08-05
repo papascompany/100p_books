@@ -1,12 +1,10 @@
 import { ArrowRight, BookOpen, CheckCircle2, Package, Star } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 
 import BookSizeCards from "@/components/home/BookSizeCards";
 import FeatureCards from "@/components/home/FeatureCards";
-// StepsSection 은 RSC 서버 컴포넌트다(framer-motion 제거 후 CSS 애니메이션).
-// 예전처럼 dynamic(ssr:false) 로 되돌리면 섹션이 JS 로드 후에야 그려져 SI/TTI 가 나빠진다.
-import StepsSection from "@/components/home/StepsSection";
 import { Button } from "@/components/ui/button";
 import { getSiteContentMany } from "@/lib/content/get";
 
@@ -15,6 +13,30 @@ import { getSiteContentMany } from "@/lib/content/get";
 //   CMS 저장 시 revalidateTag/revalidatePath 로 즉시 갱신.
 //   Header 가 cookies() 를 안 쓰게 바뀌어 이 페이지가 진짜 정적/ISR 로 빌드됨.
 export const revalidate = 300;
+
+// StepsSection 만 ssr:false 유지 — 기존 동작 호환을 위해.
+const StepsSection = dynamic(() => import("@/components/home/StepsSection"), {
+  ssr: false,
+  loading: () => (
+    <section className="py-12 md:py-20 bg-night">
+      <div className="container">
+        <div className="mx-auto max-w-xl text-center mb-12 space-y-3">
+          <div className="h-4 w-24 bg-white/10 mx-auto rounded" />
+          <div className="h-8 w-64 bg-white/10 mx-auto rounded" />
+        </div>
+        <div className="grid gap-6 md:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="border border-white/10 bg-white/5 p-5 space-y-3">
+              <div className="size-20 rounded-full bg-white/10 mx-auto md:mx-0" />
+              <div className="h-5 w-32 bg-white/10 rounded" />
+              <div className="h-4 w-full bg-white/10 rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  ),
+});
 
 // ─── 컴포넌트 ──────────────────────────────────────────────────────────────
 
@@ -141,10 +163,10 @@ export default async function LandingPage() {
         </div>
       </section>
 
-      {/* ══ 3. 특징 3-컬럼 (사진 배경 + CSS fade-up) ══════════════════════ */}
+      {/* ══ 3. 특징 3-컬럼 (사진 배경 + framer-motion) ═════════════════════ */}
       <FeatureCards items={features} />
 
-      {/* ══ 4. 북 사이즈 쇼케이스 (사진 배경 + CSS fade-up) ═══════════════ */}
+      {/* ══ 4. 북 사이즈 쇼케이스 (사진 배경 + framer-motion) ══════════════ */}
       <BookSizeCards items={sizes} />
 
       {/* ══ 5. 사용 방법 3스텝 ══════════════════════════════════════════════ */}
