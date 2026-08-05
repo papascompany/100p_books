@@ -318,6 +318,10 @@ function checkPixels(
 
 async function main(): Promise<void> {
   const t0 = Date.now();
+  // 시작 로그 — CI 에서 어느 단계까지 갔는지(모듈 로드/렌더/구조) 구분하기 위해.
+  console.log(
+    `[pdf-regression] start platform=${PLATFORM_KEY} node=${process.version} update=${UPDATE}`,
+  );
   const baseline = loadBaseline();
 
   const renderCtx = {
