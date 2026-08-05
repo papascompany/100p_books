@@ -270,7 +270,7 @@ export default function LoginForm() {
             <button
               type="button"
               onClick={() => switchMode("signin")}
-              className="mt-4 text-sm font-medium text-coral underline-offset-4 hover:underline"
+              className="mt-4 text-sm font-medium text-coral-700 underline-offset-4 hover:underline dark:text-coral-300"
             >
               로그인으로 돌아가기
             </button>
@@ -369,7 +369,7 @@ export default function LoginForm() {
                     <button
                       type="button"
                       onClick={() => switchMode("forgot")}
-                      className="text-xs text-muted-foreground underline-offset-4 hover:text-coral hover:underline"
+                      className="text-xs text-muted-foreground underline-offset-4 hover:text-coral-700 hover:underline dark:hover:text-coral-300"
                     >
                       비밀번호 찾기
                     </button>
@@ -470,7 +470,7 @@ export default function LoginForm() {
                   <button
                     type="button"
                     onClick={() => switchMode("signup")}
-                    className="font-medium text-coral underline-offset-4 hover:underline"
+                    className="font-medium text-coral-700 underline-offset-4 hover:underline dark:text-coral-300"
                   >
                     회원가입
                   </button>

@@ -13,7 +13,7 @@
 ### 작업 환경 (중요)
 - **정본 로컬**: `/Users/yohan/Developer/claude/100p_books` (branch `main`). Documents 사본은 node_modules 제거됨 — 쓰지 말 것.
 - 레포 `papascompany/100p_books`(PUBLIC). GitHub **auto-deploy 정상**(main push→Vercel 자동빌드, 빈 커밋 스킵).
-- **로컬 `pnpm lint/build` 불가**(node v22 ↔ comment-json 크래시, 코드 무관). → `tsc --noEmit` + `pnpm vitest run`은 정상, **Vercel 클린 빌드가 권위 검증**: push 후 `gh api repos/papascompany/100p_books/commits/<sha>/status --jq .state` 로 success 확인.
+- **로컬 전체 검증 가능**(2026-08-03 실측 — 과거 기록된 node v22 ↔ comment-json 크래시는 해소됨): `pnpm typecheck && pnpm lint && pnpm test && pnpm test:pdf && pnpm build` 모두 정상. push 후에는 GitHub Actions CI(`.github/workflows/ci.yml`)와 Vercel 빌드가 이중 검증: `gh api repos/papascompany/100p_books/commits/<sha>/status --jq .state`.
 - 커밋은 사용자가 요청할 때만. 커밋 메시지 끝 `Co-Authored-By: Claude ...`. zsh glob 때문에 git add 시 `[id]` 경로는 **따옴표**로.
 - **Supabase 운영 DB(`vprifnztvlduhpuwgdau`)는 MCP/CLI 불가**(MCP=타 계정 "storige's Org") → 마이그레이션은 사용자가 대시보드 SQL Editor 수동 적용. ⚠️ 함정: SQL Editor가 다른 프로젝트에 연결되면 `42P01 relation does not exist` — 상단이 `100p_books / PRODUCTION`인지 먼저 확인시킬 것. **0001~0029 적용 완료**(0029: 2026-07-31).
 - 첫 작업 전 루트 `STATUS.md` + 이 문서를 읽고 현재 상태를 사용자에게 보고할 것.
@@ -29,14 +29,17 @@
 8. **마이그레이션 0029 운영 적용 완료**(2026-07-31, 사용자 확인) — funnel_events 테이블+RLS. 사후 확인 rls_enabled=true/index 3/policy 1 기대값 일치. 계측 데이터 기록 시작됨.
 9. **모바일 UX/QA 일괄 개선 완결**(2026-08-01, `e656108`+`2d48ca7`, Vercel success) — 다른 세션이 시작한 27파일 개선(로그인 개편·업로드 서명 배치화·에디터 자동저장 보호·PreviewGrid DnD 재작성·제스처 팬/더블탭·a11y)을 이어서 자식 컴포넌트 3개(`MobileToolbar` 퀵바 / `ResourcePalette` tabs / `PagePreviewDialog` trimGuide)와 `clampPointsForMinPayment` 테스트로 완결. 상세: STATUS.md §최근 작업 0.
 10. **포인트 결제 배선 + 미적용 버그 수정**(2026-08-01) — `clampPointsForMinPayment`를 `OrderForm`/`orders/create` 양쪽 배선(단일 정본). **`pointsToUse`→`usePoints` 키 버그 수정**(기존엔 포인트가 전혀 적용 안 됨). 적대 리뷰 대응: 할인 소계 변경 시 자동 재검증, confirm 캡처 전 잔액 재확인(이중 사용 차단), AMOUNT_BELOW_MINIMUM 게이트(서버+클라). 상세: STATUS.md §최근 작업 0-1.
-11. **UI/UX 전수감사 118건 잔여분 완결**(2026-08-03, `81506b9`, **Vercel success**) — 8영역 감사 확정 118건 중 선행 커밋 미반영분 ~75건을 7샤드 병렬 구현 + 3렌즈 적대 리뷰 9건 반영. 핵심: CV-1 표지 폭 공식 완결(+`COVER_FORMAT_OUTDATED` 주문 게이트+구규격 배너), 표지 모바일 세그먼트 편집, MY-1/2 크래시, 주문서 draft 복원, 업로드 재진입 UI. 검증: tsc 0에러·vitest 169p·모바일 실화면·Vercel 클린 빌드. 상세: STATUS.md §최근 작업 0-2. ⚠️ 잔여 확인 1건: 운영 `book_sizes.cover_width_mm` 실값이 시드 의미(펼침 폭 302/296/406)인지 SQL 1회 확인 — `select name, cover_width_mm from book_sizes;`
+11. **UI/UX 전수감사 118건 잔여분 완결**(2026-08-03, `81506b9`, **Vercel success**) — 8영역 감사 확정 118건 중 선행 커밋 미반영분 ~75건을 7샤드 병렬 구현 + 3렌즈 적대 리뷰 9건 반영. 핵심: CV-1 표지 폭 공식 완결(+`COVER_FORMAT_OUTDATED` 주문 게이트+구규격 배너), 표지 모바일 세그먼트 편집, MY-1/2 크래시, 주문서 draft 복원, 업로드 재진입 UI. 검증: tsc 0에러·vitest 169p·모바일 실화면·Vercel 클린 빌드. 상세: STATUS.md §최근 작업 0-2. 운영 `book_sizes.cover_width_mm` 실값 확인 완료(2026-08-04, 사용자 SQL 확인 — 302/296/406 시드 의미와 일치) → 이 건 완전 종결.
+
+12. **품질 백로그 1차 착수**(2026-08-03) — ⚠️ **미커밋**. ① **CI 신설**(`.github/workflows/ci.yml` — 그동안 CI 부재로 push 후 Vercel 실패로만 회귀 인지 가능했음. verify/e2e/a11y 3잡, 더미 env 로 빌드) ② **PDF 회귀**(`pnpm test:pdf` — 구조는 플랫폼 무관 엄격, 첫 페이지 해시는 platform-arch 별. baseline 손상 실험으로 감지 실증) ③ **WCAG 2.1 AA 감사**(`pnpm test:a11y` — 위반 5종 발견·수정 후 25/25 통과). 상세: STATUS.md §최근 작업 0-3.
+    - **다음 세션 할 일**: 커밋·push 후 첫 CI 실행 로그에서 `linux-x64` 픽셀 해시를 받아 `test/fixtures/pdf-baseline.json` 에 커밋해야 CI 에서도 픽셀 회귀 비교가 시작된다(그 전까지는 구조 검증만 유효).
 
 ### 예정 작업 (우선순위 순 — 여기서 이어서 진행)
 1. **[사용자 액션 대기] Storige측 통지 전달** — 통지문 정본: `docs/STORIGE-NOTICE-2026-07-21.md`. 사용자가 Storige 세션에 붙여넣으면 끝. 요지: (a) validate/external FROZEN_ROUTES 등재 (b) 검증 result 키셋 골든 spec 신설 (c) 표지 검증 계약 긴장 정리(선택). 전달 완료 통보 받으면 이 항목 닫기.
-2. **품질 백로그** (사용자가 고르면 착수 — STATUS.md 우선순위 절 참조):
-   - PDF 회귀 테스트 CI 통합(페이지 수+첫 페이지 해시 — CLAUDE.md 명시 항목, 미구성)
-   - WCAG 2.1 AA 접근성 감사(Lighthouse a11y+axe-core)
-   - 인증된 사용자 E2E 골든 플로우(업로드→에디터→주문)
+2. **품질 백로그 잔여** (사용자가 고르면 착수 — STATUS.md 우선순위 절 참조):
+   - ~~PDF 회귀 테스트 CI 통합~~ ✅ 완료(위 12번) — 잔여는 CI linux-x64 baseline 커밋뿐
+   - ~~WCAG 2.1 AA 접근성 감사~~ ✅ 완료(위 12번) — 잔여: 키보드 only 회귀, 로그인 이후 화면(아래 항목과 함께)
+   - **인증된 사용자 E2E 골든 플로우**(업로드→에디터→주문) — **선행 조건이 사용자 액션**: E2E 전용 테스트 계정 + CI 시크릿(`E2E_EMAIL`/`E2E_PASSWORD`) 등록, 또는 service_role 시드 스크립트 승인. 정해지면 바로 착수 가능(a11y 감사도 이 픽스처로 로그인 이후 화면까지 확장).
    - Lighthouse SI 4.8s/TTI 7.3s 개선(fabric lazy split)
    - 포인트 홀드/예약 설계 — create 검증↔confirm 차감 사이 이중 사용의 구조적 해소(현재는 confirm 캡처 전 재확인으로 완화, ms TOCTOU 감수). pending 주문 합산 검증 또는 ledger hold RPC.
    - 100% 할인 코드 정책 — 현재 100원 미만 주문은 AMOUNT_BELOW_MINIMUM 으로 차단(무료 주문 경로 없음). 무료 주문 지원 여부 오너 결정.

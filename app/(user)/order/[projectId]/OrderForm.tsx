@@ -928,7 +928,7 @@ export default function OrderForm(props: OrderFormProps) {
             <hr className="my-2 border-border" />
             <div className="flex items-baseline justify-between rounded-lg bg-coral-50 px-3 py-2 dark:bg-coral-950/20">
               <dt className="text-sm font-semibold text-ink">최종 결제 금액</dt>
-              <dd className="font-display text-2xl font-bold tracking-tight text-coral">
+              <dd className="font-display text-2xl font-bold tracking-tight text-coral-700 dark:text-coral-300">
                 {fmtKrw(finalAmount)}
               </dd>
             </div>
@@ -996,7 +996,7 @@ function Field(props: {
     <label className={"flex flex-col gap-1.5 " + (props.className ?? "")}>
       <span className="text-xs font-medium text-muted-foreground">
         {props.label}
-        {props.required ? <span className="text-coral"> *</span> : null}
+        {props.required ? <span className="text-coral-700 dark:text-coral-300"> *</span> : null}
       </span>
       {props.children}
       {props.error ? (

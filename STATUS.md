@@ -10,6 +10,24 @@
 
 ## 🆕 최근 작업 (2026-06-13 ~ 2026-08-03)
 
+### 0-3. 품질 백로그 착수 — CI 신설 + PDF 회귀 + WCAG AA (2026-08-03) — ⚠️ **미커밋**
+- **CI 파이프라인 신설**(`.github/workflows/ci.yml`) — 그동안 CI 가 아예 없어 "push → Vercel 실패"
+  로만 회귀를 알 수 있었다. 3 잡: `verify`(typecheck·lint·test·pdf 회귀·build) / `e2e` / `a11y`.
+  운영 시크릿은 넣지 않고 형식만 유효한 더미 env 로 빌드한다(모든 env 접근이 lazy 임을 로컬 실증).
+- **PDF 회귀 테스트**(`scripts/pdf-regression.ts`, `pnpm test:pdf`) — CLAUDE.md 명시 부채 해소.
+  기존 `verify:pdf` 는 매직 헤더·크기만 봤다. 2계층 검증: ① 구조(페이지 수·페이지 크기 pt)는
+  플랫폼 무관 엄격 비교 ② 첫 페이지 SHA-256 은 `${platform}-${arch}` 키별 비교.
+  PDF 바이트 전체는 `setCreationDate(new Date())` 탓에 해시 대상이 될 수 없어 렌더 결과를 해싱한다.
+  **회귀 감지 실증**: baseline 을 일부러 손상시켜 픽셀·구조 both FAIL 재현 후 복원.
+- **WCAG 2.1 AA 감사**(`e2e/a11y.spec.ts`, `pnpm test:a11y`) — axe-core 로 공개 라우트 7종 ×
+  desktop/mobile + 인터랙션 3종 + 다크 모드 3종. **실측 위반 5종을 발견해 전건 수정**:
+  ① `--mute-fg` 46%→44% (soft-cloud 면 위 4.39:1 → 4.73:1) ② 홈 폴라로이드 캡션이 하드코딩
+  `bg-white` 위에 테마 토큰 `text-mute` 를 써 다크에서 2.82:1 (GL-1 과 같은 유형) → 고정색
+  ③ 텍스트 노드의 `text-coral` (2.79:1) → `coral-700` + `dark:coral-300` ④⑤ `bg-blue-500`
+  흰 텍스트 버튼(3.68:1) → blue-600/700. 수정 후 **25/25 통과·위반 0**.
+- 부수 정정: 문서에 오래 기록돼 있던 "로컬 lint/build 불가"가 **실측 결과 해소**됨(아래 환경 메모).
+- 검증: typecheck 0 · lint 0 · vitest 169p/1s · pdf 회귀 4케이스 · e2e 12p · a11y 25p · build 성공.
+
 ### 0-2. UI/UX 전수감사 118건 잔여분 완결 (2026-08-03) — 커밋 `81506b9`, **Vercel 빌드 success**
 - 배경: 8영역 UI/UX 감사(발견 119→적대검증 확정 118건) 중 `e656108`/`88b36d9`가 선반영한 부분을
   제외한 **잔여 ~75건**을 7샤드(표지/마이페이지/주문/에디터 페이지·그리드/업로드/온보딩)로 병렬 구현.
@@ -84,8 +102,9 @@
 
 ### 환경/배포 메모
 - **GitHub auto-deploy 정상**(실커밋 push→자동 빌드 확인). 빈 커밋은 Vercel이 스킵하므로 무시.
-- 로컬 `pnpm lint/build`는 세션 재개 후 **node v22 ↔ comment-json 툴링 크래시**로 불가(코드 무관).
-  → **`tsc --noEmit`은 정상**, **Vercel 클린 빌드가 권위 검증**.
+- ~~로컬 `pnpm lint/build` 불가(node v22 ↔ comment-json 크래시)~~ → **2026-08-03 실측 해소**.
+  현재 node v22.22.2 에서 `pnpm lint`·`pnpm build` 모두 정상 동작한다(0 경고 / 빌드 성공).
+  push 전 로컬 전체 검증이 가능하며, GitHub Actions CI 가 clean 환경에서 한 번 더 검증한다.
 - Supabase MCP/CLI는 다른 계정("storige's Org") → 운영 DB `vprifnztvlduhpuwgdau` 직접 SQL 불가 → 대시보드 수동.
 
 ### 보류 (착수 대기)
@@ -269,11 +288,16 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ### 🟡 품질 보강
 
-5. **WCAG 2.1 AA 접근성 감사** — Lighthouse a11y 카테고리 + axe-core 자동 감사 + 키보드 only 회귀
+5. ~~**WCAG 2.1 AA 접근성 감사**~~ ✅ **완료 (2026-08-03)** — axe-core 자동 감사(`pnpm test:a11y`),
+   위반 5종 수정 후 25/25 통과. 잔여: 키보드 only 회귀 시나리오, 로그인 이후 화면(에디터·주문·마이페이지)은
+   인증 픽스처가 필요해 7번과 함께 진행.
 6. **Lighthouse Speed Index / TTI 추가 개선** — 현재 LCP 1.5s / Performance 97 (Core Web Vitals OK), SI 4.8s / TTI 7.3s 노란불 잔존. fabric.js 추가 lazy split, 홈 hydration 분리
-7. **인증된 사용자 E2E 시나리오 확장** — 현재 스모크는 익명/가드만. 매직링크 mock + 업로드 → 에디터 → 주문 골든 플로우
+7. **인증된 사용자 E2E 시나리오 확장** — 현재 스모크는 익명/가드만. 업로드 → 에디터 → 주문 골든 플로우.
+   **선행 조건(사용자 액션)**: E2E 전용 테스트 계정 + CI 시크릿(`E2E_EMAIL`/`E2E_PASSWORD`) 등록,
+   또는 service_role 로 테스트 유저를 만드는 시드 스크립트 승인. 이게 정해지면 착수 가능.
 8. **PDF 100페이지 부하 검증** — Vercel Pro 플랜 가입 후 실측 (현재 1페이지 + photo+shadow 케이스만)
-9. **PDF 회귀 테스트 CI 통합** — 결과 PDF 페이지 수 + 첫 페이지 SHA-256 비교 (CLAUDE.md 명시 항목)
+9. ~~**PDF 회귀 테스트 CI 통합**~~ ✅ **완료 (2026-08-03)** — `pnpm test:pdf` + CI 잡.
+   잔여: CI(linux-x64) 픽셀 baseline 을 첫 실행 로그에서 받아 커밋해야 그 플랫폼에서도 실제 비교가 시작된다.
 10. **mypage 의 photo count RPC 운영 적용 후 실측** — 0024 마이그레이션 활성화 후 실제 단축 측정
 
 ### 🟢 장기 / 인프라
@@ -315,19 +339,24 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 ## 테스트 현황
 
 ```
-유닛 테스트 (Vitest):     16 파일 / 170 tests / 1 skipped (2026-08-01)
-E2E 테스트 (Playwright):  desktop+mobile chromium 12/12 통과 (5.7s)
+유닛 테스트 (Vitest):     16 파일 / 170 tests / 1 skipped (2026-08-03)
+E2E 스모크 (Playwright):  desktop+mobile chromium 12/12 통과 (22.5s)
+접근성 (axe-core):       WCAG 2.1 AA 25/25 통과 · 위반 0 (2026-08-03)
+PDF 회귀(페이지수+해시): ✅ pnpm test:pdf — 4 케이스 / ~300ms
 PDF 런타임 검증:          pnpm verify:pdf — 40KB / 353ms / PDF 1.7
 Lighthouse 모바일:        Performance 97 · LCP 1.5s · CLS 0
-PDF 회귀(페이지수+해시): ❌ 미구성 (다음 작업 후보)
+CI (GitHub Actions):     ✅ typecheck·lint·test·pdf·build + e2e + a11y (2026-08-03 신설)
 ```
 
 테스트 실행:
 ```bash
 pnpm test                   # 유닛 테스트 (단발)
 pnpm test:watch             # 와치 모드
+pnpm test:pdf               # PDF 회귀 (페이지 수·크기 + 첫 페이지 해시)
+pnpm test:pdf:update        # ⚠️ 렌더 변경이 의도된 경우에만 baseline 갱신
+pnpm test:a11y              # axe-core WCAG 2.1 AA 감사
 pnpm verify:pdf             # PDF 파이프라인 런타임 1페이지 검증
-pnpm e2e                    # Playwright E2E (자동 dev 서버)
+pnpm e2e                    # Playwright 스모크 (자동 dev 서버)
 PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e   # 운영 대상 스모크
 ```
 

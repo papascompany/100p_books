@@ -141,7 +141,7 @@ export default async function LandingPage() {
                   sizes="144px"
                 />
               </div>
-              <p className="mt-1.5 text-center text-[10px] font-medium text-mute">{card.caption}</p>
+              <p className="mt-1.5 text-center text-[10px] font-medium text-zinc-600">{card.caption}</p>
             </div>
           ))}
         </div>

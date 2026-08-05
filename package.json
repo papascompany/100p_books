@@ -13,8 +13,11 @@
     "test:watch": "vitest",
     "gen-icons": "npx tsx scripts/gen-icons.ts",
     "verify:pdf": "NODE_OPTIONS=\"--require ./scripts/_server-only-stub.cjs\" npx tsx scripts/verify-pdf.ts",
-    "e2e": "playwright test",
-    "e2e:headed": "playwright test --headed"
+    "test:pdf": "NODE_OPTIONS=\"--require ./scripts/_server-only-stub.cjs\" npx tsx scripts/pdf-regression.ts",
+    "test:pdf:update": "NODE_OPTIONS=\"--require ./scripts/_server-only-stub.cjs\" npx tsx scripts/pdf-regression.ts --update",
+    "e2e": "playwright test e2e/smoke.spec.ts",
+    "e2e:headed": "playwright test --headed",
+    "test:a11y": "playwright test e2e/a11y.spec.ts"
   },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.55",
@@ -52,6 +55,7 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@playwright/test": "^1.60.0",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^20.14.0",

@@ -25,9 +25,18 @@ Next.js 14 (App Router) + TypeScript + Tailwind + shadcn/ui + Fabric.js 6 + Supa
 각 에이전트는 정의된 범위 외 파일 수정 금지.
 
 ## 테스트
-- 유닛: Vitest
-- E2E (편집/주문 플로우): Playwright (모바일 viewport 포함)
-- PDF 회귀: 생성된 PDF 페이지 수 + 첫 페이지 해시 비교
+| 대상 | 명령 | 비고 |
+|---|---|---|
+| 유닛 | `pnpm test` | Vitest |
+| E2E 스모크 | `pnpm e2e` | Playwright, desktop + mobile 390px |
+| 접근성 | `pnpm test:a11y` | axe-core WCAG 2.1 AA, 공개 라우트 + 다크 모드 |
+| PDF 회귀 | `pnpm test:pdf` | 페이지 수·페이지 크기 + 첫 페이지 SHA-256 |
+| 타입·린트·빌드 | `pnpm typecheck && pnpm lint && pnpm build` | |
+
+- PDF 회귀 baseline: `test/fixtures/pdf-baseline.json`. 구조(페이지 수·크기)는 플랫폼 무관하게
+  엄격 비교하고, 픽셀 해시는 `${platform}-${arch}` 키별로 비교한다(래스터라이저·폰트 폴백이 OS마다 다름).
+  렌더 변경이 **의도된** 경우에만 `pnpm test:pdf:update` 로 갱신하고 diff 를 리뷰에 포함한다.
+- 위 전부는 `.github/workflows/ci.yml` 에서 push/PR 마다 자동 실행된다.
 
 ## 금지 사항
 - `.env`, 서비스 키 커밋 금지

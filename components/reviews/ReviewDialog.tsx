@@ -180,7 +180,7 @@ export default function ReviewDialog({ orderId, trigger, onSuccess }: ReviewDial
           {/* 별점 */}
           <div>
             <p className="mb-2 text-sm font-medium">
-              별점 <span className="text-coral">*</span>
+              별점 <span className="text-coral-700 dark:text-coral-300">*</span>
             </p>
             <div
               className="flex gap-1"

@@ -1,0 +1,137 @@
+name: CI
+
+# push 전에 깨진 코드를 잡기 위한 파이프라인.
+# Vercel 빌드는 배포 시점에만 돌므로, PR/브랜치 단계의 1차 방어선을 여기서 만든다.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 빌드 타임에 실제 백엔드를 부르지 않는다(모든 env 접근이 lazy).
+  # 형식만 유효한 더미 값으로 "env 누락 throw" 만 회피한다.
+  # 운영 시크릿은 CI 에 넣지 않는다 — 실제 값 검증은 Vercel 빌드가 담당.
+  NEXT_PUBLIC_SUPABASE_URL: https://ci-dummy.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-dummy-anon-key
+  SUPABASE_SERVICE_ROLE_KEY: ci-dummy-service-role-key
+  NEXT_PUBLIC_APP_URL: http://localhost:3000
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  verify:
+    name: typecheck · lint · test · pdf · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test
+
+      # 페이지 수 + 첫 페이지 해시 회귀 (CLAUDE.md §테스트).
+      # linux-x64 픽셀 baseline 이 아직 없으면 이번 실행에서 기록만 하고 통과한다
+      # (구조 검증은 항상 엄격). 로그의 해시를 baseline 에 커밋하면 다음부터 비교된다.
+      - name: PDF regression
+        run: pnpm test:pdf
+
+      - name: Upload PDF baseline / diff
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-regression
+          path: |
+            test/fixtures/pdf-baseline.json
+            tmp/pdf-regression/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Build
+        run: pnpm build
+
+  e2e:
+    name: e2e smoke (desktop + mobile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      # webServer 설정이 pnpm dev 를 자동으로 띄운다 (playwright.config.ts).
+      - name: Run E2E
+        run: pnpm e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  a11y:
+    name: accessibility (axe-core WCAG 2.1 AA)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run a11y audit
+        run: pnpm test:a11y
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: a11y-report
+          path: playwright-report/
+          retention-days: 7

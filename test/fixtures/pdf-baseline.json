@@ -1,0 +1,38 @@
+{
+  "structure": {
+    "interior": {
+      "pageCount": 3,
+      "pageSizesPt": [
+        [
+          422.36,
+          422.36
+        ],
+        [
+          422.36,
+          422.36
+        ],
+        [
+          422.36,
+          422.36
+        ]
+      ]
+    },
+    "cover": {
+      "pageCount": 1,
+      "pageSizesPt": [
+        [
+          875.91,
+          433.7
+        ]
+      ]
+    }
+  },
+  "pixels": {
+    "darwin-arm64": {
+      "shapes": "4f8c4bc94435455a39840dc1f6a4207dc5d2c23b62f4f9b6cbcd5808b33f51f9",
+      "photo-shadow": "284847f894f5fccd7401d04be3328bceb19d6076171e38da1b171ca5662748ce",
+      "text": "fd05d8c7a48ef6b65cfe3dfcb9e690065ef13d6dabd64818ad632500b53c4837",
+      "cover": "2ee828eff2a465697c2cbcf72a799d3467de6f5416547020f01f5d0fe16f17f6"
+    }
+  }
+}

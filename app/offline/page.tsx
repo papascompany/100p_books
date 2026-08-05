@@ -40,7 +40,7 @@ export default function OfflinePage() {
         <button
           type="button"
           id="offline-retry"
-          className="flex items-center justify-center h-11 w-full rounded-xl bg-blue-500 text-white text-sm font-semibold hover:bg-blue-600 transition-colors"
+          className="flex items-center justify-center h-11 w-full rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
         >
           다시 연결하기
         </button>

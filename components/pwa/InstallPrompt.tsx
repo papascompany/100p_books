@@ -214,7 +214,7 @@ function AndroidGuide({
         </button>
         <button
           onClick={onInstall}
-          className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 transition-colors flex items-center justify-center gap-1.5"
+          className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-blue-700 hover:bg-blue-800 transition-colors flex items-center justify-center gap-1.5"
         >
           <Download size={15} aria-hidden />
           설치하기
