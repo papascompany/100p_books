@@ -45,7 +45,8 @@
      - ⚠️ **측정 방법론(중요)**: Lighthouse 는 편차가 커서 **반드시 3회 이상 중앙값**으로 비교할 것. 이번에 baseline 을 1회만 재고(LCP 1,754ms — 이상치) "회귀"로 오판해 한 번 롤백했다가 되돌렸다.
      - 시도했다가 버린 것: `core preload:false`(FCP 959→3,619ms 악화). core 는 preload:true 가 최적.
      - 폰트 재생성은 `python3 scripts/build-font-subsets.py`(원본은 `assets/fonts/`, fontTools 필요).
-     - 잔여: 홈 Unsplash 원격 이미지 16장 최적화(LCP 요소는 히어로 이미지, `elementRenderDelay` 지배적).
+     - 이미지 최적화도 진행(`d1c17ea`) — **결론: 이미지는 이미 최적화 상태였다**(총 150~161KB, Lighthouse 이미지 진단 전부 통과). 사진 6장을 16개 원본 URL 로 참조하던 캐시 파편화만 정리(고유 원본 16→6). 효과는 6회 측정에서 LCP -4%·TTI -5% 로 **범위가 겹쳐 개선으로 주장하지 않는다**(구조적 정리로만 유지).
+     - **다음 레버는 렌더링 경로**: LCP 분해에서 `elementRenderDelay` 가 지배적이고 실행마다 55~2,044ms 로 요동친다(메인스레드 1.1s — Other 387ms/Style·Layout 281ms/Script 260ms). 현재 Performance 81 에서 더 올리려면 비용 대비 효과 재평가 필요.
    - 포인트 홀드/예약 설계 — create 검증↔confirm 차감 사이 이중 사용의 구조적 해소(현재는 confirm 캡처 전 재확인으로 완화, ms TOCTOU 감수). pending 주문 합산 검증 또는 ledger hold RPC.
    - 100% 할인 코드 정책 — 현재 100원 미만 주문은 AMOUNT_BELOW_MINIMUM 으로 차단(무료 주문 경로 없음). 무료 주문 지원 여부 오너 결정.
 3. **[선택] 퍼널 데이터 첫 확인** — 0029 적용(2026-07-31) 이후 실사용 이벤트가 쌓이면 `select event, count(*) from funnel_events group by 1;`로 유입 확인. 필요 시 관리자 콘솔 퍼널 대시보드 착수 여부 결정.
