@@ -10,7 +10,7 @@
 
 ## 🆕 최근 작업 (2026-06-13 ~ 2026-08-03)
 
-### 0-3. 품질 백로그 착수 — CI 신설 + PDF 회귀 + WCAG AA (2026-08-03) — ⚠️ **미커밋**
+### 0-3. 품질 백로그 착수 — CI 신설 + PDF 회귀 + WCAG AA (2026-08-03) — **CI 전건 green**
 - **CI 파이프라인 신설**(`.github/workflows/ci.yml`) — 그동안 CI 가 아예 없어 "push → Vercel 실패"
   로만 회귀를 알 수 있었다. 3 잡: `verify`(typecheck·lint·test·pdf 회귀·build) / `e2e` / `a11y`.
   운영 시크릿은 넣지 않고 형식만 유효한 더미 env 로 빌드한다(모든 env 접근이 lazy 임을 로컬 실증).
@@ -27,6 +27,14 @@
   흰 텍스트 버튼(3.68:1) → blue-600/700. 수정 후 **25/25 통과·위반 0**.
 - 부수 정정: 문서에 오래 기록돼 있던 "로컬 lint/build 불가"가 **실측 결과 해소**됨(아래 환경 메모).
 - 검증: typecheck 0 · lint 0 · vitest 169p/1s · pdf 회귀 4케이스 · e2e 12p · a11y 25p · build 성공.
+- **CI 실측**(2026-08-03): 첫 실행에서 잡힌 실패 2건을 fix-forward 하고 전건 green.
+  ① `pnpm/action-setup` 의 `version: 9` 가 `packageManager: pnpm@9.0.0` 과 충돌(3잡 셋업 실패)
+  → action 쪽 지정 제거, node 20→22 로 로컬과 정렬. ② `npx tsx` 가 CI 에서 출력 없이 exit 1
+  → `tsx` 를 devDependency 로 고정하고 `pnpm exec` 로 전환(설치 변수 제거).
+  최종: verify 1m50s / e2e 1m34s(12p) / a11y 2m2s(25p) 모두 성공.
+- **PDF 회귀 설계 실증**: 구조 스냅샷이 darwin-arm64 와 linux-x64 에서 **완전히 동일**(422.36pt·875.91pt)
+  → 플랫폼 무관 계층이 의도대로 동작. 픽셀 해시는 두 플랫폼이 서로 달라 키 분리가 필요함도 확인.
+  CI 첫 실행 로그의 linux-x64 해시 4종을 baseline 에 커밋해 **CI 에서도 픽셀 비교가 시작**됨.
 
 ### 0-2. UI/UX 전수감사 118건 잔여분 완결 (2026-08-03) — 커밋 `81506b9`, **Vercel 빌드 success**
 - 배경: 8영역 UI/UX 감사(발견 119→적대검증 확정 118건) 중 `e656108`/`88b36d9`가 선반영한 부분을
@@ -297,7 +305,7 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
    또는 service_role 로 테스트 유저를 만드는 시드 스크립트 승인. 이게 정해지면 착수 가능.
 8. **PDF 100페이지 부하 검증** — Vercel Pro 플랜 가입 후 실측 (현재 1페이지 + photo+shadow 케이스만)
 9. ~~**PDF 회귀 테스트 CI 통합**~~ ✅ **완료 (2026-08-03)** — `pnpm test:pdf` + CI 잡.
-   잔여: CI(linux-x64) 픽셀 baseline 을 첫 실행 로그에서 받아 커밋해야 그 플랫폼에서도 실제 비교가 시작된다.
+   darwin-arm64·linux-x64 baseline 모두 등록 완료 — 로컬·CI 양쪽에서 픽셀 회귀가 실제로 비교된다.
 10. **mypage 의 photo count RPC 운영 적용 후 실측** — 0024 마이그레이션 활성화 후 실제 단축 측정
 
 ### 🟢 장기 / 인프라

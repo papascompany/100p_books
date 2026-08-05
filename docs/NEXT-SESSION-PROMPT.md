@@ -31,8 +31,9 @@
 10. **포인트 결제 배선 + 미적용 버그 수정**(2026-08-01) — `clampPointsForMinPayment`를 `OrderForm`/`orders/create` 양쪽 배선(단일 정본). **`pointsToUse`→`usePoints` 키 버그 수정**(기존엔 포인트가 전혀 적용 안 됨). 적대 리뷰 대응: 할인 소계 변경 시 자동 재검증, confirm 캡처 전 잔액 재확인(이중 사용 차단), AMOUNT_BELOW_MINIMUM 게이트(서버+클라). 상세: STATUS.md §최근 작업 0-1.
 11. **UI/UX 전수감사 118건 잔여분 완결**(2026-08-03, `81506b9`, **Vercel success**) — 8영역 감사 확정 118건 중 선행 커밋 미반영분 ~75건을 7샤드 병렬 구현 + 3렌즈 적대 리뷰 9건 반영. 핵심: CV-1 표지 폭 공식 완결(+`COVER_FORMAT_OUTDATED` 주문 게이트+구규격 배너), 표지 모바일 세그먼트 편집, MY-1/2 크래시, 주문서 draft 복원, 업로드 재진입 UI. 검증: tsc 0에러·vitest 169p·모바일 실화면·Vercel 클린 빌드. 상세: STATUS.md §최근 작업 0-2. 운영 `book_sizes.cover_width_mm` 실값 확인 완료(2026-08-04, 사용자 SQL 확인 — 302/296/406 시드 의미와 일치) → 이 건 완전 종결.
 
-12. **품질 백로그 1차 착수**(2026-08-03) — ⚠️ **미커밋**. ① **CI 신설**(`.github/workflows/ci.yml` — 그동안 CI 부재로 push 후 Vercel 실패로만 회귀 인지 가능했음. verify/e2e/a11y 3잡, 더미 env 로 빌드) ② **PDF 회귀**(`pnpm test:pdf` — 구조는 플랫폼 무관 엄격, 첫 페이지 해시는 platform-arch 별. baseline 손상 실험으로 감지 실증) ③ **WCAG 2.1 AA 감사**(`pnpm test:a11y` — 위반 5종 발견·수정 후 25/25 통과). 상세: STATUS.md §최근 작업 0-3.
-    - **다음 세션 할 일**: 커밋·push 후 첫 CI 실행 로그에서 `linux-x64` 픽셀 해시를 받아 `test/fixtures/pdf-baseline.json` 에 커밋해야 CI 에서도 픽셀 회귀 비교가 시작된다(그 전까지는 구조 검증만 유효).
+12. **품질 백로그 1차 착수**(2026-08-03, **CI 전건 green**) — ① **CI 신설**(`.github/workflows/ci.yml` — 그동안 CI 부재로 push 후 Vercel 실패로만 회귀 인지 가능했음. verify/e2e/a11y 3잡, 더미 env 로 빌드) ② **PDF 회귀**(`pnpm test:pdf` — 구조는 플랫폼 무관 엄격, 첫 페이지 해시는 platform-arch 별. baseline 손상 실험으로 감지 실증) ③ **WCAG 2.1 AA 감사**(`pnpm test:a11y` — 위반 5종 발견·수정 후 25/25 통과). 상세: STATUS.md §최근 작업 0-3.
+    - CI 첫 실행에서 잡힌 셋업 실패 2건(pnpm 버전 중복 지정 / `npx tsx` 무출력 exit 1)을 fix-forward 해 전건 green. `linux-x64` 픽셀 baseline 도 커밋 완료 — 로컬·CI 양쪽에서 픽셀 회귀가 실제 비교된다.
+    - ⚠️ baseline 갱신 규칙: 렌더 결과가 바뀌면 CI 가 실패한다. **의도된 변경일 때만** `pnpm test:pdf:update`(로컬 darwin) + CI 로그의 새 linux 해시를 함께 커밋하고, diff 를 리뷰에 포함할 것. 러너 이미지의 폰트가 바뀌어도 깨질 수 있다(그 경우도 갱신으로 처리).
 
 ### 예정 작업 (우선순위 순 — 여기서 이어서 진행)
 1. **[사용자 액션 대기] Storige측 통지 전달** — 통지문 정본: `docs/STORIGE-NOTICE-2026-07-21.md`. 사용자가 Storige 세션에 붙여넣으면 끝. 요지: (a) validate/external FROZEN_ROUTES 등재 (b) 검증 result 키셋 골든 spec 신설 (c) 표지 검증 계약 긴장 정리(선택). 전달 완료 통보 받으면 이 항목 닫기.
