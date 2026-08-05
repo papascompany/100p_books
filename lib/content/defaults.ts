@@ -22,12 +22,12 @@ export const SITE_CONTENT_DEFAULTS: SiteContentMap = {
     floating: [
       {
         image:
-          "https://images.unsplash.com/photo-1606159068539-43f36b99d1b2?w=400&q=75",
+          "https://images.unsplash.com/photo-1606159068539-43f36b99d1b2?w=1200&q=80",
         caption: "우리의 여행",
       },
       {
         image:
-          "https://images.unsplash.com/photo-1495640388908-05fa85288e61?w=400&q=75",
+          "https://images.unsplash.com/photo-1495640388908-05fa85288e61?w=1200&q=80",
         caption: "가족의 순간",
       },
     ],
@@ -46,7 +46,7 @@ export const SITE_CONTENT_DEFAULTS: SiteContentMap = {
       title: "자동 레이아웃",
       desc: "사진을 올리면 찍은 순서대로 자동 정렬. 페이지 구성까지 한 번에 완성돼요.",
       image:
-        "https://images.unsplash.com/photo-1606159068539-43f36b99d1b2?w=900&q=80",
+        "https://images.unsplash.com/photo-1606159068539-43f36b99d1b2?w=1200&q=80",
       alt: "폴라로이드 사진들이 가지런히 정렬된 모습",
     },
     {
@@ -54,7 +54,7 @@ export const SITE_CONTENT_DEFAULTS: SiteContentMap = {
       title: "감성 편집 에디터",
       desc: "콜라주, 여백, 글씨, 스티커까지. 모바일에서도 내 취향대로 꾸밀 수 있어요.",
       image:
-        "https://images.unsplash.com/photo-1530538987395-032d1800fdd4?w=900&q=80",
+        "https://images.unsplash.com/photo-1530538987395-032d1800fdd4?w=1920&q=80",
       alt: "빈티지한 분위기로 펼쳐진 사진 앨범",
     },
     {
@@ -62,7 +62,7 @@ export const SITE_CONTENT_DEFAULTS: SiteContentMap = {
       title: "집 앞까지 배송",
       desc: "전문 인쇄소에서 고품질로 제작해 3~5일 안에 보내드려요.",
       image:
-        "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=900&q=80",
+        "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=1200&q=80",
       alt: "고품질 인쇄로 펼쳐진 사진집의 디테일",
     },
   ],
@@ -74,7 +74,7 @@ export const SITE_CONTENT_DEFAULTS: SiteContentMap = {
       desc: "손에 쏙 들어오는 작은 책",
       ratio: "3/5",
       image:
-        "https://images.unsplash.com/photo-1495640388908-05fa85288e61?w=900&q=80",
+        "https://images.unsplash.com/photo-1495640388908-05fa85288e61?w=1200&q=80",
       alt: "손에 쏙 들어오는 작은 사진집",
     },
     {
@@ -83,7 +83,7 @@ export const SITE_CONTENT_DEFAULTS: SiteContentMap = {
       desc: "SNS 감성 정사각형 포맷",
       ratio: "1/1",
       image:
-        "https://images.unsplash.com/photo-1611532736597-de2d4265fba3?w=900&q=80",
+        "https://images.unsplash.com/photo-1611532736597-de2d4265fba3?w=1200&q=80",
       alt: "정사각형 포맷의 감성 사진집",
     },
     {
@@ -92,7 +92,7 @@ export const SITE_CONTENT_DEFAULTS: SiteContentMap = {
       desc: "일반 노트 사이즈, 넉넉한 여백",
       ratio: "3/5",
       image:
-        "https://images.unsplash.com/photo-1531346878377-a5be20888e57?w=900&q=80",
+        "https://images.unsplash.com/photo-1531346878377-a5be20888e57?w=1200&q=80",
       alt: "A5 사이즈의 펼쳐진 화보집",
     },
   ],
@@ -101,12 +101,12 @@ export const SITE_CONTENT_DEFAULTS: SiteContentMap = {
     heading: "실제 포토북 후기",
     sub: "100p Books로 만든 실제 고객들의 포토북입니다.",
     images: [
-      { src: "https://images.unsplash.com/photo-1606159068539-43f36b99d1b2?w=600&q=75", rowSpan: true },
-      { src: "https://images.unsplash.com/photo-1495640388908-05fa85288e61?w=600&q=75" },
-      { src: "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=600&q=75" },
-      { src: "https://images.unsplash.com/photo-1611532736597-de2d4265fba3?w=600&q=75", rowSpan: true },
-      { src: "https://images.unsplash.com/photo-1530538987395-032d1800fdd4?w=600&q=75" },
-      { src: "https://images.unsplash.com/photo-1531346878377-a5be20888e57?w=600&q=75" },
+      { src: "https://images.unsplash.com/photo-1606159068539-43f36b99d1b2?w=1200&q=80", rowSpan: true },
+      { src: "https://images.unsplash.com/photo-1495640388908-05fa85288e61?w=1200&q=80" },
+      { src: "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=1200&q=80" },
+      { src: "https://images.unsplash.com/photo-1611532736597-de2d4265fba3?w=1200&q=80", rowSpan: true },
+      { src: "https://images.unsplash.com/photo-1530538987395-032d1800fdd4?w=1920&q=80" },
+      { src: "https://images.unsplash.com/photo-1531346878377-a5be20888e57?w=1200&q=80" },
     ],
   },
 
@@ -121,7 +121,7 @@ export const SITE_CONTENT_DEFAULTS: SiteContentMap = {
     accent: "한 권의 감성으로.",
     sub: "지금 사진을 올리면 3분 안에 첫 페이지가 완성됩니다. 무료로 시작할 수 있어요.",
     image:
-      "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=1200&q=60",
+      "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=1200&q=80",
     primaryLabel: "무료로 만들기",
     primaryHref: "/upload",
   },
