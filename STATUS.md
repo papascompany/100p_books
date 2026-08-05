@@ -10,27 +10,43 @@
 
 ## 🆕 최근 작업 (2026-06-13 ~ 2026-08-05)
 
-### 0-4. Lighthouse SI/TTI 개선 — 폰트 분할 + 홈 번들 축소 (2026-08-05) — ⚠️ **미커밋**
+### 0-4. Lighthouse SI/TTI 개선 — 폰트 분할 + 홈 번들 축소 (2026-08-05)
 - **실측으로 병목을 재정의**: 기존 기록은 원인을 "클라이언트 JS 사이즈(fabric chunk 등)"로
-  적어 뒀으나, 운영 Lighthouse 실측 결과 **TBT 는 80ms 로 이미 낮고 TTI 만 12.4s** 였다.
-  전송량 1위는 `PretendardVariable.woff2` **2,011KB(전체의 82%)** — 병목은 JS 가 아니라 폰트였다.
+  적어 뒀으나 실측 결과 TBT 는 이미 낮았고(7~80ms), 전송량 1위가
+  `PretendardVariable.woff2` **2,011KB(전체의 82%)** 였다. 병목은 JS 가 아니라 폰트였다.
 - **폰트 2분할**(`scripts/build-font-subsets.py`): core(라틴·기호·가나 + KS X 1001 한글 2,350자,
-  **533KB**) / ext(나머지 완성형 8,822자, 1,317KB). `next/font` 를 두 번 선언하고
-  tailwind `fontFamily.sans` 에 core → ext 순으로 나열 — 브라우저가 core 에 없는 글리프를
-  만날 때만 ext 를 받는다(unicode-range 없이 폴백 체인만으로. next/font 의 size-adjust 유지).
+  **533KB**, preload) / ext(나머지 완성형 8,822자, 1,317KB, preload 안 함).
+  `next/font` 를 두 번 선언하고 tailwind `fontFamily.sans` 에 core → ext 순으로 나열 —
+  브라우저가 core 에 없는 글리프를 만날 때만 ext 를 받는다(unicode-range 불필요,
+  next/font 의 size-adjust fallback 유지 → CLS 0).
+  KS X 1001 판정은 `iso2022_kr` 인코딩 가능 여부(euc_kr·johab 은 CP949 확장까지 통과시켜 못 씀).
   실기 검증: 초기엔 core 만 로드, 희귀 음절(쀍뷁쭭꾧) 삽입 시 ext 자동 로드 확인.
 - **홈 번들 축소**: `StepsSection` 이 레포에서 framer-motion 의 **유일한 사용처**였다.
   진입 애니메이션을 CSS(`animate-fade-up`/`line-grow`/`badge-pop`)로 옮겨 RSC 서버 컴포넌트화하고
-  `dynamic(ssr:false)` 를 제거했다. framer-motion 의존성 자체를 삭제.
+  `dynamic(ssr:false)` 제거, framer-motion 의존성 삭제.
   → 홈 First Load JS **150kB → 102kB**, 라우트 청크 41.5kB → 190B.
 - **부수 발견(실제 결함)**: `ssr:false` 때문에 axe 가 StepsSection 을 검사하지 못하고 있었다.
-  SSR 로 바꾸자 CTA 의 `bg-coral text-white`(대비 2.79:1, GL-5 와 동일 유형) 위반이 드러나
+  SSR 로 바꾸자 CTA 의 `bg-coral text-white`(대비 2.79:1, GL-5 와 동일 유형)가 드러나
   `variant="coral"`(text-night)로 교정. a11y 25/25 통과 회복.
-- **측정치**(로컬 prod 빌드, 모바일 스로틀, 각 3회 중앙값 — 절대값은 운영과 다르므로 상대 비교용):
-  TTI 14,242ms → **6,594ms(-54%)** · LCP 14,189ms → **6,534ms(-54%)** · 전송량 2,524KB → **1,009KB(-60%)**
-  · CLS 0 유지. FCP/SI 는 측정 편차(같은 코드가 46~75점) 범위 안이라 유의한 변화로 보지 않는다.
-- 검증: typecheck 0 · lint 0 · vitest 169p/1s · pdf 회귀 4케이스 · e2e 12p · a11y 25p · build 성공.
-- 남은 것: 운영 배포 후 운영 URL 재측정으로 실사용 지표 확인(로컬 절대값은 원격 이미지에 지배됨).
+- **운영 실측 (각 3회 중앙값)** — 같은 조건에서 원본 코드와 직접 비교:
+
+  | 지표 | 원본 | 변경본 |
+  |---|---|---|
+  | Performance | 73 | **81** |
+  | LCP | 12,840ms | **5,186ms** |
+  | TTI | 12,878ms | **5,223ms** |
+  | Speed Index | 4,140ms | **2,209ms** |
+  | FCP | 984ms | 959ms |
+  | CLS | 0 | 0 |
+
+- ⚠️ **측정 방법론 교훈**: 처음에 운영 baseline 을 **1회만** 재고 그 값(LCP 1,754ms)을 기준 삼아
+  "LCP 회귀"로 오판해 한 차례 롤백했다. 롤백본을 3회 재보니 LCP 12,840ms —
+  1회 값이 이상치였다. **Lighthouse 는 반드시 3회 이상 중앙값으로 비교할 것.**
+  (이 과정에서 시도한 `core preload:false` 는 FCP 959→3,619ms 로 악화해 채택하지 않았다.)
+- 검증: typecheck 0 · lint 0 · vitest 169p/1s · pdf 회귀 4케이스 · e2e 12p · a11y 25p ·
+  build 성공 · 모바일 실화면(폰트·StepsSection) 확인 · CI green.
+- 남은 개선 여지: 홈 Unsplash 원격 이미지 16장(LCP 요소는 히어로 이미지이고
+  `elementRenderDelay` 가 여전히 지배적), ext 폰트가 필요한 화면의 체감 확인.
 
 ## 이전 작업 (2026-06-13 ~ 2026-08-03)
 
