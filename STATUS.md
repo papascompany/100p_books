@@ -3,7 +3,7 @@
 > 최종 업데이트: 2026-08-07
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `735fb2a` (fix(analytics): 이메일 가입 signup_completed) — Vercel prod success
+> 운영 빌드: `3529f0d` — CI green(verify·e2e·a11y) · Vercel prod success
 > 다음 세션 인계: [docs/NEXT-SESSION-PROMPT.md](docs/NEXT-SESSION-PROMPT.md) (붙여넣기 블록 그대로 사용)
 > **정본 로컬 경로**: `/Users/yohan/Developer/claude/100p_books` (Documents 사본은 node_modules 제거됨)
 > **성능 수치 정본**: §0-5 (2026-08-07, prod 5회 측정). §0-4 는 그 직전 상태, §M8·테스트 현황의
@@ -95,6 +95,20 @@
     도형·가나·전각 블록을 제거**해 267→199KB. 수학·기타기호는 실제 쓰는 10자만 개별 지정.
     통화(₩ 예비)와 한글 자모(사용자 입력 "ㅋㅋ")는 소스에 없어도 남겼다.
   - **크리티컬 경로 폰트 533KB → 199KB (-334KB)**. tailwind 폴백 체인은 ui → kr → ext 3단.
+- **운영 실측 (배포 후 5회, 중앙값)** — 같은 방법(워밍업 1회 후 5회)으로 전/후 비교:
+
+  | 지표 | 전(`735fb2a`) | 후(`3529f0d`) | |
+  |---|---|---|---|
+  | 총 전송 | 938KB | **605KB** | −333KB (−35%) |
+  | 폰트 전송 | 533KB | **208KB** | (Bebas 8.6KB 포함) |
+  | LCP | 4,814ms | **3,619ms** | −25% |
+  | Performance | 83 | **88** | +5 |
+  | FCP | 977ms | 974ms | 변화 없음 |
+  | TBT | 0 | 0~23 | 낮게 유지 |
+  | CLS | 0 | 0 | 유지 |
+
+  전송 감소분(−333KB)이 폰트 절감분과 정확히 일치한다 — 예측대로 대역폭이 LCP 를 정했다.
+  다만 예상치(LCP ~2.9s, 점수 90+)에는 못 미쳤다. 남은 605KB(이미지·JS)가 여전히 크다.
 - 부수 발견 — **a11y 테스트가 flaky 했다**: 폰트가 3개로 늘자 스왑이 밀리면서 진입
   애니메이션도 함께 밀려, 고정 대기 600ms 뒤 측정하던 axe 가 `animate-fade-up` 의
   opacity 전환 중 텍스트를 재 대비 위반으로 보고했다(실행마다 실패 1~4건으로 요동).
@@ -119,10 +133,17 @@
     `orders.project_id` 에 CASCADE 가 없어 주문 → 프로젝트 순서를 지켜야 한다.
   - 모바일 뷰포트 제외: `Dropzone` 의 `<input type="file">` 이 ≤768px 에서 DOM 에서 빠지고
     바텀시트 안으로 들어간다.
-- 검증 상태: typecheck 0 · lint 0 · vitest 169p/1s · pdf 4케이스 OK ·
-  기존 `pnpm e2e` **12 passed 유지(회귀 없음)** · env 없을 때 skip 경로 정상 동작.
-  **미검증**: 골든 플로우 본 실행. 셀렉터는 실제 JSX 근거로 작성했으나 로그인 상태가 필요해
-  아직 돌리지 않았다 — 운영 DB 에 테스트 계정을 만드는 일이라 **승인 후 실행**.
+- 실측으로 잡은 함정 두 가지(주석에 근거 고정):
+  - **숨은 input 에 `setInputFiles` 주입은 쓰면 안 된다.** 파일은 들어가는데(`input.files=3`)
+    React `onChange` 가 실행되지 않아(`e.target.value=""` 리셋조차 안 됨) 큐가 빈 채 남는다.
+    드롭존 클릭 → `filechooser` 경로로 바꾸면 "핸들러가 붙었는가"와 파일 선택이 함께 해결된다.
+  - **표지 저장 완료는 버튼 라벨이 아니라 PATCH 응답으로 판정한다.** `save()` 가
+    `setCurrentDoc` 으로 캔버스를 갱신하면 `onModified` 가 다시 발화해 dirty 가 되살아난다.
+- 검증 상태: typecheck 0 · lint 0 · vitest 169p/1s · pdf 4케이스 OK · `pnpm e2e` 12 passed ·
+  `pnpm test:a11y` 25 passed ×3회 · build 성공 · **골든 플로우 2 passed(22초)** ·
+  cleanup 실동작 확인(프로젝트 1건 + 스토리지 6개 삭제) · CI green · Vercel prod success.
+  ⚠️ 운영 Supabase 를 쓰므로 이 테스트는 CI 기본 파이프라인에 넣지 않았다
+  (`pnpm e2e:auth` 수동 실행. service_role 키가 없으면 자동 skip).
 
 ## 이전 작업 (2026-06-13 ~ 2026-08-05)
 

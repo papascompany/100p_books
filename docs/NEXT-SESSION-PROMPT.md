@@ -2,10 +2,11 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 2026-08-06 · HEAD `ca4db54` · main = origin/main · 작업트리 clean (이 문서 커밋 시점 기준)
-> 직전 실코드 커밋은 `d1c17ea`(perf: 이미지 원본 URL 통일). 이후는 문서 커밋뿐.
-> 최근 세션: 품질 백로그 1차(CI 신설·PDF 회귀·WCAG AA) + 성능 개선(폰트 분할) 완료·배포.
-> 이 문서의 사실 주장은 2026-08-06 서브에이전트 3렌즈로 레포 실물과 대조 검증했다.
+> 갱신 2026-08-07 · main = origin/main · CI green · Vercel prod success
+> 직전 실코드 커밋 `1f482c6`(perf: 폰트 3단 분할). 이 문서/STATUS 갱신 커밋이 그 뒤에 온다.
+> 최근 세션: **에디터 ref 회귀 수정(3개월간 저장 불가)** · 웹훅 헤더 게이트 제거 ·
+> 인증 골든 플로우 E2E 신설 · 폰트 3단 분할 · PR #2 머지 · `book_completed` dedupe(0030, **운영 미적용**).
+> 이 문서의 수치·경로는 모두 이번 세션에 실행·측정으로 확인한 값이다.
 
 ---
 
@@ -49,7 +50,7 @@
 
 | 미설정 env | 실제 동작 | 근거 |
 |---|---|---|
-| `TOSS_WEBHOOK_SECRET` | production 에서 **모든 결제 웹훅을 500 `WEBHOOK_NOT_CONFIGURED` 로 거부**(fail-closed) | `app/api/payments/webhook/route.ts:75-84` |
+| ~~`TOSS_WEBHOOK_SECRET`~~ | **2026-08-07 해소 — 이 키는 이제 존재하지 않는다.** 토스는 개발자 지정 커스텀 헤더를 웹훅에 보낼 수 없어(헤더 4종 고정·서명은 지급대행 전용) 미설정이면 500·설정하면 401 로 어느 쪽이든 전량 거부였다. 헤더 게이트를 제거하고 paymentKey 재조회 검증 + rate limit 으로 대체(`ee261d8`). **남은 운영 작업은 토스 콘솔에 웹훅 URL 등록뿐**(헤더 설정 없음) | `app/api/payments/webhook/route.ts` 상단 주석 |
 | `UPSTASH_REDIS_REST_URL`/`TOKEN` | rate limit **전면 fail-open**(가입 라우트 포함) | `lib/security/rate-limit.ts:13,21-23` |
 | `RESEND_API_KEY`/`EMAIL_FROM` | 메일 job 을 **cancelled 처리 → 발송 0** | `lib/email/worker.ts:168-172` |
 
@@ -70,6 +71,7 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
 | PDF 회귀 | `pnpm test:pdf` | 4 케이스 OK |
 | 접근성 | `pnpm test:a11y` | 25 passed (WCAG 2.1 AA 위반 0) |
 | E2E 스모크 | `pnpm e2e` | 12 passed |
+| **인증 골든 플로우** | `pnpm e2e:auth` | 2 passed (업로드→편집→표지→주문). **운영 Supabase 를 쓰므로 CI 미포함**, service_role 키 없으면 자동 skip |
 | 빌드 | `pnpm build` | 홈 First Load JS 102kB |
 
 ⚠️ `pnpm e2e` / `pnpm test:a11y` 는 playwright webServer 로 `pnpm dev --port 3000` 을 띄우는데
@@ -107,6 +109,21 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
    `test/fixtures/pdf-baseline.json`에 **darwin-arm64 + linux-x64 둘 다 등록**.
 9. **WCAG 2.1 AA 감사**(`e2e/a11y.spec.ts`) — 실측 위반 5종 발견·수정 후 25/25 통과.
 
+**2026-08-07 세션 (커밋 `9250ddf`~`3529f0d`, CI green · Vercel prod success)**
+12. 🚨 **에디터 ref 회귀 수정**(`9250ddf`) — `next/dynamic` 이 ref 를 버려 표지·내지 에디터의
+    저장·객체 추가·undo/redo 가 **3개월간(2026-05-07~) 전면 no-op** 이었다. 표지 저장이 안 되면
+    `cover_json` 이 없어 **주문 단계 자체가 안 열린다**. `FabricStageLazy` 래퍼로 해소 — 함정 6번 참조.
+13. **결제 웹훅 헤더 게이트 제거**(`ee261d8`) — 토스가 못 보내는 헤더를 요구해 전량 거부였다.
+    진위는 paymentKey 재조회 4겹 검증에 일원화, 폭주는 rate limit 프리셋으로. **`TOSS_WEBHOOK_SECRET`
+    은 더 이상 코드에 없다** — 다시 도입하지 말 것.
+14. **인증 골든 플로우 E2E**(`973e453`) — `pnpm e2e:auth`. 업로드→자동편집→표지저장→주문서→
+    결제 직전(버튼 enabled)까지. afterAll 정리 실동작 확인. 함정 7번의 두 규칙을 반드시 지킬 것.
+15. **폰트 3단 분할**(`1f482c6`) — ui 199KB(preload) / kr 301KB / ext 1,315KB.
+    운영 5회 중앙값: **전송 938→605KB · LCP 4,814→3,619ms(−25%) · Performance 83→88 · CLS 0 유지**.
+    재생성은 `python3 scripts/build-font-subsets.py`(fontTools·brotli 필요) — **산출물은 커밋 대상**이고
+    ui 서브셋은 **소스 스캔 결과에 의존**하므로 한글 문구를 크게 추가하면 다시 돌릴 것.
+16. **`book_completed` dedupe**(`9c546d3`) — 마이그레이션 `0030`. **운영 DB 적용은 아직 안 됐다**(예정 0번).
+
 **성능 (2026-08-05)**
 10. **폰트 분할 + 홈 번들 축소**(`fc5d498`) — 병목은 JS가 아니라 **2MB 폰트**였다(TBT는 이미 낮았음).
     core(라틴·기호·가나 + KS X 1001 한글 2,350자, 533KB, `preload:true`) /
@@ -122,7 +139,7 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
     진단 전부 통과). 사진 6장을 16개 원본 URL로 참조하던 캐시 파편화만 정리(고유 원본 16→6).
     성능 효과는 6회 측정에서 분포가 겹쳐 **개선으로 주장하지 않음** — 구조적 정리로만 유지.
 
-### 3. 반드시 지켜야 할 함정 5가지
+### 3. 반드시 지켜야 할 함정 8가지
 
 1. **Storige 계약 의존** — 코드에 `FROZEN` 이라는 마커 문자열은 **없다**(grep 하면 0건이니 stale 로 오판 말 것).
    근거 주석 위치: `lib/storige/client.ts` 상단 13~66행(키 2종·90MB 임계)과 ValidateOpts 423~457행.
@@ -141,49 +158,63 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
    `pnpm start`가 EADDRINUSE로 죽어 **옛 빌드를 측정**하게 된다. 서빙 중인 CSS 해시가 이번 빌드 산출물인지
    대조하는 것이 확실하다(`lsof -ti:3000`, `curl -s <url> | grep static/css`).
 5. **Supabase SQL Editor 프로젝트 확인** — 상단이 `100p_books / PRODUCTION`인지 먼저 확인시킬 것.
+6. 🚨 **`next/dynamic` 으로 감싼 컴포넌트에 ref 를 주지 말 것.** Loadable 래퍼는 함수 컴포넌트라
+   ref 를 조용히 버린다("Function components cannot be given refs" 경고만 남고 `.current` 는 null).
+   이것 때문에 표지·내지 에디터의 저장·객체 추가가 **3개월간 전면 no-op** 이었다(`9250ddf` 수정).
+   FabricStage 는 반드시 `components/editor/FabricStageLazy.tsx`(forwardRef → `forwardedRef` prop
+   우회 래퍼)를 통해 쓸 것. **다른 컴포넌트에 lazy + ref 가 필요하면 같은 패턴을 복제**하고,
+   "성능 최적화로 dynamic 전환" 같은 변경을 할 때 ref 사용처를 먼저 grep 할 것.
+7. **인증 E2E 작성 규칙 2가지**(둘 다 실측으로 확인한 함정):
+   ① 숨은 file input 에 `setInputFiles` 로 주입하면 파일은 들어가는데 React `onChange` 가 안 돈다
+   → 드롭존 클릭 → `filechooser` 경로를 쓸 것. ② 에디터 저장 완료는 버튼 라벨("저장"/"저장됨")이
+   아니라 **PATCH 응답**으로 판정할 것(`save()` 가 캔버스를 갱신하면 dirty 가 되살아난다).
+8. **a11y 측정 전 화면을 시간이 아니라 상태로 안정시킬 것** — `e2e/a11y.spec.ts` 의 `settle()`
+   (`document.fonts.ready` + 모든 `animate-*` 의 opacity===1). 고정 대기로 두면 폰트 스왑이 밀릴 때
+   진입 애니메이션 전환 중에 axe 가 측정해 **대비 위반이 실행마다 1~4건씩 오락가락**한다.
 
 ### 4. 예정 작업 (우선순위 순)
 
-0. **[먼저 처리] 열린 PR #2 — 퍼널 계측 버그 수정**
-   `fix/funnel-signup-email-path` · `fix(analytics): 이메일 가입 경로 signup_completed 누락 수정 (S1-2)`
-   (2026-08-04 open, 1파일 +8줄, `app/api/auth/signup/route.ts`)
-   - **버그는 main 실코드에서 확인됨**: `signup_completed`는 `app/api/auth/callback/route.ts:87`에만 있고
-     이메일+비밀번호 가입 경로(`app/api/auth/signup/route.ts`, admin.createUser)에는 계측이 **전혀 없다**.
-     이메일 가입은 callback을 타지 않으므로(클라가 `signInWithPassword`로 세션 생성)
-     **현재 `funnel_events.signup_completed`는 카카오/매직링크 가입자만 집계된다.**
-   - PR 브랜치가 CI 신설(`5909c4d`) 이전 main 에서 분기해 **GitHub Actions 결과가 없다**(Vercel 체크만 존재).
-     → main rebase 후 CI 통과를 확인하고 머지할 것.
+0. 🔴 **[가장 먼저·사용자 액션] 마이그레이션 `0030` 운영 적용**
+   `supabase/migrations/0030_funnel_book_completed_once.sql` — `book_completed` 프로젝트당 1회
+   부분 유니크 인덱스 + 기존 중복 정리 DELETE. **코드는 이미 배포됐고 인덱스만 없는 상태**라
+   지금은 중복이 계속 쌓인다(동작은 정상 — 23505 무시 로직이 이미 있다).
+   SQL Editor 상단이 `100p_books / PRODUCTION` 인지 먼저 확인시킬 것. 0001~0029 는 적용 완료.
 
 1. **[사용자 액션 대기] Storige측 통지 전달** — 통지문 정본 `docs/STORIGE-NOTICE-2026-07-21.md`를
    사용자가 Storige 세션에 붙여넣으면 끝. 요지: (a) validate/external FROZEN_ROUTES 등재
    (b) 검증 result 키셋 골든 spec 신설 (c) 표지 검증 계약 긴장 정리(선택).
-   **전달 완료 통보를 받으면 이 항목을 닫을 것.**
+   **2026-08-07 기준 아직 미전달.** 전달 완료 통보를 받으면 이 항목을 닫을 것.
 
-2. **[선행 조건 = 사용자 액션] 인증된 사용자 E2E 골든 플로우** (업로드→에디터→주문)
-   - 필요한 것 중 하나: ① E2E 전용 테스트 계정 + CI 시크릿(`E2E_EMAIL`/`E2E_PASSWORD`) 등록,
-     또는 ② service_role로 테스트 유저를 만드는 시드 스크립트 승인.
-   - **계정 생성·비밀번호 입력은 어시스턴트가 직접 하지 않는다.**
-   - 정해지면 바로 착수 가능. a11y 감사도 이 픽스처로 로그인 이후 화면까지 확장한다.
+2. **[운영 판단 필요] 미설정 env 2종** → 절차는 [docs/OPS-ENV-STATUS.md](OPS-ENV-STATUS.md)
+   - `UPSTASH_REDIS_REST_URL`/`TOKEN` — rate limit 4종(가입·업로드·후기·탈퇴)이 전면 fail-open.
+     구독 + env 등록만 하면 코드 변경 없이 활성화된다(비용 발생 → 오너 결정).
+   - `RESEND_API_KEY`/`EMAIL_FROM` — 주문 완료·배송 알림 등 **메일 6종이 전부 cancelled**.
+     과거 큐 항목은 자동 재발송되지 않는다(`/api/admin/emails/[id]/retry` 로 개별 재시도).
+   - (웹훅은 §0 표 참조 — 코드로 해소됐고 **토스 콘솔에 URL 등록만** 남았다.)
 
-3. **[운영 판단 필요] 미설정 env 3종** (§0 표 참조) — 코드는 이미 대비돼 있으나 기능이 꺼져 있다:
-   결제 웹훅 전면 거부(`TOSS_WEBHOOK_SECRET`) · rate limit 무력화(Upstash) · 메일 발송 0(Resend).
-   특히 **웹훅 fail-closed 는 결제 상태 동기화에 영향**을 줄 수 있으니 사용자에게 현황을 먼저 알릴 것.
+3. **[검토] 인증 E2E 를 CI 에 넣을지** — 현재 `pnpm e2e:auth` 는 **수동 실행**이다.
+   운영 Supabase 를 그대로 쓰기 때문에 CI 상시 실행은 (a) 운영 DB·스토리지 오염 (b) PUBLIC 레포
+   Actions 에 service_role 키 노출이라는 두 리스크가 있다. CI 편입을 원하면 **staging Supabase
+   프로젝트를 따로 만드는 것**이 선행 조건이다. 그 전까지는 릴리스 전 로컬 1회 실행을 권장.
+   → 이 테스트가 없었기 때문에 에디터 ref 회귀가 3개월간 안 잡혔다는 점을 기억할 것.
 
 4. **품질/성능 잔여** (사용자가 고르면 착수)
-   - **렌더링 경로 최적화** — 현재 Performance 81. LCP 분해에서 `elementRenderDelay`가 지배적이고
-     실행마다 55~2,044ms로 요동친다(메인스레드 1.1s — Other 387ms / Style·Layout 281ms / Script 260ms).
-     **비용 대비 효과를 먼저 재평가**할 것. 이미지·폰트는 이미 정리됐다.
-   - 키보드 only 접근성 회귀 시나리오
+   - **남은 성능 레버** — 폰트 정리 후 운영 5회 중앙값은 Performance **88** · LCP **3,619ms** ·
+     총 전송 **605KB** · TBT 0 · CLS 0. 전송량이 곧 LCP 인 구조는 그대로이니 다음 레버도
+     **전송량**이다(이미지 ~150KB + JS). 폰트는 199KB 까지 줄여 더 짜낼 여지가 적다.
+     ⚠️ Lighthouse 는 Lantern 시뮬레이션이라 실측 LCP breakdown 합(0.3~2.3s)과 크게 다르다 —
+     실사용자 체감과 점수를 혼동하지 말 것.
    - **포인트 홀드/예약 설계** — create 검증 ↔ confirm 차감 사이 이중 사용의 구조적 해소
      (현재는 confirm 캡처 전 재확인으로 완화, ms TOCTOU 감수). pending 주문 합산 검증 또는 ledger hold RPC.
    - **100% 할인 코드 정책** — 현재 100원 미만 주문은 `AMOUNT_BELOW_MINIMUM`으로 차단(무료 주문 경로 없음).
      무료 주문 지원 여부는 **오너 결정 필요**.
-   - 프로젝트 삭제 소프트삭제 편입(현재 하드 삭제, 스키마 변경 필요) ·
-     `book_completed` 퍼널 이벤트 서버측 dedupe(현재 저장마다 재발화)
+   - 프로젝트 삭제 소프트삭제 편입(현재 하드 삭제, 스키마 변경 필요)
+   - 키보드 only 접근성 회귀 시나리오 · 인증 이후 화면 a11y 감사(이제 픽스처가 있다)
 
 5. **[선택] 퍼널 데이터 첫 확인** — `select event, count(*) from public.funnel_events group by 1 order by 2 desc;`
-   ⚠️ **PR #2 머지 전 데이터는 이메일 가입자의 `signup_completed`가 통째로 빠져 있다** —
-   분모가 과소해 "가입→첫 책" 전환율이 과대 계상되니 그대로 읽지 말 것.
+   ⚠️ 두 가지를 감안해 읽을 것: ① `735fb2a`(2026-08-07) 이전 데이터는 **이메일 가입자의
+   `signup_completed` 가 통째로 빠져 있다**(분모 과소 → 전환율 과대). ② `0030` 적용 전
+   `book_completed` 는 표지 저장마다 중복 기록돼 **분자가 부풀어 있다**.
 
 6. **[보류] 데모 모드** — 사용자가 "구현 시작"이라고 할 때만: `/login` "데모 둘러보기" 원클릭 +
    `POST /api/auth/demo-login` + `DEMO_MODE` env 토글. 운영자 준비물: 데모계정 + `DEMO_*` env.
@@ -202,8 +233,8 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
 - 세션 종료 시 `STATUS.md`와 이 문서를 갱신한다(완료/미완/다음 단계/새로 발견한 함정).
 
 **첫 작업**: `git status -sb && git log --oneline -5` 로 실제 상태를 확인하고,
-`STATUS.md`와 이 문서를 읽어 현재 상태를 보고한 뒤,
-예정 0번(PR #2 머지)·1번(Storige 통지)·2번(E2E 계정 준비)·3번(미설정 env)을 사용자에게 확인하고
-사용자가 고른 항목부터 진행할 것.
+`STATUS.md`(§0-6 · §0-5)와 이 문서를 읽어 현재 상태를 보고한 뒤,
+예정 0번(**마이그레이션 0030 운영 적용 — 사용자 액션**)·1번(Storige 통지)·2번(Upstash/Resend)·
+3번(인증 E2E 의 CI 편입 여부)을 사용자에게 확인하고 사용자가 고른 항목부터 진행할 것.
 
 ## ─────────────────────────────── (붙여넣기 블록 끝)
