@@ -7,7 +7,8 @@ import { createAdminSupabase } from "@/lib/db/admin";
  *
  *   - service_role 로 funnel_events INSERT (마이그레이션 0029).
  *   - 계측 실패가 제품 흐름을 절대 막지 않는다 — throw 하지 않음 (console.warn 만).
- *   - signup_completed 는 DB 부분 유니크 인덱스로 중복 차단 (23505 는 정상 무시).
+ *   - 중복은 앱이 아니라 DB 부분 유니크 인덱스가 막는다 (23505 는 정상 무시):
+ *     signup_completed = 사용자당 1회(0029), book_completed = 프로젝트당 1회(0030).
  *
  * 사용 패턴:
  * ```ts

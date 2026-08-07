@@ -270,6 +270,9 @@ export async function PATCH(req: Request) {
     }
 
     // 퍼널 계측: 표지 저장 = 책 완성 시점 (S1-2).
+    // 저장할 때마다 호출되지만 프로젝트당 1건만 남는다 — 부분 유니크 인덱스
+    // uq_funnel_book_completed_once (0030) 가 이후 INSERT 를 23505 로 튕기고
+    // 헬퍼가 이를 정상 흐름으로 무시한다. 기록되는 시각은 "최초 완성" 시각.
     await trackFunnelEvent({
       event: "book_completed",
       userId: user.id,
