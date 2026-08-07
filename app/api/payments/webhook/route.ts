@@ -8,6 +8,7 @@ import type { OrderStatus } from "@/lib/db/types";
 import { restoreOrderCredits } from "@/lib/orders/refund";
 import { canTransition } from "@/lib/orders/state";
 import { fetchTossPayment } from "@/lib/payments/toss";
+import { enforceRateLimit } from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -56,32 +57,37 @@ function mapTossStatus(s: string | undefined | null): OrderStatus | null {
 /**
  * POST /api/payments/webhook
  *
- *   - 헤더 X-Webhook-Secret 가 TOSS_WEBHOOK_SECRET 과 일치해야 함 (운영에서 IP allowlist 추가).
  *   - 본문은 토스가 보낸 이벤트 — paymentKey/orderId/status 추출.
- *   - 이중 검증: paymentKey 로 토스 API 직접 조회 → totalAmount/status 비교.
+ *   - 진위 검증: paymentKey 로 토스 API 직접 조회 → totalAmount/status 비교.
  *   - 상태 전이 가능하면 orders 업데이트.
+ *
+ * ⚠️ 이 라우트는 **의도적으로 무인증**이다. 되돌리기 전에 아래를 읽을 것.
+ *
+ *   토스페이먼츠는 개발자가 지정한 커스텀 헤더를 웹훅에 실어 보낼 수 없다. 공식 문서 기준
+ *   요청 헤더는 `tosspayments-webhook-transmission-{time,retried-count,id}` 와
+ *   `tosspayments-webhook-signature` 4종뿐이고, **서명 헤더는 지급대행 이벤트
+ *   (payout.changed / seller.changed) 전용**이다. 결제 이벤트에는 서명이 없고, 문서가
+ *   제시하는 검증 수단은 가상계좌(DEPOSIT_CALLBACK) 본문의 `secret` 필드뿐이다.
+ *
+ *   이전 구현은 `x-webhook-secret` 헤더를 요구했는데, 그러면 미설정 시 500·설정 시 401 로
+ *   **어느 쪽이든 토스 웹훅이 전량 거부**됐다(2026-08-07 실측·수정).
+ *
+ *   대신 진위는 아래 4겹으로 보장한다 — 위조 페이로드가 상태를 바꿀 수 없다:
+ *     ① 우리 DB 에 있는 주문만 처리(없으면 200 ack)
+ *     ② paymentKey 없으면 상태를 건드리지 않음
+ *     ③ 토스 API 재조회로 totalAmount·status 확인 — 페이로드의 status 는 신뢰하지 않음
+ *     ④ canTransition + 조건부 클레임(status 일치할 때만 UPDATE)
+ *   남는 위험은 무인증 POST 폭주뿐이라 rate limit 으로 막는다.
  */
 export async function POST(req: Request) {
   try {
-    // 시크릿 검증 — cron 들과 동일한 fail-closed 자세로 통일한다.
-    //   - TOSS_WEBHOOK_SECRET 설정 시: 헤더와 일치해야 통과.
-    //   - 미설정 시: 운영(production)에서는 거부(빈 값 배포로 인한 무인증 통과 차단).
-    //     비운영(개발/프리뷰)에서는 통과 — 로컬 토스 테스트 편의.
-    const expectedSecret = process.env.TOSS_WEBHOOK_SECRET;
-    if (expectedSecret) {
-      const got = req.headers.get("x-webhook-secret") ?? req.headers.get("x-toss-webhook-secret");
-      if (got !== expectedSecret) {
-        return fail("WEBHOOK_UNAUTHORIZED", "웹훅 시크릿 불일치", 401);
-      }
-    } else if (process.env.NODE_ENV === "production") {
-      console.error(
-        "[payments/webhook] TOSS_WEBHOOK_SECRET 미설정 — 운영 환경에서 웹훅을 거부합니다.",
-      );
-      return fail(
-        "WEBHOOK_NOT_CONFIGURED",
-        "웹훅 시크릿이 설정되지 않았습니다.",
-        500,
-      );
+    // 폭주 차단 — 진위 검증이 아니라 가용성 보호. 정상 트래픽(결제당 소수 + 실패 재시도 7회)
+    // 에는 걸리지 않는다. Upstash 미설정 시에는 fail-open (lib/security/rate-limit.ts).
+    const rl = await enforceRateLimit("payment-webhook", req, null);
+    if (!rl.success) {
+      return fail("RATE_LIMITED", "웹훅 요청이 너무 잦습니다.", 429, {
+        resetAt: rl.reset,
+      });
     }
 
     const raw = (await req.json().catch(() => ({}))) as unknown;

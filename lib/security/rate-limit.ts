@@ -119,6 +119,10 @@ const PRESETS = {
   "account-delete": { limit: 5, window: "1 h", prefix: "account-delete" },
   // 회원가입 — IP 당 시간당 10회 (가입 남용/스팸 계정 차단)
   signup: { limit: 10, window: "1 h", prefix: "signup" },
+  // 결제 웹훅 — IP 당 분당 60회. 토스는 개발자 지정 헤더를 보낼 수 없어 이 엔드포인트는
+  // 무인증이다(진위는 paymentKey 재조회로 검증). 그래서 폭주 차단만 여기서 맡는다.
+  // 정상 트래픽은 결제 건당 소수 + 실패 시 3일 19시간에 걸친 7회 재시도뿐이라 여유가 크다.
+  "payment-webhook": { limit: 60, window: "1 m", prefix: "payment-webhook" },
 } as const satisfies Record<string, LimiterOptions>;
 
 /**

@@ -274,7 +274,6 @@ vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
 vercel env add SUPABASE_SERVICE_ROLE_KEY production
 vercel env add TOSS_SECRET_KEY production
 vercel env add NEXT_PUBLIC_TOSS_CLIENT_KEY production
-vercel env add TOSS_WEBHOOK_SECRET production
 vercel env add NEXT_PUBLIC_APP_URL production
 ```
 
@@ -292,7 +291,10 @@ vercel env add NEXT_PUBLIC_APP_URL production
 1. https://app.tosspayments.com/ 가입 후 사업자 심사 통과
 2. 라이브 키(`live_sk_...`, `live_ck_...`) 발급
 3. 웹훅 등록: `https://<도메인>/api/payments/webhook`
-   - `X-Webhook-Secret` 헤더에 `TOSS_WEBHOOK_SECRET` 과 동일 값 등록
+   - **커스텀 헤더나 시크릿을 설정할 필요가 없다(설정할 수도 없다).** 토스는 개발자가
+     지정한 헤더를 웹훅에 실어 보내지 못하고, 서명 헤더는 지급대행 이벤트 전용이다.
+   - 진위는 서버가 `paymentKey` 로 토스 API 를 재조회해 금액·상태를 대조하는 방식으로
+     검증한다 — 자세한 근거는 `app/api/payments/webhook/route.ts` 상단 주석 참조.
 
 ### 5. 카카오 OAuth (선택)
 1. https://developers.kakao.com/ 에서 앱 생성
