@@ -17,7 +17,8 @@
     "test:pdf:update": "NODE_OPTIONS=\"--require ./scripts/_server-only-stub.cjs\" pnpm exec tsx scripts/pdf-regression.ts --update",
     "e2e": "playwright test e2e/smoke.spec.ts",
     "e2e:headed": "playwright test --headed",
-    "test:a11y": "playwright test e2e/a11y.spec.ts"
+    "test:a11y": "playwright test e2e/a11y.spec.ts",
+    "e2e:auth": "playwright test --project=authenticated-desktop"
   },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.55",

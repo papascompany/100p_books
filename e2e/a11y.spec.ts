@@ -69,12 +69,31 @@ const PUBLIC_ROUTES: Array<{ path: string; label: string }> = [
   { path: "/offline", label: "오프라인" },
 ];
 
+/**
+ * 색 대비를 재기 전에 화면을 안정시킨다.
+ *
+ * 고정 대기(600ms)로는 부족하다 — 웹폰트가 늦게 스왑되면 그만큼 진입 애니메이션도 밀려서,
+ * `animate-fade-up` 이 opacity 1 에 도달하기 전에 axe 가 측정한다. 전환 중 텍스트는 실효
+ * 대비가 낮게 계산돼 통과/실패가 실행마다 뒤집힌다(폰트를 3단 분할한 뒤 실제로 관측됨).
+ * 그래서 시간이 아니라 **상태**를 기다린다.
+ */
+async function settle(page: Page): Promise<void> {
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  await page.waitForFunction(
+    () =>
+      Array.from(document.querySelectorAll<HTMLElement>('[class*="animate-"]')).every(
+        (el) => getComputedStyle(el).opacity === "1",
+      ),
+    undefined,
+    { timeout: 10_000 },
+  );
+}
+
 test.describe("WCAG 2.1 AA — 공개 라우트", () => {
   for (const route of PUBLIC_ROUTES) {
     test(`${route.path} (${route.label})`, async ({ page }) => {
       await page.goto(route.path, { waitUntil: "domcontentloaded" });
-      // 진입 애니메이션(fade-up)이 끝난 상태에서 대비를 측정한다.
-      await page.waitForTimeout(600);
+      await settle(page);
       await expectNoViolations(page, `${route.path} ${route.label}`);
     });
   }
@@ -143,7 +162,7 @@ test.describe("WCAG 2.1 AA — 다크 모드", () => {
   ]) {
     test(`${route.path} (${route.label}) 다크`, async ({ page }) => {
       await page.goto(route.path, { waitUntil: "domcontentloaded" });
-      await page.waitForTimeout(600);
+      await settle(page);
       await expectNoViolations(page, `${route.path} ${route.label} (다크)`);
     });
   }
