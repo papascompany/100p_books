@@ -1,15 +1,130 @@
 # 100p Books — 개발 현황 및 다음 단계
 
-> 최종 업데이트: 2026-08-06
+> 최종 업데이트: 2026-08-07
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `efbc746` (docs: 이미지 최적화 결과 기록) — 직전 실코드 커밋 `d1c17ea`
+> 운영 빌드: `735fb2a` (fix(analytics): 이메일 가입 signup_completed) — Vercel prod success
 > 다음 세션 인계: [docs/NEXT-SESSION-PROMPT.md](docs/NEXT-SESSION-PROMPT.md) (붙여넣기 블록 그대로 사용)
 > **정본 로컬 경로**: `/Users/yohan/Developer/claude/100p_books` (Documents 사본은 node_modules 제거됨)
+> **성능 수치 정본**: §0-5 (2026-08-07, prod 5회 측정). §0-4 는 그 직전 상태, §M8·테스트 현황의
+> "Performance 97 · LCP 1.5s" 는 2026-05-13 옛 측정치이니 baseline 으로 쓰지 말 것.
 
 ---
 
-## 🆕 최근 작업 (2026-06-13 ~ 2026-08-05)
+## 🆕 최근 작업 (2026-08-07)
+
+### 0-6. 🚨 에디터 ref 회귀 수정 — 저장·캔버스 조작이 3개월간 전면 불가였다 (2026-08-07)
+
+**증상**: 표지/내지 에디터에서 "저장", "글 추가", "사진 추가", undo/redo 등 캔버스를 건드리는
+모든 조작이 **아무 일도 하지 않았다**. 네트워크 요청도 캔버스 변화도 없다.
+
+**원인**: `CoverEditor` 와 `PageEditor` 가 `FabricStage` 를 `dynamic(() => import(...))` 로
+직접 감쌌는데, **next/dynamic 이 만드는 Loadable 래퍼는 함수 컴포넌트라 ref 를 전달하지
+않는다**(React 가 "Function components cannot be given refs" 로 경고하고 ref 를 버린다).
+그래서 `stageRef.current` 가 계속 null 이었고, `serializeLive()` 가 null 을 반환해
+`save()` 가 fetch 도 없이 조기 반환했다. `handleStageReady` 의 `loadDoc` 도 같은 이유로 no-op.
+
+**언제부터**: `46e8d4e`(2026-05-07, "perf: Bebas Neue self-hosting + fabric.js lazy chunk 분리")
+에서 정적 import 를 dynamic 으로 바꾸며 끊겼다. main 에 포함돼 **약 3개월간 운영 배포 상태**.
+성능 최적화가 기능을 조용히 죽인 전형적인 회귀다.
+
+**영향**: 표지 저장이 안 되면 `cover_json` 이 없어 주문 페이지 게이트
+(`order/[projectId]/page.tsx:70-103`)가 열리지 않는다 — **주문 진행 자체가 막힌다.**
+서버 API 기반인 "자동 편집"(`/api/layout/generate`)은 정상이라 내지 페이지는 생성됐다.
+
+**수정**: `components/editor/FabricStageLazy.tsx` 신설 — forwardRef 래퍼가 ref 를 받아
+`forwardedRef` **prop 으로** 우회 전달하고, `FabricStage` 가 그것을 `useImperativeHandle` 에
+연결한다(핸들은 `useMemo` 로 한 번 만들어 두 경로에 공유). lazy 청크 분리는 유지된다.
+두 에디터는 이 래퍼를 import 한다.
+
+**실증**: 골든 플로우 E2E 로 확인 — 수정 전에는 120초 동안 저장을 반복 클릭해도 PATCH 가
+한 번도 안 나갔고(dev·프로덕션 빌드 모두), `addText` 클릭 후 캔버스도 그대로였다.
+수정 후 **첫 클릭에 PATCH 성공, 업로드→편집→표지→주문 전 구간 통과(2 passed, 22초)**.
+
+> 교훈: 이 회귀는 유닛 테스트·타입체크·빌드·공개 라우트 E2E 를 **전부 통과**한 채 배포됐다.
+> 로그인 이후 화면을 실제로 조작하는 E2E 가 없었기 때문이다. 아래 ⑤ 픽스처가 그 공백을 메운다.
+
+### 0-5. 퍼널 계측 완결 · 운영 env 실측 · 렌더링 재평가 · 인증 E2E 픽스처 (2026-08-07)
+
+**① PR #2 머지 — 이메일 가입 퍼널 누락 수정** (`735fb2a`)
+- 버그 재확인: `signup_completed` 가 `app/api/auth/callback/route.ts:87` 에만 있어
+  이메일+비밀번호 가입자는 퍼널 1단계에서 통째로 빠져 있었다(그 경로는 callback 을 타지 않음).
+- CI 신설 이전 브랜치라 GitHub Actions 결과가 없던 문제 → main rebase 후 재실행,
+  **verify 1m44s / e2e 1m14s / a11y 2m24s 전건 green** 확인 후 rebase 머지. Vercel prod success.
+- ⚠️ 머지 이전 `funnel_events` 데이터는 여전히 이메일 가입자가 빠져 있다 —
+  전환율 분모가 과소하니 그대로 읽지 말 것.
+
+**② `book_completed` 서버측 dedupe** — 마이그레이션 `0030` (운영 적용 대기)
+- `POST /api/cover` 는 표지 저장마다 이벤트를 기록해, 표지를 10번 손보면 10건이 쌓여
+  "책 완성" 분자가 부풀었다.
+- `signup_completed` 와 같은 관례로 **DB 부분 유니크 인덱스**(`(project_id, event)`)로 멱등화.
+  앱은 그대로 INSERT 하고 23505 를 헬퍼가 정상 무시한다. 키를 project 단위로 잡은 이유는
+  한 사용자가 책 두 권을 만들면 2건이 기록돼야 하기 때문.
+- 인덱스 생성 전에 기존 중복을 **가장 이른 1건만 남기고** 정리하는 DELETE 를 포함했다.
+
+**③ 미설정 env 3종 실측 — 웹훅은 env 문제가 아니었다** → [docs/OPS-ENV-STATUS.md](docs/OPS-ENV-STATUS.md)
+- **핵심 발견**: 토스페이먼츠는 개발자 지정 커스텀 헤더를 웹훅에 실어 보낼 수 없다.
+  요청 헤더는 `tosspayments-webhook-*` 4종 고정이고 서명 헤더는 **지급대행 이벤트 전용**이다.
+  우리 코드는 `x-webhook-secret` 을 요구하므로 → 미설정이면 500, **설정하면 401**.
+  **어느 쪽이든 웹훅이 통과하지 못한다. `TOSS_WEBHOOK_SECRET` 등록은 조치가 아니다.**
+- 실제 손실은 결제 승인이 아니라(그건 confirm 이 처리) "앱을 거치지 않은 상태 변화"의 자동 반영 —
+  토스 콘솔 직접 취소/환불이 `refunded` 로 안 넘어오고 포인트·할인 복원이 안 돈다.
+  대체 경로는 있다: 관리자 콘솔 수동 전이가 같은 `restoreOrderCredits` 를 호출한다.
+- 조치 A/B/C 안과 Upstash·Resend 절차는 위 문서에 정리. **오너 결정 대기.**
+
+**④ 렌더링 경로 최적화 재평가 — 결론: 착수 가치 있음, 레버는 폰트 하나뿐**
+- prod(`735fb2a`) **5회 측정** 중앙값: Performance **83** · FCP **977ms**(편차 972~984, 매우 안정)
+  · LCP **4,814ms** · TBT **0** · CLS **0** · SI 1,732ms(편차 972~4,318 — 신뢰 불가).
+- **지난 세션의 "elementRenderDelay 가 지배적" 진단은 상황에 따라 다르다**: LCP breakdown 실측 합은
+  run 별로 312ms / 937ms / 2,327ms 인데 보고된 LCP 는 4.5~5.2s 다. 이 격차는 Lighthouse 가
+  **Lantern 시뮬레이션**(mobile, 1,474Kbps, RTT 150ms, CPU 4×)으로 재계산하기 때문이다.
+- 진짜 원인은 대역폭이다: 총 전송 **938KB** ÷ 184KB/s ≈ **5.1초** — 보고 LCP 와 일치한다.
+  그중 **폰트 core 533KB 가 57%**, 2위는 54KB 짜리 스크립트다.
+- 다른 레버는 이미 소진: TBT 0 이라 JS·하이드레이션 여지 없음. LCP 요소인 hero `<img>` 는
+  `fetchpriority=high` · eager · discoverable 진단을 **전부 통과**(51KB).
+- **정량 실험**: 홈이 실제로 쓰는 고유 한글은 **245자**(RSC 페이로드 포함, 가시 텍스트 213자).
+  그만 담은 서브셋은 104KB — 현재 core 533KB 대비 429KB 절감.
+- **구현 완료 — 3단 분할**(`scripts/build-font-subsets.py` 재작성):
+  - `ui` **199KB**(preload) = 라틴·기호 실사용분 + **앱 소스에 리터럴로 등장하는 한글 760자**.
+    홈 245자가 아니라 소스 전체를 스캔한 이유: UI 문자열은 코드에 박혀 있어 정적으로 전부
+    모을 수 있고, 그러면 앱의 **모든 고정 문구**가 첫 폰트로 커버된다. 사용자 생성 텍스트
+    (제목·후기·주소)에서만 다음 단계를 받는다.
+  - `kr` 301KB(preload 없음) = KS X 1001 중 ui 에 없는 1,591자
+  - `ext` 1,315KB(preload 없음) = 나머지 완성형 8,821자
+  - 부수 최적화: 블록별 실사용을 세어(전체 1,864자 중 124자만 사용) **라틴 확장·문자유사·
+    도형·가나·전각 블록을 제거**해 267→199KB. 수학·기타기호는 실제 쓰는 10자만 개별 지정.
+    통화(₩ 예비)와 한글 자모(사용자 입력 "ㅋㅋ")는 소스에 없어도 남겼다.
+  - **크리티컬 경로 폰트 533KB → 199KB (-334KB)**. tailwind 폴백 체인은 ui → kr → ext 3단.
+- 부수 발견 — **a11y 테스트가 flaky 했다**: 폰트가 3개로 늘자 스왑이 밀리면서 진입
+  애니메이션도 함께 밀려, 고정 대기 600ms 뒤 측정하던 axe 가 `animate-fade-up` 의
+  opacity 전환 중 텍스트를 재 대비 위반으로 보고했다(실행마다 실패 1~4건으로 요동).
+  시간이 아닌 **상태**를 기다리도록 `settle()` 신설(`document.fonts.ready` +
+  모든 `animate-*` 의 opacity===1) → **25 passed × 3회 연속 안정**.
+  참고: coral(#FF6B5E)+night(#141414) 실제 대비는 6.59:1 로 애초에 기준을 넘는다 —
+  색 문제가 아니라 측정 시점 문제였다.
+
+**⑤ 인증 사용자 E2E 골든 플로우 — 픽스처·spec 구현 (실행 검증은 승인 대기)**
+- 새 파일: `e2e/fixtures/test-user.ts`(service_role 계정 준비 + 데이터 정리),
+  `e2e/fixtures/paths.ts`, `e2e/auth.setup.ts`(storageState), `e2e/golden-flow.spec.ts`,
+  `e2e/fixtures/photos/sample-{1,2,3}.jpg`. `playwright.config.ts` 에 `setup` +
+  `authenticated-desktop` 프로젝트 추가, `pnpm e2e:auth` 스크립트 신설.
+- 설계 결정과 근거:
+  - 세션 쿠키 위조는 불가능하다(`requireUser()` 가 `auth.getUser()` 로 GoTrue 왕복 검증)
+    → **실제 로그인 폼을 통과**한 뒤 storageState 를 저장한다.
+  - 비밀번호는 실행할 때마다 새로 만들어 프로세스 메모리에만 두고, 디스크에는
+    세션 쿠키만 남긴다(`e2e/.auth/` 는 gitignore).
+  - **결제창은 열지 않는다.** "결제하기" 버튼이 enabled 가 되는 것까지가 마지막 단언 —
+    그 버튼을 누르면 `orders` 행이 생기고 곧바로 Toss 로 전체 리다이렉트된다.
+  - 운영 Supabase 를 그대로 쓰므로 `afterAll` 에서 프로젝트·사진·스토리지를 지운다.
+    `orders.project_id` 에 CASCADE 가 없어 주문 → 프로젝트 순서를 지켜야 한다.
+  - 모바일 뷰포트 제외: `Dropzone` 의 `<input type="file">` 이 ≤768px 에서 DOM 에서 빠지고
+    바텀시트 안으로 들어간다.
+- 검증 상태: typecheck 0 · lint 0 · vitest 169p/1s · pdf 4케이스 OK ·
+  기존 `pnpm e2e` **12 passed 유지(회귀 없음)** · env 없을 때 skip 경로 정상 동작.
+  **미검증**: 골든 플로우 본 실행. 셀렉터는 실제 JSX 근거로 작성했으나 로그인 상태가 필요해
+  아직 돌리지 않았다 — 운영 DB 에 테스트 계정을 만드는 일이라 **승인 후 실행**.
+
+## 이전 작업 (2026-06-13 ~ 2026-08-05)
 
 ### 0-4. Lighthouse SI/TTI 개선 — 폰트 분할 + 홈 번들 축소 (2026-08-05)
 - **실측으로 병목을 재정의**: 기존 기록은 원인을 "클라이언트 JS 사이즈(fabric chunk 등)"로
@@ -340,12 +455,13 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 | 미설정 env | 실제 동작 | 근거 |
 |---|---|---|
-| `TOSS_WEBHOOK_SECRET` | ⚠️ production 에서 **결제 웹훅을 전부 500 `WEBHOOK_NOT_CONFIGURED` 로 거부**(fail-closed) | `app/api/payments/webhook/route.ts:75-84` |
+| ~~`TOSS_WEBHOOK_SECRET`~~ | **해소(2026-08-07)** — 토스가 커스텀 헤더를 못 보내 이 키로는 해결이 불가능했다. 헤더 게이트를 제거하고 재조회 검증 + rate limit 으로 대체(§0-5, [docs/OPS-ENV-STATUS.md](docs/OPS-ENV-STATUS.md)) | `app/api/payments/webhook/route.ts` |
 | `UPSTASH_REDIS_REST_URL`/`TOKEN` | rate limit **전면 fail-open**(가입 라우트 포함) | `lib/security/rate-limit.ts:13,21-23` |
 | `RESEND_API_KEY`/`EMAIL_FROM` | 메일 job **cancelled 처리 → 발송 0** | `lib/email/worker.ts:168-172` |
 
 1. ~~**Supabase 운영 DB 마이그레이션 적용**~~ ✅ **0001~0029 전부 완료**(0029: 2026-07-31)
-2. **`TOSS_WEBHOOK_SECRET` 등록** — 현재 웹훅이 전면 거부되므로 결제 상태 동기화에 영향. **우선순위 최상**
+2. ~~**`TOSS_WEBHOOK_SECRET` 등록**~~ ✅ **불필요로 판명(2026-08-07)** — 등록해도 401 로 거부된다.
+   코드 수정으로 해소했고, 남은 것은 **토스 콘솔에 웹훅 URL 등록**뿐이다(헤더 설정 없음)
 3. **Kakao OAuth 콘솔 등록** — REST API Key + Client Secret → Supabase Provider Enable
 4. **Resend API Key + EMAIL_FROM** — 가입/주문 메일 실 발송(현재 발송 0)
 5. **(선택) Upstash Redis 구독 + env** — Rate limit 활성화 (미설정 시 fail-open, 보안 권장)
