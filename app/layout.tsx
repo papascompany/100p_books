@@ -21,11 +21,23 @@ import "./globals.css";
  * core → ext 순으로 나열한다. 브라우저는 core 에 없는 글리프를 만날 때만 ext 를 요청하므로
  * next/font 의 자동 fallback 메트릭(size-adjust, CLS 방지)을 그대로 유지할 수 있다.
  */
+// 3단 분할 — 크리티컬 경로에는 ui(199KB)만 올린다.
+// 홈 총 전송 938KB 중 폰트가 533KB(57%)였고, Lighthouse 는 이를 1,474Kbps 로 시뮬레이션해
+// LCP 를 계산하므로 전송량이 곧 LCP 였다. 자세한 근거는 scripts/build-font-subsets.py 주석.
 const pretendard = localFont({
-  src: "../public/fonts/Pretendard-core.woff2",
+  src: "../public/fonts/Pretendard-ui.woff2",
   variable: "--font-pretendard",
   display: "swap",
   preload: true,
+  weight: "45 920",
+});
+
+// KS X 1001 중 앱 UI 문자열에 없는 한글 — 사용자 입력(제목·후기·주소)에서만 필요해진다.
+const pretendardKr = localFont({
+  src: "../public/fonts/Pretendard-kr.woff2",
+  variable: "--font-pretendard-kr",
+  display: "swap",
+  preload: false,
   weight: "45 920",
 });
 
@@ -153,7 +165,7 @@ export default function RootLayout({
           />
         ) : null}
       </head>
-      <body className={`${pretendard.variable} ${pretendardExt.variable} ${bebasNeue.variable} min-h-screen font-sans antialiased bg-background text-foreground`}>
+      <body className={`${pretendard.variable} ${pretendardKr.variable} ${pretendardExt.variable} ${bebasNeue.variable} min-h-screen font-sans antialiased bg-background text-foreground`}>
         <ThemeProvider>
           <div className="flex min-h-screen flex-col">{children}</div>
           <Toaster />

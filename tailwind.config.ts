@@ -111,7 +111,9 @@ const config: Config = {
         /* Pretendard Variable — 한글/UI 기본 폰트 (next/font CSS 변수) */
         sans: [
           "var(--font-pretendard)",
-          /* 희귀 한글 음절 폴백 — core 서브셋에 없는 글리프만 이 폰트에서 받는다 */
+          /* 3단 폴백 — 앞 서브셋에 없는 글리프를 만날 때만 다음 폰트를 받는다.
+             ui(앱 UI 문자열·preload) → kr(KS X 1001 나머지) → ext(희귀 음절) */
+          "var(--font-pretendard-kr)",
           "var(--font-pretendard-ext)",
           "ui-sans-serif",
           "system-ui",
@@ -122,6 +124,7 @@ const config: Config = {
         ],
         display: [
           "var(--font-pretendard)",
+          "var(--font-pretendard-kr)",
           "var(--font-pretendard-ext)",
           "ui-sans-serif",
           "sans-serif",
