@@ -4,6 +4,7 @@ import * as fabric from "fabric";
 import { nanoid } from "nanoid";
 import {
   forwardRef,
+  type Ref,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -122,6 +123,15 @@ export interface FabricStageProps {
   /** 캔버스 초기화 완료 — lazy load 시 doc 로딩 트리거용. 최초 1회만 발생. */
   onReady?: () => void;
   className?: string;
+  /**
+   * `next/dynamic` 경유용 ref 통로.
+   *
+   * next/dynamic 이 만드는 Loadable 래퍼는 함수 컴포넌트라 ref 를 받지 못한다
+   * (React 가 "Function components cannot be given refs" 로 경고하고 ref 는 버려진다).
+   * 그래서 lazy 래퍼(`FabricStageLazy`)가 ref 를 **prop 으로** 넘기고, 여기서
+   * 일반 ref 와 동일하게 핸들을 연결한다. 직접 import 하는 경우엔 쓰지 않는다.
+   */
+  forwardedRef?: Ref<FabricStageHandle>;
 }
 
 /**
@@ -148,6 +158,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       onHistoryChange,
       onReady,
       className,
+      forwardedRef,
     } = props;
 
     const wrapperRef = useRef<HTMLDivElement>(null);
@@ -832,8 +843,9 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       [],
     );
 
-    useImperativeHandle(
-      ref,
+    // 핸들을 한 번 만들어 두 경로(직접 ref / lazy 래퍼가 넘긴 forwardedRef)에 같이 붙인다.
+    // 둘을 따로 만들면 같은 캔버스에 서로 다른 핸들 객체가 물려 헷갈린다.
+    const handle = useMemo<FabricStageHandle>(
       () => ({
         loadDoc,
         serialize,
@@ -877,6 +889,9 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         bleedMm,
       ],
     );
+
+    useImperativeHandle(ref, () => handle, [handle]);
+    useImperativeHandle(forwardedRef, () => handle, [handle]);
 
     void historyVersion; // re-render trigger
 

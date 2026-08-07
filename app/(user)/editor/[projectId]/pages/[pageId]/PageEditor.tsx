@@ -8,14 +8,9 @@ import dynamic from "next/dynamic";
 
 import CollageTemplateDialog from "@/components/editor/CollageTemplateDialog";
 import type { FabricStageHandle } from "@/components/editor/FabricStage";
-const FabricStage = dynamic(() => import("@/components/editor/FabricStage"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex flex-1 items-center justify-center bg-soft-cloud">
-      <div className="size-10 animate-spin rounded-full border-4 border-hairline border-t-ink" />
-    </div>
-  ),
-});
+// ⚠️ dynamic() 직접 사용 금지 — ref 가 끊겨 stageRef 가 null 이 된다(저장 no-op).
+// 근거는 components/editor/FabricStageLazy.tsx 상단 주석.
+import FabricStage from "@/components/editor/FabricStageLazy";
 const PREVIEW_DPI = 72;
 import KeyboardShortcutsHelp, {
   useShortcutsAutoShow,

@@ -14,14 +14,10 @@ import type { FabricStageHandle } from "@/components/editor/FabricStage";
 import PhotoPickerDialog from "@/components/editor/PhotoPickerDialog";
 import ResourcePalette from "@/components/editor/ResourcePalette";
 
-const FabricStage = dynamic(() => import("@/components/editor/FabricStage"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-64 w-full items-center justify-center bg-soft-cloud">
-      <div className="size-10 animate-spin rounded-full border-4 border-hairline border-t-ink" />
-    </div>
-  ),
-});
+// ⚠️ FabricStage 를 dynamic() 으로 직접 감싸면 ref 가 전달되지 않아 stageRef 가 null 이
+// 된다(저장·객체 추가가 전부 no-op). lazy 청크는 유지하면서 ref 를 살리는 래퍼를 쓴다 —
+// 근거는 components/editor/FabricStageLazy.tsx 상단 주석.
+import FabricStage from "@/components/editor/FabricStageLazy";
 const SelectionPanel = dynamic(() => import("@/components/editor/SelectionPanel"), { ssr: false });
 const PREVIEW_DPI = 72;
 /** 모바일 면 세그먼트 확대 시 논리 px 대비 허용 최대 업스케일(핀치 maxZoom 4와 정합). */
