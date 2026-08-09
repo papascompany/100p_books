@@ -4,10 +4,13 @@
 > 콘솔 클릭·SQL)은 전부 [docs/LAUNCH-RUNBOOK.md](docs/LAUNCH-RUNBOOK.md) 한 곳에 있다.
 > 실시간 상태는 관리자 대시보드(`/admin`)의 "서비스 런치 체크" 카드.
 >
+> 🔴 **단 하나 예외 — 오픈 전 반드시**: 보안 마이그레이션 `0031` 을 운영 DB 에 적용할 것
+> (런북 §0). 적용 전에는 공개 anon 키로 포인트를 무한 발급할 수 있다(§0-7 참조).
+>
 > 최종 업데이트: 2026-08-09
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `3529f0d` — CI green(verify·e2e·a11y) · Vercel prod success
+> 운영 빌드: `f760357` — CI green(verify·e2e·a11y) · Vercel prod success
 > 다음 세션 인계: [docs/NEXT-SESSION-PROMPT.md](docs/NEXT-SESSION-PROMPT.md) (붙여넣기 블록 그대로 사용)
 > **정본 로컬 경로**: `/Users/yohan/Developer/claude/100p_books` (Documents 사본은 node_modules 제거됨)
 > **성능 수치 정본**: §0-5 (2026-08-07, prod 5회 측정). §0-4 는 그 직전 상태, §M8·테스트 현황의
