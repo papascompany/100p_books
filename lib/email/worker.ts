@@ -17,7 +17,10 @@ import type { EmailJob } from "@/lib/db/types";
  * Resend 통합:
  *   - RESEND_API_KEY 가 설정되어 있으면 Resend SDK 로 발송.
  *   - EMAIL_FROM 환경변수: 발신자 주소 (기본: "100p Books <noreply@100pbooks.com>").
- *   - 미설정이면 status='cancelled', last_error 명시.
+ *   - **미설정이면 큐를 아예 건드리지 않는다**(deferred). 예전에는 잡을 'cancelled' 로
+ *     종결시켰는데, 그러면 키를 나중에 등록해도 그동안 쌓인 주문·배송 알림이 영구 유실된다.
+ *     지금은 pending 그대로 두므로 키를 넣는 순간 scheduled_at 순서대로 발송된다.
+ *     attempt 도 소모하지 않는다(키 없는 상태로 cron 이 돌아 max_attempts 를 태우던 문제).
  *
  * 재시도:
  *   - 실패한 잡은 status='failed' + attempt+1.
@@ -36,6 +39,13 @@ export interface ProcessResult {
   sent: number;
   failed: number;
   skipped: number;
+  /**
+   * true 면 발송 인프라가 없어 큐를 그대로 두고 아무것도 처리하지 않았다는 뜻.
+   * cron 응답에 그대로 실려 나가므로 운영자가 "왜 0건인지" 를 바로 알 수 있다.
+   */
+  deferred?: boolean;
+  /** deferred 일 때 대기 중인 잡 수 — 방치 규모를 드러낸다. */
+  queued?: number;
 }
 
 const DEFAULT_BATCH = 10;
@@ -45,6 +55,21 @@ export async function processEmailQueue(
 ): Promise<ProcessResult> {
   const batch = opts.batchSize ?? DEFAULT_BATCH;
   const admin = createAdminSupabase();
+
+  // 0) 발송 인프라 확인 — 없으면 큐를 **건드리지 않고** 그대로 대기시킨다.
+  //    잡을 cancelled 로 종결하면 키 등록 후에도 되살릴 수 없다(주문 확인·배송 알림 유실).
+  if (!process.env.RESEND_API_KEY) {
+    const { count } = await admin
+      .from("email_jobs")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["pending", "failed"]);
+    const queued = count ?? 0;
+    console.warn(
+      `[email/worker] RESEND_API_KEY 미설정 — 발송을 보류하고 큐를 보존합니다 (대기 ${queued}건). ` +
+        `키를 등록하면 다음 cron 에서 자동 발송됩니다.`,
+    );
+    return { processed: 0, sent: 0, failed: 0, skipped: 0, deferred: true, queued };
+  }
 
   // 1) 후보 가져오기 — pending + failed (attempt < max_attempts)
   const nowIso = new Date().toISOString();
@@ -168,11 +193,14 @@ async function sendEmail(job: EmailJob): Promise<SendResult> {
   const resendKey = process.env.RESEND_API_KEY;
 
   if (!resendKey) {
+    // 정상 경로에서는 도달하지 않는다 — processEmailQueue 가 진입 시점에 걸러
+    // 잡을 pending 그대로 남긴다. 여기까지 왔다면 그 가드를 우회한 직접 호출이므로,
+    // 잡을 죽이지 않고 'failed' 로 두어 다음 실행에서 재시도되게 한다.
     console.warn(
-      `[email/worker] RESEND_API_KEY 미설정 — job ${job.id} cancelled (template=${job.template}, to=${job.to_email})`,
+      `[email/worker] RESEND_API_KEY 미설정 — job ${job.id} 발송 보류 (template=${job.template})`,
     );
     return {
-      kind: "cancelled",
+      kind: "failed",
       error: "RESEND_API_KEY 환경변수가 설정되지 않았습니다.",
     };
   }
