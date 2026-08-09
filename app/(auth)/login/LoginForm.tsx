@@ -56,6 +56,13 @@ function friendlyAuthError(message: string, mode: Mode): string {
   return message || "로그인에 실패했습니다.";
 }
 
+/**
+ * 카카오 로그인 노출 스위치 — Kakao Developers 콘솔 + Supabase Provider 설정이
+ * 완료된 뒤 Vercel env 에 NEXT_PUBLIC_KAKAO_ENABLED=1 을 넣으면 켜진다.
+ * (미설정 시 버튼을 숨겨 "죽은 버튼"이 노출되지 않게 한다 — LAUNCH-RUNBOOK §5)
+ */
+const KAKAO_ENABLED = process.env.NEXT_PUBLIC_KAKAO_ENABLED === "1";
+
 /** 콜백 라우트(?error=코드)가 전달하는 에러 코드를 한국어 안내문으로 변환. */
 function callbackErrorMessage(code: string): string {
   switch (code) {
@@ -277,7 +284,7 @@ export default function LoginForm() {
           </div>
         ) : (
           <>
-            {mode !== "forgot" ? (
+            {KAKAO_ENABLED && mode !== "forgot" ? (
               <>
                 {/* 카카오 — 모바일 주 로그인 수단으로 폼 상단에 배치 */}
                 <Button

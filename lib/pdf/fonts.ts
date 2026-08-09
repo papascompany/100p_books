@@ -23,8 +23,13 @@ import type { PageDoc } from "@/lib/layout/types";
 
 const REGISTERED = new Set<string>();
 
-/** Pretendard 등 시스템 폴백 family — 등록 실패 시 graceful fallback. */
-const SYSTEM_FALLBACKS = ["Pretendard", "system-ui", "sans-serif"];
+/**
+ * 시스템 폴백 family — 이 이름들은 resources 조회 대상에서 제외한다.
+ * ⚠️ "Pretendard" 를 여기 넣지 말 것: Vercel Linux 런타임에는 Pretendard 가
+ * 설치돼 있지 않다. resources 에 시딩된 Pretendard 를 조회해 등록해야
+ * 한글이 폴백(또는 tofu)으로 렌더되지 않는다.
+ */
+const SYSTEM_FALLBACKS = ["system-ui", "sans-serif"];
 
 interface FontRow {
   id: string;

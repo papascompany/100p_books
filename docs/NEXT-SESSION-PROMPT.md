@@ -2,11 +2,11 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 2026-08-07 · main = origin/main · CI green · Vercel prod success
-> 직전 실코드 커밋 `1f482c6`(perf: 폰트 3단 분할). 이 문서/STATUS 갱신 커밋이 그 뒤에 온다.
-> 최근 세션: **에디터 ref 회귀 수정(3개월간 저장 불가)** · 웹훅 헤더 게이트 제거 ·
-> 인증 골든 플로우 E2E 신설 · 폰트 3단 분할 · PR #2 머지 · `book_completed` dedupe(0030, **운영 미적용**).
-> 이 문서의 수치·경로는 모두 이번 세션에 실행·측정으로 확인한 값이다.
+> 갱신 2026-08-09 · main = origin/main · CI green · Vercel prod success
+> **🚀 서비스 개시 가능 상태.** 남은 운영 액션은 전부 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md),
+> 실시간 상태는 `/admin` "서비스 런치 체크" 카드. **"다음 추천" 목록을 새로 만들지 말 것 —
+> 운영 액션·백로그의 유일한 정본은 런북이다** (사용자 지시, 2026-08-09).
+> 최근 세션: 폰트 운영 시딩(resources 0→1) · 카카오 버튼 env 게이트 · 런치 체크판 · 런북 일원화.
 
 ---
 
@@ -109,6 +109,15 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
    `test/fixtures/pdf-baseline.json`에 **darwin-arm64 + linux-x64 둘 다 등록**.
 9. **WCAG 2.1 AA 감사**(`e2e/a11y.spec.ts`) — 실측 위반 5종 발견·수정 후 25/25 통과.
 
+**2026-08-09 세션 (서비스 런치 마감)**
+17. **폰트 운영 시딩 + 폴백 수정** — `resources` 가 비어 있어 PDF 한글이 폴백 렌더될 상태.
+    Pretendard 시딩(실코드 경로로 렌더 검증) + `lib/pdf/fonts.ts` SYSTEM_FALLBACKS 에서
+    "Pretendard" 제거. **다시 넣지 말 것**(Vercel Linux 에 없는 폰트).
+18. **카카오 버튼 게이트** — 프로바이더 비활성(authorize 400 실측) 상태의 죽은 버튼을
+    `NEXT_PUBLIC_KAKAO_ENABLED=1` 게이트로 숨김. 콘솔 설정 후 env 켜면 노출(런북 §5).
+19. **런치 체크판 + 런북** — `/admin` "서비스 런치 체크" 카드(`lib/admin/launch-status.ts`),
+    운영 액션·백로그 정본을 `docs/LAUNCH-RUNBOOK.md` 로 일원화.
+
 **2026-08-07 세션 (커밋 `9250ddf`~`3529f0d`, CI green · Vercel prod success)**
 12. 🚨 **에디터 ref 회귀 수정**(`9250ddf`) — `next/dynamic` 이 ref 를 버려 표지·내지 에디터의
     저장·객체 추가·undo/redo 가 **3개월간(2026-05-07~) 전면 no-op** 이었다. 표지 저장이 안 되면
@@ -172,56 +181,13 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
    (`document.fonts.ready` + 모든 `animate-*` 의 opacity===1). 고정 대기로 두면 폰트 스왑이 밀릴 때
    진입 애니메이션 전환 중에 axe 가 측정해 **대비 위반이 실행마다 1~4건씩 오락가락**한다.
 
-### 4. 예정 작업 (우선순위 순)
+### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
 
-0. 🔴 **[가장 먼저·사용자 액션] 마이그레이션 `0030` 운영 적용**
-   `supabase/migrations/0030_funnel_book_completed_once.sql` — `book_completed` 프로젝트당 1회
-   부분 유니크 인덱스 + 기존 중복 정리 DELETE. **코드는 이미 배포됐고 인덱스만 없는 상태**라
-   지금은 중복이 계속 쌓인다(동작은 정상 — 23505 무시 로직이 이미 있다).
-   SQL Editor 상단이 `100p_books / PRODUCTION` 인지 먼저 확인시킬 것. 0001~0029 는 적용 완료.
-
-1. **[사용자 액션 대기] Storige측 통지 전달** — 통지문 정본 `docs/STORIGE-NOTICE-2026-07-21.md`를
-   사용자가 Storige 세션에 붙여넣으면 끝. 요지: (a) validate/external FROZEN_ROUTES 등재
-   (b) 검증 result 키셋 골든 spec 신설 (c) 표지 검증 계약 긴장 정리(선택).
-   **2026-08-07 기준 아직 미전달.** 전달 완료 통보를 받으면 이 항목을 닫을 것.
-
-2. **[운영 판단 필요] 미설정 env 2종** → 절차는 [docs/OPS-ENV-STATUS.md](OPS-ENV-STATUS.md)
-   - `UPSTASH_REDIS_REST_URL`/`TOKEN` — rate limit 4종(가입·업로드·후기·탈퇴)이 전면 fail-open.
-     구독 + env 등록만 하면 코드 변경 없이 활성화된다(비용 발생 → 오너 결정).
-   - `RESEND_API_KEY`/`EMAIL_FROM` — 주문 완료·배송 알림 등 **메일 6종이 전부 cancelled**.
-     과거 큐 항목은 자동 재발송되지 않는다(`/api/admin/emails/[id]/retry` 로 개별 재시도).
-   - (웹훅은 §0 표 참조 — 코드로 해소됐고 **토스 콘솔에 URL 등록만** 남았다.)
-
-3. **[검토] 인증 E2E 를 CI 에 넣을지** — 현재 `pnpm e2e:auth` 는 **수동 실행**이다.
-   운영 Supabase 를 그대로 쓰기 때문에 CI 상시 실행은 (a) 운영 DB·스토리지 오염 (b) PUBLIC 레포
-   Actions 에 service_role 키 노출이라는 두 리스크가 있다. CI 편입을 원하면 **staging Supabase
-   프로젝트를 따로 만드는 것**이 선행 조건이다. 그 전까지는 릴리스 전 로컬 1회 실행을 권장.
-   → 이 테스트가 없었기 때문에 에디터 ref 회귀가 3개월간 안 잡혔다는 점을 기억할 것.
-
-4. **품질/성능 잔여** (사용자가 고르면 착수)
-   - **남은 성능 레버** — 폰트 정리 후 운영 5회 중앙값은 Performance **88** · LCP **3,619ms** ·
-     총 전송 **605KB** · TBT 0 · CLS 0. 전송량이 곧 LCP 인 구조는 그대로이니 다음 레버도
-     **전송량**이다(이미지 ~150KB + JS). 폰트는 199KB 까지 줄여 더 짜낼 여지가 적다.
-     ⚠️ Lighthouse 는 Lantern 시뮬레이션이라 실측 LCP breakdown 합(0.3~2.3s)과 크게 다르다 —
-     실사용자 체감과 점수를 혼동하지 말 것.
-   - **포인트 홀드/예약 설계** — create 검증 ↔ confirm 차감 사이 이중 사용의 구조적 해소
-     (현재는 confirm 캡처 전 재확인으로 완화, ms TOCTOU 감수). pending 주문 합산 검증 또는 ledger hold RPC.
-   - **100% 할인 코드 정책** — 현재 100원 미만 주문은 `AMOUNT_BELOW_MINIMUM`으로 차단(무료 주문 경로 없음).
-     무료 주문 지원 여부는 **오너 결정 필요**.
-   - 프로젝트 삭제 소프트삭제 편입(현재 하드 삭제, 스키마 변경 필요)
-   - 키보드 only 접근성 회귀 시나리오 · 인증 이후 화면 a11y 감사(이제 픽스처가 있다)
-
-5. **[선택] 퍼널 데이터 첫 확인** — `select event, count(*) from public.funnel_events group by 1 order by 2 desc;`
-   ⚠️ 두 가지를 감안해 읽을 것: ① `735fb2a`(2026-08-07) 이전 데이터는 **이메일 가입자의
-   `signup_completed` 가 통째로 빠져 있다**(분모 과소 → 전환율 과대). ② `0030` 적용 전
-   `book_completed` 는 표지 저장마다 중복 기록돼 **분자가 부풀어 있다**.
-
-6. **[보류] 데모 모드** — 사용자가 "구현 시작"이라고 할 때만: `/login` "데모 둘러보기" 원클릭 +
-   `POST /api/auth/demo-login` + `DEMO_MODE` env 토글. 운영자 준비물: 데모계정 + `DEMO_*` env.
-
-7. **[모니터링] Storige C-2 배포 통지 시** — 100p PDF 검증 E2E 재실증(105.9MB presigned→COMPLETED).
-   **선행: 로컬 `.env.local`에 `STORIGE_API_KEY`/`STORIGE_WORKER_API_KEY`를 받아야 실증 가능.**
-   `cropMarkEnabled` 미opt-in이라 기본 무영향.
+**여기에 목록을 다시 만들지 말 것.** 키 발급·콘솔 클릭·SQL 등 남은 운영 액션과 백로그는
+전부 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md)(\x{a7}1 토스 웹훅 \x{b7} \x{a7}3 Resend \x{b7} \x{a7}4 Upstash \x{b7}
+\x{a7}5 카카오 \x{b7} \x{a7}6 마이그레이션 0030 \x{b7} \x{a7}7 Storige 통지 \x{b7} 백로그 표)에 있고, 실시간 상태는
+`/admin` "서비스 런치 체크" 카드가 보여준다. 항목이 해소되면 런북에서 지우고,
+새 운영 이슈가 생기면 런북에 추가한다.
 
 ### 5. 작업 방식
 
@@ -233,8 +199,8 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
 - 세션 종료 시 `STATUS.md`와 이 문서를 갱신한다(완료/미완/다음 단계/새로 발견한 함정).
 
 **첫 작업**: `git status -sb && git log --oneline -5` 로 실제 상태를 확인하고,
-`STATUS.md`(§0-6 · §0-5)와 이 문서를 읽어 현재 상태를 보고한 뒤,
-예정 0번(**마이그레이션 0030 운영 적용 — 사용자 액션**)·1번(Storige 통지)·2번(Upstash/Resend)·
-3번(인증 E2E 의 CI 편입 여부)을 사용자에게 확인하고 사용자가 고른 항목부터 진행할 것.
+`STATUS.md`(§0-7)와 이 문서를 읽어 현재 상태를 한 문단으로 보고한다.
+**추천 목록을 만들지 말고**, 사용자가 시킨 작업을 바로 진행한다.
+운영 액션이 궁금하면 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md) 를 가리키는 것으로 끝.
 
 ## ─────────────────────────────── (붙여넣기 블록 끝)

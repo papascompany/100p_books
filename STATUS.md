@@ -1,6 +1,10 @@
 # 100p Books — 개발 현황 및 다음 단계
 
-> 최종 업데이트: 2026-08-07
+> **🚀 서비스 개시 가능 상태 (2026-08-09).** 코드 작업은 끝났고, 남은 운영 액션(키 발급·
+> 콘솔 클릭·SQL)은 전부 [docs/LAUNCH-RUNBOOK.md](docs/LAUNCH-RUNBOOK.md) 한 곳에 있다.
+> 실시간 상태는 관리자 대시보드(`/admin`)의 "서비스 런치 체크" 카드.
+>
+> 최종 업데이트: 2026-08-09
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
 > 운영 빌드: `3529f0d` — CI green(verify·e2e·a11y) · Vercel prod success
@@ -11,7 +15,24 @@
 
 ---
 
-## 🆕 최근 작업 (2026-08-07)
+## 🆕 최근 작업 (2026-08-09)
+
+### 0-7. 서비스 런치 마감 — 폰트 시딩 · 카카오 게이트 · 런치 체크판 · 런북 일원화 (2026-08-09)
+
+- **인쇄용 한글 폰트 운영 시딩**: `resources` 가 완전히 비어 있어(감사로 발견) PDF 한글이
+  폴백으로 렌더될 상태였다. Pretendard(variable woff2, OFL)를 admin 업로드 API 와 동일한
+  3단계 절차로 시딩하고, 실코드 경로(`registerProjectFonts`)로 다운로드→등록→한글 렌더 검증.
+  `lib/pdf/fonts.ts` 의 SYSTEM_FALLBACKS 에서 "Pretendard" 제거(Vercel Linux 에 없는 폰트를
+  폴백으로 가정해 resources 조회를 건너뛰던 문제).
+- **카카오 버튼 게이트**: 운영 Supabase 프로바이더가 비활성(authorize 400 실측)인데 로그인
+  페이지 주 버튼으로 노출 중이었다. `NEXT_PUBLIC_KAKAO_ENABLED=1` 게이트로 숨김 —
+  콘솔 설정 완료 후 env 만 켜면 노출.
+- **관리자 런치 체크판**: `/admin` 대시보드에 "서비스 런치 체크" 카드 신설
+  (`lib/admin/launch-status.ts` + `LaunchChecklist`) — 결제/인쇄/폰트/책사이즈(필수)와
+  메일/rate limit/카카오(선택)의 on/off 를 실시간 표시, 조치는 런북 섹션 번호로 안내.
+- **런북 일원화**: 흩어져 있던 운영 액션·백로그를 [docs/LAUNCH-RUNBOOK.md](docs/LAUNCH-RUNBOOK.md)
+  로 통합. 이후 세션은 "다음 추천" 목록을 만들지 말고 런북만 갱신할 것.
+- 운영 DB 읽기 전용 감사(프로필 3·프로젝트 37·주문 0·리소스 0→1) + 전체 로컬 스위트 green.
 
 ### 0-6. 🚨 에디터 ref 회귀 수정 — 저장·캔버스 조작이 3개월간 전면 불가였다 (2026-08-07)
 

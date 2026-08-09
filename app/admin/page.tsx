@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import LaunchChecklist from "@/components/admin/LaunchChecklist";
 import StatCard from "@/components/admin/StatCard";
 import StatusBadge from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -125,6 +126,8 @@ export default async function AdminDashboardPage() {
           hint="in_production 상태"
         />
       </section>
+
+      <LaunchChecklist />
 
       <section>
         <div className="mb-2 flex items-baseline justify-between">
