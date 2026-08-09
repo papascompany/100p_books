@@ -117,10 +117,13 @@ test.describe("WCAG 2.1 AA — 인터랙션 상태", () => {
   test("모바일 내비 드로어 열림 상태", async ({ page, isMobile }) => {
     test.skip(!isMobile, "드로어는 모바일 뷰포트 전용");
     await page.goto("/", { waitUntil: "domcontentloaded" });
+    await settle(page);
     await clickUntil(
       () => page.getByRole("button", { name: "메뉴 열기" }).click(),
       () => expect(page.locator("#mobile-nav")).toBeVisible({ timeout: 2000 }),
     );
+    // 드로어 자체의 슬라이드-인이 끝난 뒤 재야 한다 — 전환 중이면 실효 대비가 낮게 잡힌다.
+    await settle(page);
     await expectNoViolations(page, "모바일 드로어 열림");
   });
 
