@@ -3,6 +3,18 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import type { Database } from "@/lib/db/types";
 
+/**
+ * `?code=` 를 Supabase 인증 코드로 오인하면 안 되는 경로.
+ *
+ * 토스페이먼츠는 결제 실패 시 failUrl 로 `?code=PAY_PROCESS_CANCELED&message=…&orderId=…`
+ * 를 붙여 **top-level GET 리다이렉트**로 돌려보낸다(성공 URL 에는 code 가 없다).
+ * 아래 예외가 없으면 미들웨어가 그 요청을 /api/auth/callback 으로 넘겨
+ * `exchangeCodeForSession("PAY_PROCESS_CANCELED")` 가 실패하고, **이미 로그인한 사용자가
+ * 결제 실패 안내 대신 "로그인 처리 중 문제가 발생했어요" 화면에 떨어진다.**
+ * 결제 취소는 흔한 경로라 재시도 동선이 통째로 끊긴다.
+ */
+const CODE_PARAM_EXEMPT_PATHS = /^\/order\/[^/]+\/(fail|success)\/?$/;
+
 /** 친구 추천(M16-4) — ?ref=CODE 를 30일 쿠키에 저장. */
 const REFERRAL_COOKIE = "referral_code";
 const REFERRAL_COOKIE_MAX_AGE_SEC = 60 * 60 * 24 * 30;
@@ -22,7 +34,8 @@ export async function middleware(req: NextRequest) {
   if (
     codeParam &&
     req.method === "GET" &&
-    req.nextUrl.pathname !== "/api/auth/callback"
+    req.nextUrl.pathname !== "/api/auth/callback" &&
+    !CODE_PARAM_EXEMPT_PATHS.test(req.nextUrl.pathname)
   ) {
     const url = req.nextUrl.clone();
     const next = url.pathname === "/" ? "/" : url.pathname;

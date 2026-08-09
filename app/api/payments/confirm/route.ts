@@ -142,6 +142,31 @@ export async function POST(req: Request) {
       }
     }
 
+    // 1-2) 할인 코드 재확인 — 포인트와 같은 이유로 결제 캡처 **전**에 본다.
+    //    `discount_uses` 에는 unique(code_id, user_id) 가 있지만, 그 INSERT 는 캡처 **후**
+    //    (아래 6번)에 일어난다. 그래서 같은 코드로 pending 주문을 여러 개 만들어 두면
+    //    전부 할인된 금액으로 캡처되고, 두 번째부터는 23505 를 조용히 무시해
+    //    "할인은 N번 먹었는데 사용 기록은 1건" 이 된다 — 그만큼 금전 손실이다.
+    //    여기서 미리 막으면 캡처 자체가 일어나지 않는다.
+    //    (이 지점은 status === 'pending' 인 주문만 도달한다 — 위 멱등 분기가 재시도를
+    //     먼저 걸러낸다. 그래도 같은 주문의 기록은 방어적으로 제외한다.)
+    if (order.discount_code_id) {
+      const { count, error: duErr } = await admin
+        .from("discount_uses")
+        .select("id", { count: "exact", head: true })
+        .eq("code_id", order.discount_code_id)
+        .eq("user_id", order.user_id)
+        .neq("order_id", order.id);
+      if (duErr) return fail("DISCOUNT_QUERY_FAILED", duErr.message, 500);
+      if ((count ?? 0) > 0) {
+        return fail(
+          "DISCOUNT_ALREADY_USED",
+          "이미 사용한 할인 코드예요. 주문을 다시 만들어 주세요.",
+          400,
+        );
+      }
+    }
+
     // 2) 토스 결제 승인
     let tossRes;
     try {

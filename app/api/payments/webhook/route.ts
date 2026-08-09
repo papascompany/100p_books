@@ -43,9 +43,12 @@ function mapTossStatus(s: string | undefined | null): OrderStatus | null {
     case "DONE":
       return "paid";
     case "CANCELED":
-    case "PARTIAL_CANCELED":
-      // 부분 취소는 일단 "refunded" 로 매핑(향후 부분 환불은 별도 모델 필요)
       return "refunded";
+    // PARTIAL_CANCELED 는 **의도적으로 매핑하지 않는다**(null → 상태 전이 없음).
+    // 부분 환불 모델이 없어서 refunded 로 넘기면 일부만 취소된 주문이 전액 환불로
+    // 기록되고, restoreOrderCredits 가 사용 포인트·할인코드를 **전액** 복원한다.
+    // 예: 30,000원 중 5,000원만 취소했는데 쓴 포인트 전부가 되돌아온다 — 금전 손실.
+    // 부분 취소는 운영자가 관리자 콘솔에서 실제 금액을 보고 처리하도록 남긴다.
     case "ABORTED":
     case "EXPIRED":
       return "cancelled";
