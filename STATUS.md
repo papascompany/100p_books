@@ -4,10 +4,10 @@
 > 콘솔 클릭·SQL)은 전부 [docs/LAUNCH-RUNBOOK.md](docs/LAUNCH-RUNBOOK.md) 한 곳에 있다.
 > 실시간 상태는 관리자 대시보드(`/admin`)의 "서비스 런치 체크" 카드.
 >
-> 🔴 **단 하나 예외 — 오픈 전 반드시**: 보안 마이그레이션 `0031` 을 운영 DB 에 적용할 것
-> (런북 §0). 적용 전에는 공개 anon 키로 포인트를 무한 발급할 수 있다(§0-7 참조).
+> ✅ 오픈 전 필수였던 보안 마이그레이션 `0031` 은 **2026-08-11 적용·검증 완료**
+> (anon 포인트 RPC 차단 실측, 앱 경로 정상 — §0-7).
 >
-> 최종 업데이트: 2026-08-09
+> 최종 업데이트: 2026-08-11
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
 > 운영 빌드: `f760357` — CI green(verify·e2e·a11y) · Vercel prod success
