@@ -23,6 +23,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+import { GlobalFonts } from "@napi-rs/canvas";
 import { PDFDocument } from "pdf-lib";
 
 import type { BookSize } from "@/lib/db/types";
@@ -38,6 +39,26 @@ const UPDATE =
 
 /** 플랫폼 키 — 픽셀 해시는 이 키 아래에만 유효하다. */
 const PLATFORM_KEY = `${process.platform}-${process.arch}`;
+
+/** 레포에 있는 원본 폰트 — 운영이 resources 에 시딩해 쓰는 것과 같은 Pretendard. */
+const TEST_FONT_PATH = resolve(process.cwd(), "assets/fonts/PretendardVariable.woff2");
+
+/**
+ * 텍스트 케이스가 환경 폰트에 좌우되지 않도록 레포 폰트를 "Pretendard" 로 등록한다.
+ * 등록하지 못하면(파일 없음 등) 조용히 넘어가지 않고 즉시 실패시킨다 — 그러면 다시
+ * 시스템 폰트를 재게 되어 해시가 환경에 종속되기 때문이다.
+ */
+function registerTestFont(): void {
+  if (!existsSync(TEST_FONT_PATH)) {
+    console.error(`[pdf-regression] 테스트 폰트를 찾을 수 없습니다: ${TEST_FONT_PATH}`);
+    process.exit(1);
+  }
+  const ok = GlobalFonts.registerFromPath(TEST_FONT_PATH, "Pretendard");
+  if (!ok) {
+    console.error(`[pdf-regression] 폰트 등록 실패: ${TEST_FONT_PATH}`);
+    process.exit(1);
+  }
+}
 
 /** 32×32 단색 PNG — 외부 의존 없이 photo 렌더 경로를 태우기 위한 더미. */
 const DUMMY_PNG = Buffer.from(
@@ -322,6 +343,8 @@ async function main(): Promise<void> {
   console.log(
     `[pdf-regression] start platform=${PLATFORM_KEY} node=${process.version} update=${UPDATE}`,
   );
+  // 환경 폰트가 아니라 레포 폰트로 렌더한다 — 위 헤더 주석 참조.
+  registerTestFont();
   const baseline = loadBaseline();
 
   const renderCtx = {
