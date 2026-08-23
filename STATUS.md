@@ -5,12 +5,12 @@
 > 실시간 상태는 관리자 대시보드(`/admin`)의 "서비스 런치 체크" 카드.
 >
 > ✅ 오픈 전 필수였던 보안 마이그레이션 `0031` 은 **2026-08-11 적용·검증 완료**
-> (anon 포인트 RPC 차단 실측, 앱 경로 정상 — §0-7).
+> (anon 포인트 RPC 차단 실측, 앱 경로 정상 — §0-8).
 >
 > 최종 업데이트: 2026-08-11
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `f760357` — CI green(verify·e2e·a11y) · Vercel prod success
+> 운영 빌드: `30ec859` — CI green(verify·e2e·a11y) · Vercel prod success
 > 다음 세션 인계: [docs/NEXT-SESSION-PROMPT.md](docs/NEXT-SESSION-PROMPT.md) (붙여넣기 블록 그대로 사용)
 > **정본 로컬 경로**: `/Users/yohan/Developer/claude/100p_books` (Documents 사본은 node_modules 제거됨)
 > **성능 수치 정본**: §0-5 (2026-08-07, prod 5회 측정). §0-4 는 그 직전 상태, §M8·테스트 현황의
@@ -18,7 +18,63 @@
 
 ---
 
-## 🆕 최근 작업 (2026-08-09)
+## 🆕 최근 작업 (2026-08-09 ~ 08-11)
+
+### 0-8. 오픈 전 런치 감사 — 확정 블로커 8건 처리 + 보안 마이그레이션 0031 (2026-08-09~11)
+
+6개 렌즈(결제·운영·인증/RLS·실패 UX·인프라·데이터 정합성)로 병렬 감사한 뒤 각 발견을
+"반증하라"는 지시로 적대 검증했다. **22건 발견 → 8건 생존**. 생존분은 전부 처리했다.
+
+**🔐 보안 2건 — 실측으로 뚫리는 것을 확인** (마이그레이션 `0031`, `8166be4`)
+**→ 2026-08-11 운영 DB 적용·검증 완료**
+- **포인트 RPC 가 anon 에게 열려 있었다.** SECURITY DEFINER 함수 대부분이
+  `grant execute … to service_role` 만 하고 선행 `revoke` 를 빠뜨려, Postgres 기본값인
+  PUBLIC EXECUTE 가 살아 있었다. **실증**: 공개 anon 키로
+  `POST /rest/v1/rpc/deduct_user_points_v2` → 권한 거부가 아니라 `-1` 반환(= 실제 실행됨).
+  같은 패턴의 `add_user_points_v2` 로 **포인트 무한 발급**이 가능했고, 1P=1원이라 곧 금전 손실.
+  `pg_proc` 에서 시그니처를 읽어 일괄 revoke-then-grant(오타·누락 없음, 재실행 안전).
+  제외 2개: `is_admin()`(RLS 정책 22곳에서 호출 — 잠그면 관리자 정책이 깨진다),
+  `lookup_referral_code()`(의도적 anon 공개).
+- **토큰 테이블이 전체 공개 SELECT 였다.** `share_tokens`(anon 포함)·`gifts` 에
+  `using (true)` 정책 → 전체 토큰 덤프 가능. 선물은 토큰 소지자가 수령하므로
+  **결제 완료된 포토북을 제3자가 가로챌** 수 있는 구조였다. 실측 시점 두 테이블 0행이라
+  유출은 없었다(대조군: `projects` 37행인데 anon 조회는 빈 배열 → RLS 정상 동작).
+
+  **적용 후 실측(2026-08-11)**: anon → `add/deduct_user_points_v2` = `42501 permission denied` ·
+  그 외 SECURITY DEFINER 5종 = `PGRST202`(노출 자체 소멸) · `is_admin()` = `false`(정상) ·
+  `lookup_referral_code()` = `null`(공개 유지) · service_role → `-1`(앱 경로 정상) ·
+  골든 플로우 E2E 2 passed(운영 DB 상대 전 구간 정상).
+
+**결제·운영 결함 5건** (`3f06ceb`)
+- **CSP 가 우편번호 검색을 차단**하고 있었다. 다음/카카오 SDK 는 `postcode.map.kakao.com`
+  으로 iframe 을 여는데 `frame-src` 에 없었다 → 모바일은 빈 바텀시트, 데스크톱 팝업도 차단.
+  배송지는 결제 직전 필수 단계다.
+- **미들웨어가 토스 결제 실패의 `?code=` 를 OAuth 코드로 오인.** failUrl 이
+  `?code=PAY_PROCESS_CANCELED` 를 달고 오는데 이를 auth 콜백으로 넘겨, **로그인한 사용자가
+  결제 실패 안내 대신 로그인 에러 화면**에 떨어졌다. 결제 결과 경로를 예외로 뒀다.
+- **할인 코드 1인 1회 제한이 캡처 후에야 걸렸다.** `discount_uses` INSERT 가 결제 캡처
+  뒤라, 같은 코드로 pending 주문을 여러 개 만들면 전부 할인된 채 캡처되고 두 번째부터
+  23505 를 조용히 무시했다 → 할인 N회, 기록 1건. 포인트와 같이 캡처 전 재확인으로 이동.
+- **부분 환불이 전액 환불로 기록**됐다. `PARTIAL_CANCELED` → `refunded` 매핑 탓에 일부만
+  취소해도 주문이 종착 상태로 굳고 포인트·할인코드가 전액 복원됐다(`totalAmount` 는
+  부분취소 후에도 원금이라 금액 검증도 통과). 매핑 제거 — 운영자 수동 판단으로.
+- **관리자 주문 검색이 UUID 로 항상 0건.** uuid 컬럼에 `ilike` → 42883 으로 쿼리가 죽고
+  클라가 500 을 삼켜 "주문이 없습니다"로 보였다(운영자 오진). prefix 를 범위 비교로 교체.
+
+**메일 큐 유실 방지** (`e41cfd3`)
+- `RESEND_API_KEY` 가 없으면 워커가 잡을 `cancelled` 로 종결시켜, 키를 나중에 등록해도
+  그동안의 주문 확인·배송 알림이 **영구 유실**됐다. 게다가 잡을 claim 하며 attempt 를 올려
+  cron 이 도는 것만으로 `max_attempts` 가 소진됐다. 이제 진입 시점에 키를 확인해 큐를
+  **건드리지 않고** `{ deferred: true, queued: N }` 반환 → 키 등록 순간 밀린 것까지 자동 발송.
+  회귀 테스트 3건으로 계약 고정.
+
+**favicon 404 + a11y 안정화** (`815aeea`)
+- metadata 가 없는 `/favicon.ico` 를 가리켜 운영에서 404 였다 → App Router 파일 규약으로 이전
+  (다른 세션의 `3c5b3e9` 와 중복 작업이었으나 결과는 동일하게 수렴).
+- 드로어 a11y 테스트에만 `settle()` 이 빠져 대비 위반이 실행마다 오갔다 → 적용, 25 passed ×3회.
+
+**오너 결정으로 남긴 것**: 선물 수령 시 수신자 이메일 대조 여부(링크 전달 수령 UX ↔ 유출 시
+제3자 수령). 토큰 덤프 경로는 0031 로 막혔다. 상세는 런북 "오너 결정이 필요한 항목".
 
 ### 0-7. 서비스 런치 마감 — 폰트 시딩 · 카카오 게이트 · 런치 체크판 · 런북 일원화 (2026-08-09)
 
