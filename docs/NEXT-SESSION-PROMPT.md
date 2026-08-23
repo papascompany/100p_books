@@ -168,7 +168,13 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
    깨지 말아야 할 의존: 응답 최상위 `id` 키(:405-412, :476) · `body.includes("STORIGE_NOT_S3")` 폴백(:328) ·
    90MB 라우팅 임계(:69) · presign 응답 3키 fileId/uploadUrl/uploadToken(:340-343).
    계약면 변경 시 `/Users/yohan/Developer/Bookmoa Storige editor/storige/docs/CONTRACT_FREEZE.md` 대조.
-2. **PDF baseline 규칙** — 같은 platform-arch 안에서 렌더가 바뀌면 CI가 실패한다. **의도된 변경일 때만**
+2. **PDF baseline 규칙** — ⚠️ 2026-08-23 갱신: 텍스트 렌더는 이제 **레포 폰트를 직접 등록**해서
+   잰다(`scripts/pdf-regression.ts` 의 `registerTestFont`). 예전에는 등록 없이 시스템 폰트에
+   의존해, 맥(Pretendard 설치됨)과 CI 리눅스(없음)가 서로 다른 글꼴을 재고 있었고 **러너 이미지가
+   바뀌자 코드 변경 없이 CI 가 red** 가 됐다(ubuntu 20260720.247 → 20260816.277).
+   따라서 baseline 이 깨지면 먼저 "코드 변경인가, 러너 이미지 교체인가"를
+   `gh run view <id> --log | grep "Included Software"` 로 가릴 것.
+   기존 규칙은 그대로다 — 같은 platform-arch 안에서 렌더가 바뀌면 CI가 실패한다. **의도된 변경일 때만**
    `pnpm test:pdf:update`(로컬 darwin) + **CI 로그의 새 linux-x64 해시도 함께 커밋**하고 diff를 리뷰에 포함.
    ⚠️ baseline에 **없는** platform-arch 에서는 실패하지 않고 **기록만 하고 통과**한다
    (`scripts/pdf-regression.ts:290-303, 381-388`) — 러너 이미지가 바뀌면 픽셀 비교가 조용히 꺼진 채 green 이
