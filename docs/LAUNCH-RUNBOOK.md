@@ -158,8 +158,15 @@ create unique index if not exists uq_funnel_book_completed_once
 
 ## §7. Storige측 통지 전달 (붙여넣기 1회)
 
-**보낼 것(미전달)**: `docs/STORIGE-NOTICE-2026-07-21.md` 내용을 Storige 프로젝트 세션에
-붙여넣으면 끝. 전달 후 이 항목을 지울 것. (Storige 계약 동결 그물 보강 요청 — 100p 쪽 코드는 대응 완료)
+**보낼 것(미전달) — 2건, 둘 다 붙여넣기 1회로 끝난다**
+1. `docs/STORIGE-NOTICE-2026-08-24.md` — 저희 실제 사용 경로 8개(API 7 + R2 직결 PUT) 공유 +
+   변경 시 사전 통지가 필요한 계약 6가지. 특히 **presign `uploadUrl` 호스트 화이트리스트**
+   (r2.cloudflarestorage.com / amazonaws.com) — 스토리지 백엔드가 바뀌면 우리 업로드가
+   전면 차단되므로 이것만은 사전 통지가 꼭 필요하다.
+2. `docs/STORIGE-NOTICE-2026-07-21.md` — 계약 동결 그물 보강 요청(FROZEN_ROUTES 등재 ·
+   검증 result 골든 spec). 100p 쪽 코드는 이미 대응 완료.
+
+전달 후 이 항목을 지울 것.
 
 **받은 것(조치 불요)** — 2026-08-24 Storige 운영 통지, 2026-08-23 프로덕션 반영:
 회원 세션 API(`/api/edit-sessions` 상세·수정·완료·삭제·버전·목록·보관함)에 shop-session JWT
