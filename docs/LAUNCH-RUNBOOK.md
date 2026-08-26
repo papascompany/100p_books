@@ -158,13 +158,16 @@ create unique index if not exists uq_funnel_book_completed_once
 
 ## §7. Storige측 통지 전달 (붙여넣기 1회)
 
-**보낼 것(미전달) — 2건, 둘 다 붙여넣기 1회로 끝난다**
-1. `docs/STORIGE-NOTICE-2026-08-24.md` — 저희 실제 사용 경로 8개(API 7 + R2 직결 PUT) 공유 +
-   변경 시 사전 통지가 필요한 계약 6가지. 특히 **presign `uploadUrl` 호스트 화이트리스트**
-   (r2.cloudflarestorage.com / amazonaws.com) — 스토리지 백엔드가 바뀌면 우리 업로드가
-   전면 차단되므로 이것만은 사전 통지가 꼭 필요하다.
-2. `docs/STORIGE-NOTICE-2026-07-21.md` — 계약 동결 그물 보강 요청(FROZEN_ROUTES 등재 ·
-   검증 result 골든 spec). 100p 쪽 코드는 이미 대응 완료.
+**보낼 것(미전달) — `docs/STORIGE-NOTICE.md` 하나. 붙여넣기 1회로 끝난다.**
+
+2026-07-21 자 통지(계약 동결 요청)와 2026-08-24 자 통지(사용 경로 공유)를 한 장으로 합쳤다.
+담긴 것: 우리가 실제 호출하는 8개 경로(API 7 + R2 직결 PUT) · 쓰지 않는 것(edit-sessions 계열
+전부) · **변경 시 사전 통지가 필요한 계약 6가지** · FROZEN_ROUTES 등재와 검증 result 골든 spec
+요청(2026-07-21 조사 기준이라 "이미 반영됐으면 넘어가 달라"고 명시) · 우리 쪽 대응 완료 현황.
+
+가장 중요한 한 줄: **presign `uploadUrl` 호스트 화이트리스트**
+(`r2.cloudflarestorage.com` / `amazonaws.com`) — Storige 가 스토리지 백엔드를 옮기면 우리
+업로드가 전면 차단된다. 이것만은 사전 통지가 꼭 필요하다.
 
 전달 후 이 항목을 지울 것.
 
