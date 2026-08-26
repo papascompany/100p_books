@@ -158,8 +158,24 @@ create unique index if not exists uq_funnel_book_completed_once
 
 ## §7. Storige측 통지 전달 (붙여넣기 1회)
 
-`docs/STORIGE-NOTICE-2026-07-21.md` 내용을 Storige 프로젝트 세션에 붙여넣으면 끝.
-전달 후 이 항목을 지울 것. (Storige 계약 동결 그물 보강 요청 — 100p 쪽 코드는 대응 완료)
+**보낼 것(미전달)**: `docs/STORIGE-NOTICE-2026-07-21.md` 내용을 Storige 프로젝트 세션에
+붙여넣으면 끝. 전달 후 이 항목을 지울 것. (Storige 계약 동결 그물 보강 요청 — 100p 쪽 코드는 대응 완료)
+
+**받은 것(조치 불요)** — 2026-08-24 Storige 운영 통지, 2026-08-23 프로덕션 반영:
+회원 세션 API(`/api/edit-sessions` 상세·수정·완료·삭제·버전·목록·보관함)에 shop-session JWT
+`siteId` ↔ 세션 `siteId` 대조가 확장됐고, 임베드 편집기 `editor.saved` 에 `EDITOR_BUSY` 응답이 추가됐다.
+**우리 연동은 무영향 — 코드로 검증했다(2026-08-24)**:
+- 우리가 호출하는 Storige 엔드포인트는 7개뿐이고, 전부 `/external` 계열이거나 `@Public` 이다 —
+  `files/upload/external` · `files/{id}/complete` · `files/{id}/download/external` ·
+  `files/{id}/external`(DELETE) [편집기 키] · `worker-jobs/validate/external` ·
+  `worker-jobs/external/{jobId}` [워커 키] · `files/presigned-upload-public` [@Public, 키 없음].
+  회원 세션 JWT 라우트는 하나도 없다.
+- 레포 전체에서 `edit-sessions` · `shop-session` · `siteId` · `/embed` · `editor.saved` 는 **0건**.
+- Storige 가이드 §1.5 도 "게스트 세션 저장·`compose-mixed`·**`/external`(X-API-Key) 경로는
+  기존 격리 규칙 그대로이며 이번 확장의 영향이 없다**"고 명시한다.
+- 참고: 통지문은 우리가 `/edit-sessions/external` 도 쓴다고 봤지만 실제로는 사용하지 않는다
+  (Storige 측이 파악한 연동 범위가 실제보다 넓다 — 무영향 결론에는 영향 없음).
+- 향후 임베드 편집기나 shop-session JWT 회원 라우트를 도입할 때만 가이드 §1.5·§3.2 를 볼 것.
 
 ## §8. 릴리스 전 최종 확인 (로컬 1회, 5분)
 
