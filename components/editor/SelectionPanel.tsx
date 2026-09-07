@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { applyPhotoSlot } from "@/lib/fabric/photo-slot";
 import { ptToPx, type TaggedFabricObject } from "@/lib/fabric/serialize";
 
 import type { SetBackgroundInput } from "./FabricStage";
@@ -83,6 +84,7 @@ export default function SelectionPanel({
     return (
       <PhotoEditor
         target={selection as fabric.FabricImage & TaggedFabricObject}
+        dpi={dpi}
         onChange={onChange}
         onReplacePhoto={onReplacePhoto}
       />
@@ -292,10 +294,12 @@ function TextEditor({
 
 function PhotoEditor({
   target,
+  dpi,
   onChange,
   onReplacePhoto,
 }: {
   target: fabric.FabricImage & TaggedFabricObject;
+  dpi: number;
   onChange?: () => void;
   onReplacePhoto?: () => void;
 }) {
@@ -305,6 +309,37 @@ function PhotoEditor({
     target.canvas?.requestRenderAll();
     force((v) => v + 1);
     onChange?.();
+  };
+
+  /**
+   * cropMode 는 태그만 바꿔선 안 된다 — 스케일과 clip 이 그대로라 화면이 변하지 않고,
+   * 다음 렌더에서야 바뀐 모습이 나타난다(= 저장 전후가 달라 보인다).
+   * 슬롯을 다시 적용해 즉시 반영한다.
+   */
+  const setCropMode = (mode: "cover" | "contain") => {
+    if (
+      typeof target.slotWidthMm === "number" &&
+      typeof target.slotHeightMm === "number"
+    ) {
+      const rx =
+        target.slotScaleX && target.slotScaleX > 0
+          ? (target.scaleX ?? 1) / target.slotScaleX
+          : 1;
+      const ry =
+        target.slotScaleY && target.slotScaleY > 0
+          ? (target.scaleY ?? 1) / target.slotScaleY
+          : 1;
+      applyPhotoSlot(target, {
+        slotWidthMm: target.slotWidthMm * rx,
+        slotHeightMm: target.slotHeightMm * ry,
+        cropMode: mode,
+        borderRadiusMm: target.borderRadiusMm,
+        dpi,
+      });
+    } else {
+      target.cropMode = mode;
+    }
+    update();
   };
 
   return (
@@ -328,8 +363,7 @@ function PhotoEditor({
           size="sm"
           variant={target.cropMode === "cover" ? "default" : "outline"}
           onClick={() => {
-            target.cropMode = "cover";
-            update();
+            setCropMode("cover");
           }}
         >
           꽉 채우기
@@ -338,8 +372,7 @@ function PhotoEditor({
           size="sm"
           variant={target.cropMode === "contain" ? "default" : "outline"}
           onClick={() => {
-            target.cropMode = "contain";
-            update();
+            setCropMode("contain");
           }}
         >
           맞춰 넣기

@@ -25,6 +25,10 @@
 
 import * as fabric from "fabric";
 
+import {
+  applyPhotoSlot,
+  readPhotoSlotBox,
+} from "./photo-slot";
 import type {
   ClipartObject,
   LayoutObject,
@@ -67,6 +71,12 @@ export const FABRIC_EXTRA_PROPS = [
   "shadowColor",
   "originalWidthMm",
   "originalHeightMm",
+  // 사진 슬롯 — history(toJSON) 라운드트립에서 반드시 보존돼야 한다.
+  // 빠지면 undo 이후 슬롯 정보가 사라져 다시 이미지 박스가 저장된다.
+  "slotWidthMm",
+  "slotHeightMm",
+  "slotScaleX",
+  "slotScaleY",
 ] as const;
 
 /** 우리 커스텀 프로퍼티가 부착된 Fabric 객체 타입 (느슨). */
@@ -86,6 +96,12 @@ export interface TaggedFabricObject extends fabric.FabricObject {
   shadowColor?: string;
   originalWidthMm?: number;
   originalHeightMm?: number;
+  /** 사진 슬롯(칸) 크기 mm — fabric bounding box 와 다르다. lib/fabric/photo-slot.ts 참고. */
+  slotWidthMm?: number;
+  slotHeightMm?: number;
+  /** 슬롯 적용 시 우리가 넣은 스케일. 사용자가 핸들로 준 배율은 scaleX/slotScaleX. */
+  slotScaleX?: number;
+  slotScaleY?: number;
 }
 
 export interface PageDocToFabricCtx {
@@ -204,54 +220,25 @@ async function buildPhoto(
     return makePhotoFallback(obj, left, top, width, height);
   }
 
-  // 원본 픽셀 크기
-  const iw = img.width ?? 1;
-  const ih = img.height ?? 1;
-
-  // cover/contain 스케일
-  const scaleCover = Math.max(width / iw, height / ih);
-  const scaleContain = Math.min(width / iw, height / ih);
-  const scale = obj.cropMode === "contain" ? scaleContain : scaleCover;
-
   img.set({
     left,
     top,
     originX: "center",
     originY: "center",
-    scaleX: scale,
-    scaleY: scale,
     angle: obj.rotation || 0,
     selectable: true,
     hasRotatingPoint: true,
   });
 
-  // cover 시 슬롯 box 로 클리핑 — 회전 비독립 클립패스
-  // 회전이 적용된 객체에 대해서도 box-aligned 로 자르려면 absolutePositioned + 픽셀 좌표.
-  if (obj.cropMode === "cover") {
-    const radiusPx = mmToPx(obj.borderRadiusMm ?? 0, dpi);
-    const clip = new fabric.Rect({
-      left: left - width / 2,
-      top: top - height / 2,
-      width,
-      height,
-      rx: radiusPx,
-      ry: radiusPx,
-      absolutePositioned: true,
-      // 클립 자체에 회전을 부여하지 않음 — 슬롯 박스는 페이지 좌표계에 고정
-    });
-    img.clipPath = clip;
-  } else if (obj.borderRadiusMm) {
-    // contain 모드일 땐 단순 라운드 클립
-    const radiusPx = mmToPx(obj.borderRadiusMm, dpi);
-    img.clipPath = new fabric.Rect({
-      width: iw,
-      height: ih,
-      originX: "center",
-      originY: "center",
-      rx: radiusPx / scale,
-      ry: radiusPx / scale,
-    });
-  }
+  // 스케일·클립·슬롯 태그는 photo-slot 이 단독으로 책임진다.
+  // (여기서 손으로 계산하면 직렬화가 보는 슬롯과 화면이 어긋난다 — 그게 원래 버그였다.)
+  applyPhotoSlot(img, {
+    slotWidthMm: obj.widthMm,
+    slotHeightMm: obj.heightMm,
+    cropMode: obj.cropMode,
+    borderRadiusMm: obj.borderRadiusMm,
+    dpi,
+  });
 
   if (obj.shadow) {
     img.shadow = new fabric.Shadow({
@@ -517,14 +504,20 @@ function serializeOne(
 
   if (o.oType === "photo") {
     if (!o.photoId) return null;
+    // ⚠️ 사진은 bounding box 를 저장하면 안 된다.
+    // cover 사진의 fabric 박스는 **슬롯보다 큰 이미지**다(칸으로 clip 해서 그린다).
+    // 그대로 저장하면 슬롯이 이미지 크기로 부풀어, 화면과 저장본·인쇄물이 달라진다.
+    // 실측: 표지 프레임 템플릿 슬롯 131×168mm → 저장 224×168mm (앞표지 151mm 초과).
+    // 슬롯 태그가 없는 legacy 객체만 기존 박스 경로로 폴백한다.
+    const slot = readPhotoSlotBox(o, dpi);
     const ph: PhotoObject = {
       type: "photo",
       objectId,
       photoId: o.photoId,
-      leftMm,
-      topMm,
-      widthMm,
-      heightMm,
+      leftMm: slot?.leftMm ?? leftMm,
+      topMm: slot?.topMm ?? topMm,
+      widthMm: slot?.widthMm ?? widthMm,
+      heightMm: slot?.heightMm ?? heightMm,
       rotation,
       cropMode: o.cropMode ?? "cover",
     };

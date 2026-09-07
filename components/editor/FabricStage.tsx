@@ -14,6 +14,7 @@ import {
 } from "react";
 
 import { attachGestures } from "@/lib/fabric/gestures";
+import { applyPhotoSlot, syncPhotoClip } from "@/lib/fabric/photo-slot";
 import { HistoryStack, makeHistoryDebouncer } from "@/lib/fabric/history";
 import {
   applyBackgroundImageToCanvas,
@@ -269,7 +270,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         onLongPress: (t, x, y) => onLongPressRef.current?.(t ?? null, x, y),
         onUndo: () => {
           const snap = historyRef.current.undo();
-          if (snap) restoreFromSnapshot(canvas, snap);
+          if (snap) restoreFromSnapshot(canvas, snap, dpi);
           setHistoryVersion((v) => v + 1);
           onHistoryChangeRef.current?.(
             historyRef.current.canUndo,
@@ -278,7 +279,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         },
         onRedo: () => {
           const snap = historyRef.current.redo();
-          if (snap) restoreFromSnapshot(canvas, snap);
+          if (snap) restoreFromSnapshot(canvas, snap, dpi);
           setHistoryVersion((v) => v + 1);
           onHistoryChangeRef.current?.(
             historyRef.current.canUndo,
@@ -471,25 +472,30 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         const cx = mmToPx(bleedMm + widthMm / 2, dpi);
         const cy = mmToPx(bleedMm + heightMm / 2, dpi);
         // 기본 사이즈 — trim 폭의 50%
-        const targetW = mmToPx(widthMm * 0.5, dpi);
+        // 기본 슬롯 — trim 폭의 50%, 사진 원본 비율 유지(잘라내지 않는다).
         const iw = img.width ?? 1;
         const ih = img.height ?? 1;
-        const scale = targetW / iw;
+        const slotWidthMm = widthMm * 0.5;
+        const slotHeightMm = slotWidthMm * (ih / iw);
         img.set({
           left: cx,
           top: cy,
           originX: "center",
           originY: "center",
-          scaleX: scale,
-          scaleY: scale,
         });
         const tagged = img as TaggedFabricObject;
         tagged.objectId = nanoid(12);
         tagged.oType = "photo";
         tagged.photoId = photoId;
-        tagged.cropMode = "cover";
-        tagged.originalWidthMm = widthMm * 0.5;
-        tagged.originalHeightMm = (ih * scale * 25.4) / dpi;
+        tagged.originalWidthMm = slotWidthMm;
+        tagged.originalHeightMm = slotHeightMm;
+        // 슬롯 = 화면에 보이는 박스. 직렬화는 이 값을 그대로 저장한다.
+        applyPhotoSlot(img, {
+          slotWidthMm,
+          slotHeightMm,
+          cropMode: "cover",
+          dpi,
+        });
         canvas.add(img);
         canvas.setActiveObject(img);
         canvas.requestRenderAll();
@@ -607,6 +613,34 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       [bleedMm, dpi, widthMm, heightMm],
     );
 
+    /** 원본이 바뀐 사진에 기존 슬롯을 다시 적용한다(슬롯 태그가 없으면 no-op). */
+    const reapplySlotFrom = useCallback(
+      (src: TaggedFabricObject, dest: fabric.FabricImage) => {
+        if (
+          typeof src.slotWidthMm !== "number" ||
+          typeof src.slotHeightMm !== "number"
+        ) {
+          return;
+        }
+        const rx =
+          src.slotScaleX && src.slotScaleX > 0
+            ? (src.scaleX ?? 1) / src.slotScaleX
+            : 1;
+        const ry =
+          src.slotScaleY && src.slotScaleY > 0
+            ? (src.scaleY ?? 1) / src.slotScaleY
+            : 1;
+        applyPhotoSlot(dest, {
+          slotWidthMm: src.slotWidthMm * rx,
+          slotHeightMm: src.slotHeightMm * ry,
+          cropMode: src.cropMode ?? "cover",
+          borderRadiusMm: src.borderRadiusMm,
+          dpi,
+        });
+      },
+      [dpi],
+    );
+
     const replacePhoto = useCallback(
       async (photoId: string, url: string) => {
         const canvas = canvasRef.current;
@@ -643,6 +677,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
           tagged.borderRadiusMm = sel.borderRadiusMm;
           tagged.originalWidthMm = sel.originalWidthMm;
           tagged.originalHeightMm = sel.originalHeightMm;
+          reapplySlotFrom(sel, next);
           canvas.remove(sel);
           canvas.add(next);
           canvas.setActiveObject(next);
@@ -651,10 +686,13 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         }
 
         img.photoId = photoId;
+        // 새 사진은 원본 픽셀 크기가 다르다 — 같은 슬롯에 맞춰 스케일·클립을 다시 계산한다.
+        // (기존 scaleX 를 그대로 두면 교체한 사진만 슬롯을 벗어난다.)
+        reapplySlotFrom(img, img);
         img.canvas?.fire("object:modified", { target: img });
         canvas.requestRenderAll();
       },
-      [],
+      [reapplySlotFrom],
     );
 
     const duplicateSelected = useCallback(async () => {
@@ -779,26 +817,26 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       if (!canvas) return;
       const snap = historyRef.current.undo();
       if (!snap) return;
-      restoreFromSnapshot(canvas, snap);
+      restoreFromSnapshot(canvas, snap, dpi);
       setHistoryVersion((v) => v + 1);
       onHistoryChangeRef.current?.(
         historyRef.current.canUndo,
         historyRef.current.canRedo,
       );
-    }, []);
+    }, [dpi]);
 
     const redo = useCallback(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const snap = historyRef.current.redo();
       if (!snap) return;
-      restoreFromSnapshot(canvas, snap);
+      restoreFromSnapshot(canvas, snap, dpi);
       setHistoryVersion((v) => v + 1);
       onHistoryChangeRef.current?.(
         historyRef.current.canUndo,
         historyRef.current.canRedo,
       );
-    }, []);
+    }, [dpi]);
 
     const remove = useCallback(() => {
       const canvas = canvasRef.current;
@@ -976,7 +1014,7 @@ function drawSafeLineOverlay(
   canvas.add(safeRect);
 }
 
-function restoreFromSnapshot(canvas: fabric.Canvas, snapshot: string) {
+function restoreFromSnapshot(canvas: fabric.Canvas, snapshot: string, dpi: number) {
   const data = JSON.parse(snapshot) as Record<string, unknown>;
   // chrome 객체(safe line / trim rect)는 excludeFromExport=true 이므로 toJSON 에 포함되지 않음.
   // 복원 시엔 사용자 객체만 다시 그려진다 — chrome 은 살아있는 객체를 보존하기 위해
@@ -988,6 +1026,12 @@ function restoreFromSnapshot(canvas: fabric.Canvas, snapshot: string) {
     const present = new Set(canvas.getObjects());
     for (const c of chromeObjects) {
       if (!present.has(c)) canvas.add(c);
+    }
+    // 사진 clip 은 absolutePositioned 라 JSON 라운드트립에서 온전히 살아나지 않는다.
+    // 슬롯 태그는 FABRIC_EXTRA_PROPS 로 보존되므로, 그 값으로 clip 을 다시 만든다.
+    // (빠뜨리면 undo 직후 크롭이 풀려 사진이 슬롯 밖으로 번진다.)
+    for (const o of canvas.getObjects() as TaggedFabricObject[]) {
+      if (o.oType === "photo") syncPhotoClip(o as fabric.FabricImage, dpi);
     }
     canvas.requestRenderAll();
   });

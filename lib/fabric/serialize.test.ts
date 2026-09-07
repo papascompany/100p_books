@@ -106,6 +106,69 @@ function tag(
   } as unknown as TaggedFabricObject;
 }
 
+describe("fabricToPageDoc — 사진 슬롯", () => {
+  /**
+   * cover 사진은 슬롯보다 큰 이미지를 슬롯으로 clip 해 그린다.
+   * bounding box(width*scaleX)를 저장하면 슬롯이 이미지 크기로 부푼다 —
+   * 표지 템플릿 사진이 앞표지를 넘어 책등·뒷표지까지 번지던 원인.
+   */
+  it("이미지 박스가 아니라 슬롯을 저장한다", () => {
+    const slotWmm = 131;
+    const slotHmm = 168;
+    const iw = 4000;
+    const ih = 3000; // 4:3 → cover 시 이미지 박스는 224×168mm
+    const baseScale = Math.max(
+      mmToPx(slotWmm, DPI) / iw,
+      mmToPx(slotHmm, DPI) / ih,
+    );
+    const photo = {
+      oType: "photo",
+      objectId: "p1",
+      photoId: "photo-1",
+      cropMode: "cover",
+      width: iw,
+      height: ih,
+      scaleX: baseScale,
+      scaleY: baseScale,
+      left: mmToPx(161.27 + slotWmm / 2, DPI),
+      top: mmToPx(10 + slotHmm / 2, DPI),
+      angle: 0,
+      slotWidthMm: slotWmm,
+      slotHeightMm: slotHmm,
+      slotScaleX: baseScale,
+      slotScaleY: baseScale,
+    } as unknown as TaggedFabricObject;
+
+    const doc = fabricToPageDoc(
+      makeMockCanvas([photo]) as never,
+      META,
+      DPI,
+    );
+    const p = doc.objects[0] as Extract<PageDoc["objects"][number], { type: "photo" }>;
+    expect(p.type).toBe("photo");
+    expect(p.widthMm).toBeCloseTo(131, 4);
+    expect(p.heightMm).toBeCloseTo(168, 4);
+    expect(p.leftMm).toBeCloseTo(161.27, 4);
+    expect(p.topMm).toBeCloseTo(10, 4);
+  });
+
+  it("슬롯 태그가 없으면 기존 bounding box 경로로 폴백한다", () => {
+    const legacy = tag("photo", {
+      photoId: "p1",
+      leftMm: 10,
+      topMm: 20,
+      widthMm: 50,
+      heightMm: 40,
+      cropMode: "cover",
+    });
+    const doc = fabricToPageDoc(makeMockCanvas([legacy]) as never, META, DPI);
+    const p = doc.objects[0] as Extract<PageDoc["objects"][number], { type: "photo" }>;
+    expect(p.widthMm).toBeCloseTo(50, 4);
+    expect(p.heightMm).toBeCloseTo(40, 4);
+    expect(p.leftMm).toBeCloseTo(10, 4);
+  });
+});
+
 describe("fabricToPageDoc", () => {
   it("photo / text / rect 모두 직렬화", () => {
     const photo = tag("photo", {
