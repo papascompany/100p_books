@@ -16,6 +16,8 @@ import { Input } from "@/components/ui/input";
 import { getBrowserSupabase } from "@/lib/db/browser";
 import { cn } from "@/lib/utils";
 
+import InvalidLinkCard from "./InvalidLinkCard";
+
 /**
  * 비밀번호 재설정 페이지.
  *
@@ -25,6 +27,11 @@ import { cn } from "@/lib/utils";
  *   3. 이 폼에서 새 비밀번호 입력 → updateUser({ password })
  *
  * 세션이 없으면(직접 접근/만료) 안내 + 재요청 링크.
+ *
+ * ⚠️ 아래 세션 확인은 **보안 경계가 아니라 UX 폴백**이다.
+ *    실제 게이트는 서버 컴포넌트 page.tsx 의 재설정 마커 쿠키 검사다
+ *    (lib/auth/recovery.ts). 여기서 세션 존재만 보고 통과시키면
+ *    로그인된 아무 사용자나 비밀번호를 바꿀 수 있다 — 그게 원래 버그였다.
  */
 type Phase =
   | { kind: "checking" }
@@ -83,6 +90,10 @@ export default function ResetPasswordForm() {
         });
         return;
       }
+      // 마커 쿠키 소멸 — 같은 기기에서 폼이 다시 열리지 않게 (best-effort).
+      void fetch("/api/auth/recovery", { method: "DELETE" }).catch(
+        () => undefined,
+      );
       setPhase({ kind: "done" });
     } catch (err) {
       setPhase({
@@ -129,23 +140,7 @@ export default function ResetPasswordForm() {
 
   // 세션 없음(만료/직접 접근)
   if (phase.kind === "no-session") {
-    return (
-      <Card className="w-full max-w-md rounded-2xl shadow-soft">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-semibold tracking-tight">
-            링크가 유효하지 않아요
-          </CardTitle>
-          <CardDescription className="mt-2">
-            재설정 링크가 만료되었거나 잘못된 접근입니다. 다시 요청해주세요.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button asChild size="lg" variant="coral" className="w-full">
-            <Link href="/login?mode=forgot">비밀번호 찾기 다시 하기</Link>
-          </Button>
-        </CardContent>
-      </Card>
-    );
+    return <InvalidLinkCard />;
   }
 
   return (

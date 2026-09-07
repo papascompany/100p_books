@@ -7,7 +7,7 @@
 > ✅ 오픈 전 필수였던 보안 마이그레이션 `0031` 은 **2026-08-11 적용·검증 완료**
 > (anon 포인트 RPC 차단 실측, 앱 경로 정상 — §0-8).
 >
-> 최종 업데이트: 2026-08-11
+> 최종 업데이트: 2026-09-07
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
 > 운영 빌드: `30ec859` — CI green(verify·e2e·a11y) · Vercel prod success
@@ -15,6 +15,79 @@
 > **정본 로컬 경로**: `/Users/yohan/Developer/claude/100p_books` (Documents 사본은 node_modules 제거됨)
 > **성능 수치 정본**: §0-5 (2026-08-07, prod 5회 측정). §0-4 는 그 직전 상태, §M8·테스트 현황의
 > "Performance 97 · LCP 1.5s" 는 2026-05-13 옛 측정치이니 baseline 으로 쓰지 말 것.
+
+---
+
+## 🆕 최근 작업 (2026-09-04 ~ 09-07)
+
+### 0-9. 브라우저 실측 QA → 확정 5건 수정 (2026-09-04~07)
+
+6개 렌즈(가입·업로드·내지·표지·주문·마이페이지)로 실브라우저 QA 를 돌려 나온 발견 중,
+원인까지 코드로 확정한 5건을 고쳤다. 결제·제작을 막는 blocker 는 없었다.
+
+**🔐 계정 탈취 경로 (두 결함의 결합)**
+- **일반 사용자에게 로그아웃 UI 가 없었다.** `/api/auth/sign-out` 의 유일한 호출자가
+  관리자 사이드바뿐이었다(`app/admin/AdminSidebar.tsx:81`). 헤더 계정 드롭다운·모바일
+  드로어·`/mypage/account` 로그아웃 카드 3곳을 추가(`components/auth/SignOutButton.tsx`).
+  라우트에는 same-origin 가드도 넣었다(외부 폼 POST 로 강제 로그아웃 방지).
+- **`/reset-password` 가 "로그인 세션만 있으면" 열렸다.** 폼이 `data.session` 존재만 보고
+  통과시켜, 공용 기기에 남은 세션으로 **현재 비밀번호 확인 없이** 변경이 가능했다(실측 재현).
+  이제 서버 컴포넌트가 재설정 마커 쿠키(`/api/auth/callback` 이 httpOnly 로 굽고,
+  `getUser()` 로 검증한 세션 사용자 id 와 일치해야 함)를 게이트로 쓴다
+  (`lib/auth/recovery.ts`, `app/(auth)/reset-password/page.tsx`).
+  실측: 로그인 상태로 `/reset-password` 직접 접근 → 폼 미노출, 안내 카드.
+
+**🖼 모든 다이얼로그가 화면 중앙을 벗어나 있었다 (조작 불가 수준)**
+- `dialog.tsx` 의 `-translate-x-1/2 -translate-y-1/2` 를 `animate-fade-in` 이 덮어썼다.
+  `tailwind.config.ts` 의 fade-in 은 fill-mode `both` 이고 마지막 키프레임이
+  `transform: translateY(0)` 이라, 애니메이션 종료 후 유틸리티 정렬이 **영구히** 사라진다.
+  모바일 "영구 삭제" 버튼이 화면 밖, 1280×800 탈퇴 다이얼로그의 "취소/탈퇴하기" 가
+  뷰포트 아래로 잘렸다.
+- 중앙 정렬을 키프레임에 품은 `dialog-in`/`dialog-out` 과 transform 을 안 건드리는
+  `fade-plain-in/out` 을 새로 만들고, 해당 패턴을 쓰던 **7개 컴포넌트 전부** 교체.
+- 회귀 가드: `components/ui/dialog-centering.test.ts` — 중앙 정렬 유틸과 transform 을
+  덮는 공용 애니메이션의 동시 사용을 소스 수준에서 금지한다. 이 테스트가 내가 눈으로
+  놓친 2건(`DeleteAccountCard`, `CopyToProjectDialog`)을 실제로 잡아냈다.
+- 실측: 탈퇴 다이얼로그 중심오차 1280×800 (0,0) / 390×844 (0,0), 양쪽 모두 뷰포트 내.
+
+**🔄 저장 후 옛 화면이 재생되던 문제 (표지 게이트·편집 유실 체감)**
+- `next.config.mjs` 의 `staleTimes.dynamic=30` 하에서 `CoverEditor`/`PageEditor` 가
+  `router.push` 만 하고 `router.refresh()` 를 하지 않아, 저장 직후 30초 동안 저장 이전
+  RSC 페이로드가 그대로 재생됐다. 두 곳 모두 refresh 를 선행하도록 수정.
+
+**📤 업로드 중 삭제 시 사진 부활 · 스토리지 고아**
+- 큐의 `remove/removeMany/cancelAll` 이 배열만 필터링해서, 진행 중 PUT 이 계속 돌고
+  `pendingComplete` 에 남아 **삭제한 사진이 서버에 되살아났다**. 반대로 이미 올라간
+  객체는 참조 행 없이 남아 고아가 됐다.
+- `UploadQueue.abortItems()` 신설 — abort + pendingComplete 제거 + `/api/photos/abandon`
+  으로 storage 회수. `pagehide` 에서 sendBeacon 으로 complete 를 밀어넣어 이탈 시
+  고아 대신 정상 확정되게 했고, complete 발사 직전 재확인도 추가.
+- 최후 방어선으로 `/api/cron/orphan-photos` (매일 20:00 UTC) 추가 — 24시간 지난 객체 중
+  `photos` 행이 없는 것만 삭제. `?dryRun=1` 로 규모를 먼저 확인할 수 있다.
+  ⚠️ 이 라우트는 `fetchCache = "force-no-store"` 가 **필수**다. 없으면 Next 가 storage list /
+  photos 조회를 캐시해 낡은 스냅샷으로 삭제를 판단한다(실측: 삭제 직후에도 4ms 만에
+  "고아 3건" 재보고 — standalone 동일 로직은 630ms·0건).
+- 실측: 3장 업로드 중 1장 삭제 → abandon 200 1건, photos 2행, storage 2객체(부활 0·고아 0).
+
+**🧹 미들웨어 로그 오염**
+- `middleware.ts` 가 모든 일반 라우트에서 `session.user` 를 읽어 auth-js 의
+  "getSession … could be insecure" 경고를 요청마다 찍었다. 실제 용도는 `?ref=` 쿠키
+  판정 하나뿐이라 그때만 읽도록 바꿨다(`getSession()` 호출 자체는 토큰 갱신 때문에 유지).
+- A/B 실측(dev, 인증 요청 8회): 수정 전 8건 → 수정 후 0건.
+  ⚠️ `next start` 에서는 이 경고가 표면화되지 않으므로 **운영 로그에는 영향 없음**.
+  QA 세션에서 관측한 5112줄 중 5101줄은 dev 서버 로그였다.
+
+**검증**: typecheck·lint·unit(18파일 175건)·a11y(25)·e2e smoke(12)·golden-flow(2) 전부 green.
+`tsconfig.json`/`vitest.config.ts` 에 `tmp` 제외 추가(스크래치 파일이 로컬 typecheck 를 깨던 문제).
+
+**운영 조치 (2026-09-07 실행)**
+- 운영 스토리지 고아 **3건 삭제 완료** — 승인 후 `/api/cron/orphan-photos` 실행.
+  삭제 전 58객체/고아 3 → 삭제 후 55객체/고아 0 (standalone 직접 스캔으로 교차 확인).
+
+**미결**
+- QA 발견 중 적대 검증까지 끝난 것은 7건, **15건은 미검증**. `editor` 렌즈(내지 자동편집)는
+  산출물 57개가 `tmp/qa/editor/` 에 있으나 정리된 발견 목록 복구에 실패했다.
+- 표지 템플릿 WYSIWYG 불일치(저장 photo 가 앞표지 폭 151mm 를 넘어 224mm) — 미수정.
 
 ---
 

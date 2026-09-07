@@ -205,7 +205,11 @@ export default function PhotoPickerDialog({
             "sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:w-[min(94vw,720px)]",
             "sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:border-b",
             "overflow-hidden bg-background shadow-soft-lg",
-            "data-[state=open]:animate-fade-in",
+            // 모바일 바텀시트는 transform 으로 위치를 잡지 않으므로 순수 페이드,
+            // sm 이상 중앙정렬에서는 translate(-50%,-50%) 를 품은 dialog-in 을 쓴다.
+            // (공용 fade-in 은 fill-mode both 로 -translate-*-1/2 를 덮어써 중앙을 깨뜨린다.)
+            "data-[state=open]:animate-fade-plain-in",
+            "sm:data-[state=open]:animate-dialog-in",
             "focus:outline-none flex flex-col",
           )}
         >

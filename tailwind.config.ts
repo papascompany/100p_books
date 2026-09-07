@@ -175,6 +175,36 @@ const config: Config = {
           from: { opacity: "0", transform: "scale(0.96)" },
           to: { opacity: "1", transform: "scale(1)" },
         },
+        /**
+         * 다이얼로그 전용 — 키프레임이 중앙 정렬 transform 을 **포함**해야 한다.
+         *
+         * DialogContent 는 `left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2` 로 중앙에
+         * 놓이는데, 여기에 `animate-fade-in` 을 걸면 fill-mode `both` 때문에 애니메이션의
+         * 마지막 프레임(`translateY(0)`)이 유틸리티 transform 을 **영구히 덮어쓴다**.
+         * 그 결과 모든 다이얼로그가 뷰포트 중앙에서 우/하로 밀려 잘렸다
+         * (모바일 "영구 삭제" 버튼이 화면 밖, 1280×800 탈퇴 다이얼로그 버튼이 뷰포트 아래).
+         * → 진입/퇴장 프레임 모두에 translate(-50%, -50%) 를 명시해 정렬을 보존한다.
+         */
+        "dialog-in": {
+          from: { opacity: "0", transform: "translate(-50%, -50%) scale(0.97)" },
+          to: { opacity: "1", transform: "translate(-50%, -50%) scale(1)" },
+        },
+        "dialog-out": {
+          from: { opacity: "1", transform: "translate(-50%, -50%) scale(1)" },
+          to: { opacity: "0", transform: "translate(-50%, -50%) scale(0.97)" },
+        },
+        /**
+         * transform 을 전혀 건드리지 않는 순수 페이드.
+         * 오버레이, 그리고 위치를 자체 transform 으로 잡는 요소(모바일 바텀시트 등)에 쓴다.
+         */
+        "fade-plain-in": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+        "fade-plain-out": {
+          from: { opacity: "1" },
+          to: { opacity: "0" },
+        },
         float: {
           "0%, 100%": { transform: "translateY(0)" },
           "50%": { transform: "translateY(-6px)" },
@@ -200,6 +230,10 @@ const config: Config = {
         "fade-in": "fade-in 0.2s ease-out both",
         "fade-up": "fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both",
         "scale-in": "scale-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "dialog-in": "dialog-in 0.2s ease-out both",
+        "dialog-out": "dialog-out 0.15s ease-in both",
+        "fade-plain-in": "fade-plain-in 0.2s ease-out both",
+        "fade-plain-out": "fade-plain-out 0.15s ease-in both",
         float: "float 5s ease-in-out infinite",
         "line-grow-x": "line-grow-x 1.1s cubic-bezier(0.22, 1, 0.36, 1) both",
         "line-grow-y": "line-grow-y 1.2s cubic-bezier(0.22, 1, 0.36, 1) both",

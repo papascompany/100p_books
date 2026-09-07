@@ -147,6 +147,10 @@ export const useUploadStore = create<UploadStoreState>()((set, get) => ({
   },
 
   remove: (id) => {
+    // 목록에서 지우기 **전에** 진행 중 업로드를 끊는다.
+    // 이게 없으면 PUT 이 계속 돌아 complete 까지 도달하고, 방금 지운 사진이
+    // 서버에 되살아난다(그리고 취소된 PUT 은 storage 고아로 남는다).
+    queueRef?.abortItems([id]);
     const next = get().items.filter((i) => i.id !== id);
     // orderIdx 재정렬
     next.forEach((it, idx) => {
@@ -159,6 +163,7 @@ export const useUploadStore = create<UploadStoreState>()((set, get) => ({
 
   removeMany: (ids) => {
     if (ids.length === 0) return;
+    queueRef?.abortItems(ids);
     const removeSet = new Set(ids);
     const next = get().items.filter((i) => !removeSet.has(i.id));
     next.forEach((it, idx) => {
@@ -189,6 +194,13 @@ export const useUploadStore = create<UploadStoreState>()((set, get) => ({
   },
 
   cancelAll: () => {
+    // done 이 아닌 항목 전부가 목록에서 사라지므로, 이미 올라간 객체는 고아가 된다.
+    // abortItems 가 abort + pendingComplete 제거 + storage 정리를 함께 수행한다.
+    queueRef?.abortItems(
+      get()
+        .items.filter((i) => i.status !== "done")
+        .map((i) => i.id),
+    );
     queueRef?.cancelAll();
     // '업로드 취소' — 진행 중 abort + 미완료(대기·진행·실패·취소) 항목을 목록에서 제거 (UP-8).
     // 서버에 반영된 done 항목은 유지 (삭제는 선택 모드/개별 X 로 명시적으로).
@@ -528,6 +540,75 @@ export class UploadQueue {
     this.syncBusy();
   }
 
+  /**
+   * 특정 항목들의 업로드를 중단하고 서버 흔적을 정리한다.
+   *
+   * 두 가지를 동시에 막는다:
+   *  1) **부활** — PUT 이 이미 끝나 pendingComplete 에 들어간 항목을 빼지 않으면
+   *     사용자가 지운 사진이 /api/photos/complete 로 DB 에 삽입된다.
+   *  2) **고아** — 중단된/완료됐지만 complete 되지 않은 PUT 의 storage 객체는
+   *     참조하는 photos 행이 없어 영구히 남는다. abandon 으로 지운다.
+   *
+   * status === "done" 인 항목은 이미 DB 행이 있으므로 건드리지 않는다
+   * (그쪽은 UploadClient 의 휴지통 API 경로).
+   */
+  abortItems(ids: string[]) {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+
+    for (const id of idSet) {
+      this.aborters.get(id)?.abort();
+      this.aborters.delete(id);
+      this.inFlight.delete(id);
+      this.signInFlight.delete(id);
+    }
+
+    // 발사 대기 중인 complete 에서 제거 (부활 차단)
+    this.pendingComplete = this.pendingComplete.filter((i) => !idSet.has(i.id));
+
+    // storage 정리 (고아 차단) — best-effort
+    const keys = useUploadStore
+      .getState()
+      .items.filter(
+        (i) => idSet.has(i.id) && i.status !== "done" && !!i.storageKey,
+      )
+      .map((i) => i.storageKey as string);
+    if (keys.length > 0) this.abandonKeys(keys);
+  }
+
+  /** 업로드했지만 확정되지 않은 storage 객체를 서버에 삭제 요청 (실패해도 무시 — cron 이 회수). */
+  private abandonKeys(storageKeys: string[]) {
+    void fetch("/api/photos/abandon", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ projectId: this.projectId, storageKeys }),
+      keepalive: true,
+    }).catch(() => undefined);
+  }
+
+  /**
+   * 페이지 이탈 직전 호출 — PUT 은 끝났는데 complete 디바운스(800ms) 때문에
+   * 아직 못 보낸 항목을 sendBeacon 으로 확정시킨다.
+   *
+   * 이걸 하지 않으면 사용자가 "업로드 다 됐다"고 보고 나간 사진이 storage 고아가 된다.
+   * (버리는 대신 확정하는 쪽이 옳다 — 실제로 업로드에 성공한 사용자의 사진이다.)
+   */
+  flushCompleteOnUnload() {
+    const batch = this.pendingComplete.splice(0, UploadQueue.COMPLETE_MAX_BATCH);
+    if (batch.length === 0) return;
+    if (typeof navigator === "undefined" || !navigator.sendBeacon) return;
+    try {
+      navigator.sendBeacon(
+        "/api/photos/complete",
+        new Blob([JSON.stringify(this.completePayload(batch))], {
+          type: "application/json",
+        }),
+      );
+    } catch {
+      /* 이탈 중이므로 조용히 포기 — cron 이 회수한다 */
+    }
+  }
+
   cancelAll() {
     for (const a of this.aborters.values()) a.abort();
     this.aborters.clear();
@@ -748,34 +829,44 @@ export class UploadQueue {
     }, UploadQueue.COMPLETE_DEBOUNCE);
   }
 
+  private completePayload(batch: UploadItem[]) {
+    return {
+      projectId: this.projectId,
+      photos: batch.map((b) => ({
+        photoId: b.photoId,
+        storageKey: b.storageKey,
+        filename: (b.effectiveFile ?? b.file).name,
+        mime: (b.effectiveFile ?? b.file).type || "image/jpeg",
+        sizeBytes: (b.effectiveFile ?? b.file).size,
+        width: b.width,
+        height: b.height,
+        exifTakenAt: b.exifTakenAt ?? null,
+        exifCamera: b.exifCamera ?? null,
+        orderIdx: b.orderIdx,
+      })),
+    };
+  }
+
   private async flushComplete() {
     if (this.completeTimer) {
       clearTimeout(this.completeTimer);
       this.completeTimer = null;
     }
 
-    const batch = this.pendingComplete.splice(0, UploadQueue.COMPLETE_MAX_BATCH);
-    if (batch.length === 0) return;
+    const raw = this.pendingComplete.splice(0, UploadQueue.COMPLETE_MAX_BATCH);
+    if (raw.length === 0) return;
 
     const store = useUploadStore.getState();
+
+    // 발사 직전 재확인 — 디바운스(800ms) 동안 사용자가 지운 항목은 보내지 않는다.
+    // (abortItems 가 이미 걸러내지만, 그 사이 도착한 항목까지 이중으로 막는다.)
+    const liveIds = new Set(store.items.map((i) => i.id));
+    const batch = raw.filter((b) => liveIds.has(b.id));
+    if (batch.length === 0) return;
     try {
       const result = await postJsonWithBackoff<CompleteResponse["data"]>(
         "/api/photos/complete",
-        {
-          projectId: this.projectId,
-          photos: batch.map((b) => ({
-            photoId: b.photoId,
-            storageKey: b.storageKey,
-            filename: (b.effectiveFile ?? b.file).name,
-            mime: (b.effectiveFile ?? b.file).type || "image/jpeg",
-            sizeBytes: (b.effectiveFile ?? b.file).size,
-            width: b.width,
-            height: b.height,
-            exifTakenAt: b.exifTakenAt ?? null,
-            exifCamera: b.exifCamera ?? null,
-            orderIdx: b.orderIdx,
-          })),
-        },
+        this.completePayload(batch),
       );
 
       const insertedIds = new Set(result.inserted.map((p) => p.id));

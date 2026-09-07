@@ -4,6 +4,10 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { trackFunnelEvent } from "@/lib/analytics/funnel";
 import { createAdminSupabase } from "@/lib/db/admin";
+import {
+  PASSWORD_RECOVERY_COOKIE,
+  PASSWORD_RECOVERY_MAX_AGE_SEC,
+} from "@/lib/auth/recovery";
 import { createServerSupabase } from "@/lib/db/server";
 import { ensureReferralCode } from "@/lib/referrals/code";
 
@@ -56,6 +60,20 @@ export async function GET(req: NextRequest) {
 
   const userId = data.user?.id;
   const response = NextResponse.redirect(redirectUrl);
+
+  // 비밀번호 재설정 링크로 들어온 경우에만 재설정 마커를 굽는다.
+  // 이 마커가 /reset-password 의 유일한 통과 조건이다 (lib/auth/recovery.ts 참고).
+  if (userId && target.startsWith("/reset-password")) {
+    response.cookies.set({
+      name: PASSWORD_RECOVERY_COOKIE,
+      value: userId,
+      path: "/",
+      maxAge: PASSWORD_RECOVERY_MAX_AGE_SEC,
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+  }
 
   if (userId) {
     const admin = createAdminSupabase();

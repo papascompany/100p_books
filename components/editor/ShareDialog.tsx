@@ -190,7 +190,8 @@ export default function ShareDialog({ open, onOpenChange, projectId }: ShareDial
           className={cn(
             "fixed left-1/2 top-1/2 z-50 w-[92vw] max-w-md -translate-x-1/2 -translate-y-1/2",
             "rounded-xl border bg-card p-5 shadow-soft-lg",
-            "data-[state=open]:animate-fade-in",
+            "data-[state=open]:animate-dialog-in",
+            "data-[state=closed]:animate-dialog-out",
             "focus:outline-none",
           )}
           aria-describedby="share-dialog-desc"

@@ -244,6 +244,12 @@ export default function CoverEditor({
           return;
         }
       }
+      // 저장 성공 뒤에는 라우터 캐시를 반드시 무효화한다.
+      // next.config.mjs 의 staleTimes.dynamic=30 때문에 refresh 없이 push 하면
+      // 30초 안에는 **저장 이전 서버 렌더**가 그대로 재생된다 —
+      // 주문 게이트가 "표지 미완성"으로 남거나, 표지↔내지를 왕복했을 때
+      // 방금 편집한 내용이 사라진 것처럼 보인다(실제 유실은 아니지만 구분 불가).
+      router.refresh();
       router.push(href);
     },
     [dirty, router, save],

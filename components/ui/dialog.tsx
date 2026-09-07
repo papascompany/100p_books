@@ -19,7 +19,7 @@ const DialogOverlay = React.forwardRef<
     ref={ref}
     className={cn(
       "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm",
-      "data-[state=open]:animate-fade-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
+      "data-[state=open]:animate-fade-plain-in data-[state=closed]:animate-fade-plain-out",
       className,
     )}
     {...props}
@@ -40,8 +40,14 @@ const DialogContent = React.forwardRef<
         "w-full max-w-lg max-h-[90dvh] overflow-y-auto",
         "rounded-2xl border border-border bg-background",
         "p-6 focus:outline-none",
-        "data-[state=open]:animate-fade-in",
-        "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
+        /**
+         * ⚠️ 여기에 `animate-fade-in`(또는 transform 을 건드리는 다른 공용 애니메이션)을
+         * 쓰면 안 된다. fill-mode `both` 의 마지막 프레임이 위 -translate-*-1/2 를 덮어써
+         * 다이얼로그가 중앙에서 밀려나고 버튼이 뷰포트 밖으로 잘린다.
+         * dialog-in/out 은 키프레임 안에 translate(-50%, -50%) 를 품고 있다.
+         */
+        "data-[state=open]:animate-dialog-in",
+        "data-[state=closed]:animate-dialog-out",
         className,
       )}
       {...props}

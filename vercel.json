@@ -44,6 +44,10 @@
     {
       "path": "/api/cron/storige-retention",
       "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/orphan-photos",
+      "schedule": "0 20 * * *"
     }
   ],
   "headers": [

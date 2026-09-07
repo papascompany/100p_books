@@ -94,8 +94,18 @@ export default function UploadClient({
       e.preventDefault();
       e.returnValue = "업로드가 진행 중이에요. 지금 나가면 진행 중인 사진이 사라져요.";
     }
+    // PUT 은 끝났지만 complete 디바운스(800ms) 때문에 아직 확정 못 한 사진을
+    // 이탈 직전에 sendBeacon 으로 밀어넣는다. 없으면 storage 고아가 된다.
+    // pagehide 는 bfcache·탭 종료·iOS Safari 에서 beforeunload 보다 확실히 발화한다.
+    function onPageHide() {
+      queueRef.current?.flushCompleteOnUnload();
+    }
     window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      window.removeEventListener("pagehide", onPageHide);
+    };
   }, [busy, counts.working]);
 
   function handleAddFiles(files: File[]) {

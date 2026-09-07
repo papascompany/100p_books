@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import SignOutButton from "@/components/auth/SignOutButton";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -101,6 +102,21 @@ export default async function AccountPage() {
                   : "기록 없음"
               }
             />
+          </CardContent>
+        </Card>
+
+        {/* 로그아웃 카드 — 공용 기기에서 세션을 끊는 유일한 확실한 수단.
+            (헤더 드롭다운/모바일 드로어에도 같은 동작이 있다.) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">로그아웃</CardTitle>
+            <CardDescription>
+              공용 기기를 쓰셨다면 반드시 로그아웃해 주세요. 세션이 남아 있으면
+              다른 사람이 계정에 접근할 수 있습니다.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SignOutButton className="h-11 rounded-full border border-border px-5 hover:bg-muted" />
           </CardContent>
         </Card>
 

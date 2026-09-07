@@ -123,14 +123,23 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(url);
     }
   } else {
-    // 일반 라우트: 쿠키에서 세션 읽기만 (네트워크 없음)
+    // 일반 라우트: 쿠키에서 세션 읽기만 (네트워크 없음).
+    //
+    // 호출 자체는 유지해야 한다 — getSession() 이 만료된 access token 을 갱신하고
+    // 그 결과를 res 쿠키에 써주므로, 빼면 1시간 뒤 서버 렌더가 비로그인으로 떨어진다.
+    //
+    // 다만 `session.user` 접근은 refParam 이 있을 때만 한다. auth-js 는 user 프로퍼티를
+    // Proxy 로 감싸 접근 시마다 "getSession() ... could be insecure" 경고를 찍는데,
+    // 모든 요청에서 읽으면 dev 서버 로그가 그 한 줄로 덮인다
+    // (실측: 인증 요청 8회 → 경고 8건 → 수정 후 0건. QA 세션에서는 5112줄 중 5101줄 = 99.8%).
+    // 참고: `next start` 에서는 이 경고가 표면화되지 않아 운영 로그에는 영향이 없었다.
+    // 여기서 user 가 필요한 유일한 목적은 아래 추천 코드 쿠키 판정이다.
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    const user = session?.user ?? null;
 
     // 친구 추천 코드 — 비로그인 사용자에 한해 쿠키 set.
-    if (refParam && !user) {
+    if (refParam && !session?.user) {
       const code = refParam.trim().toUpperCase();
       if (REFERRAL_CODE_REGEX.test(code)) {
         const existing = req.cookies.get(REFERRAL_COOKIE)?.value;

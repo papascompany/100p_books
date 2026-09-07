@@ -241,6 +241,9 @@ export default function PageEditor({
           if (!proceed) return;
         }
       }
+      // staleTimes.dynamic=30 하에서 refresh 없이 push 하면 30초 동안
+      // 저장 이전 RSC 페이로드가 재생된다(미리보기·주문 게이트가 옛 상태로 보임).
+      router.refresh();
       router.push(href);
     },
     [dirty, save, router],

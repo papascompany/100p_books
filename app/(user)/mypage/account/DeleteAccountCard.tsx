@@ -171,7 +171,8 @@ export default function DeleteAccountCard({
               /* 작은 화면(iPhone SE 등)·소프트 키보드 대응 — dvh 기준 상한 + 내부 스크롤 */
               "max-h-[85dvh] overflow-y-auto",
               "rounded-xl border bg-card p-5 shadow-soft-lg",
-              "data-[state=open]:animate-fade-in",
+              "data-[state=open]:animate-dialog-in",
+              "data-[state=closed]:animate-dialog-out",
               "focus:outline-none",
             )}
           >

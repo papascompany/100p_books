@@ -1,12 +1,20 @@
 "use client";
 
-import { Menu, UserRound, X } from "lucide-react";
+import { LogOut, Menu, Package, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import * as React from "react";
 
+import SignOutButton from "@/components/auth/SignOutButton";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { getBrowserSupabase } from "@/lib/db/browser";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +48,7 @@ export default function HeaderClient({ nav }: { nav?: NavItem[] }) {
   const pathname = usePathname();
   const [open, setOpen] = React.useState(false);
   const [isAuthed, setIsAuthed] = React.useState(false);
+  const signOutFormRef = React.useRef<HTMLFormElement>(null);
 
   // 클라이언트 세션으로 로그인 여부 판단 (Header 를 정적 렌더 가능하게).
   // env 누락(로컬 worktree 등) 시 getBrowserSupabase 가 throw 하더라도
@@ -108,17 +117,49 @@ export default function HeaderClient({ nav }: { nav?: NavItem[] }) {
         })}
       </nav>
 
+      {/* 로그아웃 전송용 form — 드롭다운이 닫혀도 살아있도록 메뉴 밖에 둔다. */}
+      <form
+        ref={signOutFormRef}
+        action="/api/auth/sign-out"
+        method="post"
+        className="hidden"
+        aria-hidden
+      />
+
       {/* Desktop right cluster */}
       <div className="hidden items-center gap-2 md:flex">
         <ThemeToggle />
         {isAuthed ? (
-          <Link
-            href="/mypage"
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-soft-cloud text-ink transition-colors hover:bg-hairline"
-            aria-label="내 프로필"
-          >
-            <UserRound className="size-4" />
-          </Link>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-soft-cloud text-ink transition-colors hover:bg-hairline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="내 계정 메뉴"
+            >
+              <UserRound className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild>
+                <Link href="/mypage" className="cursor-pointer">
+                  <UserRound className="size-4" aria-hidden />
+                  마이페이지
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/mypage/orders" className="cursor-pointer">
+                  <Package className="size-4" aria-hidden />
+                  주문 내역
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onSelect={() => signOutFormRef.current?.requestSubmit()}
+              >
+                <LogOut className="size-4" aria-hidden />
+                로그아웃
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         ) : (
           <Button asChild size="sm">
             <Link href="/login">로그인</Link>
@@ -178,13 +219,16 @@ export default function HeaderClient({ nav }: { nav?: NavItem[] }) {
               })}
               <div className="flex items-center justify-between gap-3 py-4">
                 {isAuthed ? (
-                  <Link
-                    href="/mypage"
-                    className="flex items-center gap-2 px-3 py-3 text-base font-medium text-ink"
-                  >
-                    <UserRound className="size-4" />
-                    내 프로필
-                  </Link>
+                  <div className="flex flex-1 items-center gap-2">
+                    <Link
+                      href="/mypage"
+                      className="flex items-center gap-2 px-3 py-3 text-base font-medium text-ink"
+                    >
+                      <UserRound className="size-4" />
+                      내 프로필
+                    </Link>
+                    <SignOutButton className="ml-auto rounded-full px-3 py-3 text-mute hover:text-foreground" />
+                  </div>
                 ) : (
                   <Button asChild className="flex-1">
                     <Link href="/login">로그인</Link>
