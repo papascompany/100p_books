@@ -489,7 +489,8 @@
 ### 환경/배포 메모
 - **GitHub auto-deploy 정상**(실커밋 push→자동 빌드 확인). 빈 커밋은 Vercel이 스킵하므로 무시.
 - ~~로컬 `pnpm lint/build` 불가(node v22 ↔ comment-json 크래시)~~ → **2026-08-03 실측 해소**.
-  현재 node v22.22.2 에서 `pnpm lint`·`pnpm build` 모두 정상 동작한다(0 경고 / 빌드 성공).
+  (2026-09-11 시점 기록) 당시 node v22.22.2 에서 `pnpm lint`·`pnpm build` 모두 정상 동작했다(0 경고 / 빌드 성공).
+  이후 런타임은 **Node 24.x 로 고정**됐다 — `.nvmrc`·`engines`·CI 모두 24.
   push 전 로컬 전체 검증이 가능하며, GitHub Actions CI 가 clean 환경에서 한 번 더 검증한다.
 - Supabase MCP/CLI는 다른 계정("storige's Org") → 운영 DB `vprifnztvlduhpuwgdau` 직접 SQL 불가 → 대시보드 수동.
 

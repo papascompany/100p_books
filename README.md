@@ -182,7 +182,7 @@ interface PageDoc {
 ```bash
 pnpm install
 ```
-필수: Node.js ≥ 20 (현재 25 LTS 권장), pnpm ≥ 9
+필수: Node.js 24.x (`.nvmrc`·`engines` 고정), pnpm ≥ 9
 
 ### 2. 환경변수
 ```bash
