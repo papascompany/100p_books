@@ -16,7 +16,9 @@
 --       판정은 point_ledger 순액(order_use + order_refund)과 discount_uses.order_id.
 --       'abort'  : 캡처 실패·금액 불일치 롤백 (status=pending + paymentKey 일치일 때만)
 --       'refund' : 환불/취소 복원 (status in refunded, cancelled 일 때만)
---       두 번 호출해도 두 번째는 되돌릴 것이 없어 no-op.
+--       두 번 호출해도 두 번째는 되돌릴 것이 없어 no-op. 단 'abort' 가 paymentKey 까지 해제한
+--       뒤 같은 키로 다시 abort 하면 키 불일치로 ok:false(PAYMENT_KEY_MISMATCH)를 돌려준다
+--       (상태 변화 없음 — 호출측은 RELEASE_FAILED 만 오류로 취급).
 --   (3) orders.finalize_started_at / finalized_at — 결제 확정 부수효과(finalizePaidOrder)
 --       단일 실행 리스와 완료 마커. confirm·webhook·재시도가 동시에 와도 한 곳만 실행.
 --   (4) funnel_events order_paid 주문당 1회 부분 유니크 인덱스.
@@ -113,7 +115,8 @@ begin
     return jsonb_build_object('ok', false, 'code', 'NOT_PENDING', 'status', v_order.status);
   end if;
   -- 주문서 재사용(orders/create)으로 금액·토스 주문번호가 바뀌었으면 캡처하지 않는다.
-  if v_order.amount <> p_amount
+  -- p_amount 가 NULL 이면 <> 비교가 NULL 이 되어 검사를 건너뛰므로 is distinct from 을 쓴다.
+  if v_order.amount is distinct from p_amount
      or v_order.toss_order_id is distinct from p_toss_order_id then
     return jsonb_build_object('ok', false, 'code', 'ORDER_CHANGED');
   end if;
