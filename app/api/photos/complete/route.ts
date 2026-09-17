@@ -16,6 +16,8 @@ import {
   THUMB_LONG_EDGE,
   THUMB_WEBP_QUALITY,
 } from "@/lib/image/constants";
+import { UNTRUSTED_INPUT_OPTIONS, loadHardenedSharp } from "@/lib/image/sharp-safe";
+import { sniffAllowedImage } from "@/lib/image/sniff";
 import { enforceRateLimit } from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +25,10 @@ export const runtime = "nodejs";
 // sharp 는 native. serverComponentsExternalPackages 에 포함 (next.config.mjs).
 export const maxDuration = 60;
 
-/** sharp metadata.format → 저장 contentType. 화이트리스트 밖이면 null. */
+/**
+ * sharp metadata.format → 저장 contentType. 화이트리스트 밖이면 null.
+ * heif 는 넣지 않는다 — sharp 는 AVIF 도 format='heif' 로 보고하므로 예전에는 AVIF 가 이 검사를 통과했다(SEC-1).
+ */
 function mimeFromSharpFormat(format: string | undefined): string | null {
   switch (format) {
     case "jpeg":
@@ -33,10 +38,6 @@ function mimeFromSharpFormat(format: string | undefined): string | null {
       return "image/png";
     case "webp":
       return "image/webp";
-    case "heic":
-      return "image/heic";
-    case "heif":
-      return "image/heif";
     default:
       return null;
   }
@@ -75,11 +76,13 @@ type CompleteResult = {
  *
  * 각 사진마다:
  *   1. Storage 원본 다운로드
- *   2. sharp 로 rotate() (EXIF orientation 정규화) + metadata 확인
- *   3. 정규화된 원본을 Storage 에 재업로드 (동일 키 upsert)
- *   4. 썸네일(480px webp) 생성 후 photo-thumbs 버킷에 업로드
- *   5. exifr 로 서버 재추출 (gps=false)
- *   6. photos 테이블 INSERT
+ *   2. 매직 바이트로 실제 형식 판정 — 허용 목록 밖(AVIF·GIF 등)이거나 서버가 디코드하지 않는
+ *      HEIC/HEIF 면 디코더에 넘기지 않고 거부 (클라 선언 MIME 은 신뢰하지 않음)
+ *   3. exifr 로 서버 재추출 (gps=false)
+ *   4. sharp(로더 allowlist·픽셀 한도 적용)로 rotate() (EXIF orientation 정규화) + metadata 확인
+ *   5. 정규화된 원본을 Storage 에 재업로드 (동일 키 upsert)
+ *   6. 썸네일(480px webp) 생성 후 photo-thumbs 버킷에 업로드
+ *   7. photos 테이블 INSERT
  */
 export async function POST(req: Request) {
   try {
@@ -157,7 +160,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const sharpMod = (await import("sharp")).default;
+    const sharpMod = await loadHardenedSharp();
     const exifrMod = (await import("exifr")).default;
 
     const results: CompleteResult[] = [];
@@ -206,6 +209,28 @@ export async function POST(req: Request) {
         const arrayBuf = await blob.arrayBuffer();
         const originalBuffer = Buffer.from(arrayBuf);
 
+        // 🛡 매직 바이트 선판정 (SEC-1) — exifr 파싱·sharp 디코드 **전에** 실제 바이트로 형식을 확인한다.
+        //    위에서 검사한 p.mime 은 클라 선언값이라 AVIF·GIF 등을 image/jpeg 로 속여 올릴 수 있다.
+        const sniffed = sniffAllowedImage(originalBuffer, ALLOWED_MIME_TYPES);
+        if (!sniffed.mime) {
+          results.push({
+            photoId: p.photoId,
+            photo: null,
+            error: `허용되지 않는 이미지 포맷: ${sniffed.format}`,
+          });
+          continue;
+        }
+        // HEIC/HEIF 는 허용 목록에 있지만(정상 경로는 클라가 JPEG 로 변환해 업로드) 서버는 디코드하지 않는다.
+        // prebuilt libvips 에는 HEVC 디코더가 없고, libheif 로더는 sharp-safe 에서 차단돼 있다.
+        if (sniffed.format === "heic" || sniffed.format === "heif") {
+          results.push({
+            photoId: p.photoId,
+            photo: null,
+            error: "HEIC 원본은 서버에서 처리할 수 없습니다. JPEG 로 변환해 다시 업로드해 주세요.",
+          });
+          continue;
+        }
+
         // EXIF 재추출 (GPS 절대 금지)
         let takenAt: string | null = null;
         let camera: string | null = null;
@@ -234,20 +259,17 @@ export async function POST(req: Request) {
         }
 
         // orientation 정규화: rotate() 는 EXIF orientation 을 해석해 방향 적용 후 태그 제거
-        const normalized = sharpMod(originalBuffer, { failOn: "none" }).rotate();
+        const normalized = sharpMod(originalBuffer, {
+          ...UNTRUSTED_INPUT_OPTIONS,
+          failOn: "none",
+        }).rotate();
+        // metadata() 는 헤더만 읽는다(픽셀 디코드 없음). 픽셀 한도 초과는 여기서 throw.
         const normalizedMeta = await normalized.metadata();
 
-        const width = normalizedMeta.width ?? p.width ?? null;
-        const height = normalizedMeta.height ?? p.height ?? null;
-
-        // orientation 정규화된 원본 버퍼 (같은 포맷 유지 — 재인코딩 최소화 위해 toBuffer 만)
-        // sharp 는 rotate() 이후 별도 포맷 지정 없이 toBuffer() 시 입력 포맷 그대로 출력.
-        const rewrittenBuffer = await normalized.toBuffer();
-
         // contentType/mime 은 클라 값이 아니라 sharp 가 판정한 실제 포맷에서 도출 (위조 방어).
-        // 화이트리스트 밖 포맷이면 거부.
+        // 화이트리스트 밖이거나 매직 바이트 판정과 다르면 픽셀 디코드(toBuffer) 전에 거부.
         const detectedMime = mimeFromSharpFormat(normalizedMeta.format);
-        if (!detectedMime) {
+        if (!detectedMime || detectedMime !== sniffed.mime) {
           results.push({
             photoId: p.photoId,
             photo: null,
@@ -255,6 +277,13 @@ export async function POST(req: Request) {
           });
           continue;
         }
+
+        const width = normalizedMeta.width ?? p.width ?? null;
+        const height = normalizedMeta.height ?? p.height ?? null;
+
+        // orientation 정규화된 원본 버퍼 (같은 포맷 유지 — 재인코딩 최소화 위해 toBuffer 만)
+        // sharp 는 rotate() 이후 별도 포맷 지정 없이 toBuffer() 시 입력 포맷 그대로 출력.
+        const rewrittenBuffer = await normalized.toBuffer();
 
         const { error: upErr } = await admin.storage
           .from(ORIGINALS_BUCKET)
@@ -276,7 +305,7 @@ export async function POST(req: Request) {
         const thumbKey = p.storageKey.replace(/\.[^.]+$/, ".webp");
         let thumbStoredKey: string | null = null;
         try {
-          const thumbBuffer = await sharpMod(rewrittenBuffer)
+          const thumbBuffer = await sharpMod(rewrittenBuffer, UNTRUSTED_INPUT_OPTIONS)
             .resize({
               width: THUMB_LONG_EDGE,
               height: THUMB_LONG_EDGE,

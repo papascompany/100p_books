@@ -27,6 +27,13 @@ export const THUMB_LONG_EDGE = 480;
 /** 서버 sharp webp 품질 (0-100). */
 export const THUMB_WEBP_QUALITY = 80;
 
+/**
+ * 서버 디코드 입력 픽셀 한도 (가로×세로). sharp 기본값(약 268MP)에 기대지 않고 명시한다.
+ * 200MP 카메라 원본(16320×12240 ≈ 199.8MP)까지는 받고, 그보다 큰 헤더(압축 폭탄 포함)는
+ * 픽셀 디코드 전에 거부된다.
+ */
+export const MAX_INPUT_PIXELS = 200_000_000;
+
 /** Storage 버킷 이름. */
 export const ORIGINALS_BUCKET = "photo-originals";
 export const THUMBS_BUCKET = "photo-thumbs";

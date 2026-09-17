@@ -14,6 +14,8 @@ import {
 } from "@/lib/admin/resources";
 import { createAdminSupabase } from "@/lib/db/admin";
 import type { ResourceType } from "@/lib/db/types";
+import { UNTRUSTED_INPUT_OPTIONS, loadHardenedSharp } from "@/lib/image/sharp-safe";
+import { sniffAllowedImage } from "@/lib/image/sniff";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,7 +52,7 @@ export const GET = withAdmin(async (req) => {
  *   meta: JSON string (optional)
  *
  * 흐름:
- *   1. validate (size/ext)
+ *   1. validate (size/ext) + (배경 한정) 매직 바이트로 실제 형식 판정 — sharp 디코드 전에 거부
  *   2. resources INSERT (storage_key 는 pathFor 로 계산)
  *   3. storage upload (실패 시 row 삭제)
  *   4. (배경 한정) sharp probe — width >= 2400px 검증, 실패 시 삭제
@@ -76,6 +78,21 @@ export const POST = withAdmin(async (req, _ctx, user) => {
   const t = type as ResourceType;
   const v = validateUpload(t, file);
   if (!v.ok) return fail("INVALID_FILE", v.error ?? "파일 검증 실패", 400);
+
+  const buf = Buffer.from(await file.arrayBuffer());
+
+  // 🛡 배경은 아래에서 sharp 로 읽으므로, 확장자·MIME(위조 가능)이 아니라 실제 바이트로 형식을 먼저 확인한다 (SEC-1).
+  if (t === "background") {
+    const allowedMimes = RESOURCE_CONSTRAINTS.background.mimes;
+    const sniffed = sniffAllowedImage(buf, allowedMimes);
+    if (!sniffed.mime) {
+      return fail(
+        "INVALID_FILE",
+        `배경 파일의 실제 형식이 허용되지 않습니다 (감지: ${sniffed.format}, 허용: ${allowedMimes.join(", ")}).`,
+        400,
+      );
+    }
+  }
 
   let meta: Record<string, unknown> | null = null;
   if (typeof metaRaw === "string" && metaRaw.length > 0) {
@@ -126,7 +143,6 @@ export const POST = withAdmin(async (req, _ctx, user) => {
   const storageKey = pathFor(t, inserted.id, ext);
 
   // 2) Storage 업로드
-  const buf = Buffer.from(await file.arrayBuffer());
   const { error: upErr } = await admin.storage
     .from(RESOURCES_BUCKET)
     .upload(storageKey, buf, {
@@ -141,8 +157,8 @@ export const POST = withAdmin(async (req, _ctx, user) => {
   // 3) 배경 — sharp 로 width 검증
   if (t === "background") {
     try {
-      const sharp = (await import("sharp")).default;
-      const meta2 = await sharp(buf).metadata();
+      const sharp = await loadHardenedSharp();
+      const meta2 = await sharp(buf, UNTRUSTED_INPUT_OPTIONS).metadata();
       if (!meta2.width || meta2.width < 2400) {
         await admin.storage.from(RESOURCES_BUCKET).remove([storageKey]);
         await admin.from("resources").delete().eq("id", inserted.id);
