@@ -56,7 +56,11 @@ export function pxToPt(px: number, dpi: number): number {
   return (px * 72) / dpi;
 }
 
-/** Fabric Object.toObject 가 보존해야 하는 커스텀 프로퍼티 키. */
+/**
+ * Fabric Object.toObject 가 보존해야 하는 커스텀 프로퍼티 키.
+ * ⚠️ `canvas.toJSON(props)` 는 fabric 6.9.1 에서 인자를 무시한다 — 히스토리는
+ * lib/fabric/snapshot.ts 의 createSnapshot(= canvas.toObject(props)) 만 쓸 것.
+ */
 export const FABRIC_EXTRA_PROPS = [
   "objectId",
   "oType",
@@ -71,8 +75,8 @@ export const FABRIC_EXTRA_PROPS = [
   "shadowColor",
   "originalWidthMm",
   "originalHeightMm",
-  // 사진 슬롯 — history(toJSON) 라운드트립에서 반드시 보존돼야 한다.
-  // 빠지면 undo 이후 슬롯 정보가 사라져 다시 이미지 박스가 저장된다.
+  // 사진 슬롯 — history 스냅샷 라운드트립에서 반드시 보존돼야 한다.
+  // 빠지면 undo 이후 슬롯 정보가 사라져 다시 이미지 박스가 저장된다(snapshot.test.ts 로 고정).
   "slotWidthMm",
   "slotHeightMm",
   "slotScaleX",
@@ -122,11 +126,16 @@ export async function applyBackgroundImageToCanvas(
   canvas: fabric.Canvas,
   bg: { url: string; cropMode: "cover" | "contain"; opacity: number },
   stagePxSize: { w: number; h: number },
+  opts?: {
+    /** 이미지 로드가 끝났을 때 아직 유효한 요청인지 — 늦게 끝난 옛 로드가 배경을 덮지 않게. */
+    isCurrent?: () => boolean;
+  },
 ): Promise<void> {
   try {
     const img = await fabric.FabricImage.fromURL(bg.url, {
       crossOrigin: "anonymous",
     });
+    if (opts?.isCurrent && !opts.isCurrent()) return;
     const iw = img.width ?? 1;
     const ih = img.height ?? 1;
     const sCover = Math.max(stagePxSize.w / iw, stagePxSize.h / ih);
@@ -448,6 +457,29 @@ export type PageDocMeta = Pick<
   /** 표지 PageDoc 등 backgroundImage 가 있는 경우 보존. */
   backgroundImage?: PageDoc["backgroundImage"];
 };
+
+export type SerializeForSaveResult =
+  | { ok: true; doc: PageDoc }
+  | {
+      ok: false;
+      /** untagged_objects: 저장 불변식 위반 / not_ready: 캔버스 미초기화. */
+      reason: "untagged_objects" | "not_ready";
+      untaggedCount: number;
+    };
+
+/**
+ * 저장 불변식 — chrome(excludeFromExport) 이 아닌 캔버스 객체는 전부 oType 태그가 있어야 한다.
+ *
+ * fabricToPageDoc 는 oType 없는 객체를 조용히 건너뛴다. 정상 상태라면 그런 객체는 chrome 뿐인데,
+ * 태그가 유실된 객체(QA-1: 히스토리 복원)가 섞이면 화면에는 보이는데 저장본에서는 사라진다.
+ * 이 목록이 비어있지 않으면 저장을 중단해야 한다(서버 덮어쓰기 금지).
+ * 사용자가 객체를 모두 지운 빈 캔버스는 빈 목록 → 정상 저장된다.
+ */
+export function findUntaggedUserObjects<
+  T extends { excludeFromExport?: boolean; oType?: string },
+>(objects: readonly T[]): T[] {
+  return objects.filter((o) => !o.excludeFromExport && !o.oType);
+}
 
 /**
  * 캔버스의 (자식) 모든 객체를 순회하며 PageDoc 객체로 직렬화.

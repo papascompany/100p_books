@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize } from "@/lib/db/types";
+import { computeDocVersion } from "@/lib/editor/doc-version";
 import { THUMBS_BUCKET } from "@/lib/image/constants";
 import { buildDefaultCoverDoc } from "@/lib/layout/cover";
 import { isPageDoc, type PageDoc } from "@/lib/layout/types";
@@ -66,6 +67,8 @@ export default async function CoverPage({ params }: PageProps) {
     .eq("project_id", project.id);
 
   const stored = project.cover_json as unknown;
+  // 저장된 원본 기준 내용 버전 — 에디터가 PATCH baseVersion 으로 돌려보낸다(stale-write 방어).
+  const initialVersion = computeDocVersion(project.cover_json);
   let initialDoc: PageDoc;
   let isDefault = false;
   if (
@@ -143,6 +146,7 @@ export default async function CoverPage({ params }: PageProps) {
       projectTitle={project.title ?? "Untitled"}
       initialDoc={initialDoc}
       initialIsDefault={isDefault}
+      initialVersion={initialVersion}
       initialPhotoUrls={photoUrls}
       bookSize={bookSize}
       pageCount={pageCount ?? 0}

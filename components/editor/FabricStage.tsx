@@ -13,20 +13,37 @@ import {
   useState,
 } from "react";
 
+import { toast } from "@/components/ui/use-toast";
+import { createIdleTracker } from "@/lib/editor/async-gates";
 import { attachGestures } from "@/lib/fabric/gestures";
-import { applyPhotoSlot, syncPhotoClip } from "@/lib/fabric/photo-slot";
-import { HistoryStack, makeHistoryDebouncer } from "@/lib/fabric/history";
+import { applyPhotoSlot } from "@/lib/fabric/photo-slot";
+import {
+  connectCanvasHistory,
+  HistoryRecorder,
+  HistoryStack,
+} from "@/lib/fabric/history";
+import {
+  captureUserObjects,
+  createBackgroundGate,
+  replaceUserObjects,
+} from "@/lib/fabric/load-guards";
 import {
   applyBackgroundImageToCanvas,
-  FABRIC_EXTRA_PROPS,
   fabricToPageDoc,
+  findUntaggedUserObjects,
   mmToPx,
   pageDocToFabric,
   ptToPx,
   type PageDocMeta,
+  type SerializeForSaveResult,
   type TaggedFabricObject,
 } from "@/lib/fabric/serialize";
 import { attachSnapGuides } from "@/lib/fabric/snap";
+import {
+  createSnapshot,
+  createSnapshotWithout,
+  restoreSnapshotObjects,
+} from "@/lib/fabric/snapshot";
 import {
   applyPhotoUrlsToCanvas,
   startUrlRefresher,
@@ -51,8 +68,27 @@ export type SetBackgroundInput =
   | null;
 
 export interface FabricStageHandle {
+  /**
+   * 문서 로드(초기·템플릿 적용·최신본 재로드). 히스토리를 이 문서로 초기화한다.
+   * 로드는 **dirty 를 일으키지 않는다** — 저장이 필요하면 호출자가 명시적으로 표시할 것.
+   * 객체 교체가 끝나면 resolve 한다. 배경 이미지는 그 뒤 비동기로 적용된다(직렬화와 무관).
+   *
+   * 호출 시점에 있던 객체만 교체한다. 기다리는 동안 추가된 객체는 새 문서 위에 보존되고,
+   * 히스토리에 한 단계로 쌓이며 onModified 가 발화한다(저장 대상).
+   * 배경은 호출 순서로 판정해, 기다리는 동안 setBackground 로 바꾼 레이어(색/이미지)는 덮지 않는다.
+   */
   loadDoc: (doc: PageDoc, photoUrls: Record<string, string>) => Promise<void>;
   serialize: (meta: PageDocMeta) => PageDoc;
+  /**
+   * 저장용 직렬화 — 저장 불변식(태그 없는 사용자 객체 0개)을 검사한다.
+   * ok:false 면 서버에 보내지 말 것(빈 문서 덮어쓰기 방지).
+   */
+  serializeForSave: (meta: PageDocMeta) => SerializeForSaveResult;
+  /**
+   * 진행 중인 loadDoc · undo/redo 복원이 끝날 때까지 대기. 저장 직전에 호출.
+   * timeoutMs 안에 끝나지 않으면 false — 호출자는 저장을 실패로 처리할 것.
+   */
+  whenIdle: (timeoutMs?: number) => Promise<boolean>;
   addPhoto: (photoId: string, url: string) => Promise<void>;
   addText: (opts?: {
     text?: string;
@@ -112,6 +148,10 @@ export interface FabricStageProps {
   pageId?: string;
   /** 객체 선택/수정 콜백. */
   onSelectionChange?: (target: TaggedFabricObject | null) => void;
+  /**
+   * 문서가 실제로 바뀌었을 때만 호출된다(사용자 편집으로 스냅샷이 달라진 push, undo/redo 적용).
+   * loadDoc · 복원 과정의 객체 이벤트 · 내용이 같은 push 에서는 호출되지 않는다.
+   */
   onModified?: () => void;
   /** 길게 누르기 컨텍스트 메뉴 콜백. */
   onLongPress?: (
@@ -167,7 +207,25 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
     const canvasElRef = useRef<HTMLCanvasElement>(null);
     const canvasRef = useRef<fabric.Canvas | null>(null);
     const historyRef = useRef<HistoryStack>(new HistoryStack());
-    const isRestoringRef = useRef(false);
+    /** 캔버스 이벤트 → 히스토리 연결. 캔버스와 수명이 같다. */
+    const recorderRef = useRef<HistoryRecorder | null>(null);
+    /** loadDoc 요청 순번 — 늦게 끝난 옛 로드가 새 문서를 덮지 않게 한다. */
+    const loadSeqRef = useRef(0);
+    /** undo/redo 복원 순번 — 연속 undo 시 마지막 요청만 캔버스에 반영한다. */
+    const restoreSeqRef = useRef(0);
+    /** 진행 중인 loadDoc 수 — 로드 중 undo/redo 는 무시한다(옛 문서 히스토리라서). */
+    const loadingCountRef = useRef(0);
+    /** 로드·복원 진행 추적 — 저장은 whenIdle 뒤에 직렬화한다. */
+    const idleRef = useRef(createIdleTracker());
+    /** 배경 변경 호출 순서 — 늦게 끝난 비동기 적용이 더 나중에 요청된 배경을 덮지 않게. */
+    const bgGateRef = useRef(createBackgroundGate());
+    /** 마지막 loadDoc 입력 — 크기 변경으로 캔버스를 새로 만들 때 다시 올린다. */
+    const lastLoadRef = useRef<{
+      doc: PageDoc;
+      photoUrls: Record<string, string>;
+    } | null>(null);
+    /** photoId → 최신 signed URL. undo 복원 시 만료 URL 대신 쓴다. */
+    const photoUrlsRef = useRef<Record<string, string>>({});
     const [historyVersion, setHistoryVersion] = useState(0);
 
     // 콜백들을 ref 로 보관 — 캔버스 재초기화 빈도를 낮춘다.
@@ -180,6 +238,12 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
     const maxFitScaleRef = useRef(maxFitScale);
     /** 현재 캔버스의 fit 재계산 함수 — maxFitScale 변경 시 즉시 재적용용. */
     const refitRef = useRef<(() => void) | null>(null);
+    // 캔버스 init effect(제스처 단축키·재생성 시 재로드)가 최신 콜백을 쓰도록 ref 로 우회.
+    const undoRef = useRef<() => void>(() => {});
+    const redoRef = useRef<() => void>(() => {});
+    const loadDocRef = useRef<
+      ((doc: PageDoc, photoUrls: Record<string, string>) => Promise<void>) | null
+    >(null);
     useEffect(() => {
       onSelectionChangeRef.current = onSelectionChange;
     }, [onSelectionChange]);
@@ -242,50 +306,39 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         onSelectionChangeRef.current?.(null),
       );
 
-      // History push (debounced)
-      const pushSnapshot = () => {
-        if (isRestoringRef.current) return;
-        const json = JSON.stringify((canvas as unknown as { toJSON: (props?: string[]) => unknown }).toJSON(FABRIC_EXTRA_PROPS as unknown as string[]));
-        historyRef.current.push(json);
-        setHistoryVersion((v) => v + 1);
-        onHistoryChangeRef.current?.(
-          historyRef.current.canUndo,
-          historyRef.current.canRedo,
-        );
-        onModifiedRef.current?.();
-      };
-      const debouncedPush = makeHistoryDebouncer(pushSnapshot, 200);
-      const handler = () => debouncedPush();
-      canvas.on("object:modified", handler);
-      canvas.on("object:added", handler);
-      canvas.on("object:removed", handler);
-
-      // 안전선 (점선) — chrome 객체 (oType 미부여 → 직렬화 제외)
+      // 안전선 (점선) — chrome 객체 (oType 미부여 → 직렬화 제외).
+      // 히스토리 연결 **전에** 그린다 — chrome add 이벤트가 push 를 예약하지 않게(QA-4).
       drawSafeLineOverlay(canvas, widthMm, heightMm, bleedMm, dpi);
+
+      // History push (debounced 200ms).
+      // 스냅샷은 createSnapshot(= canvas.toObject(FABRIC_EXTRA_PROPS)) — toJSON(props) 는
+      // fabric 6.9.1 에서 인자를 무시해 태그가 빠진다(QA-1).
+      // 로드·복원 중 이벤트 무시, 내용이 같은 push 는 onModified 없음 — HistoryRecorder 참고.
+      const recorder = new HistoryRecorder({
+        stack: historyRef.current,
+        takeSnapshot: () => createSnapshot(canvas),
+        debounceMs: 200,
+        onHistoryChange: (canUndo, canRedo) => {
+          setHistoryVersion((v) => v + 1);
+          onHistoryChangeRef.current?.(canUndo, canRedo);
+        },
+        onModified: () => onModifiedRef.current?.(),
+      });
+      recorderRef.current = recorder;
+      // 로드 전 기준점 = chrome 만 있는 빈 문서. 로드 전에 발화한 이벤트가 있어도 no-op push 가 된다.
+      // (문서 없이 시작하는 페이지에서는 첫 사용자 편집이 이 기준점과 달라 정상적으로 dirty 가 된다.)
+      recorder.ensureBaseline();
+      // chrome(excludeFromExport) 대상 이벤트는 걸러서 연결한다.
+      const disconnectHistory = connectCanvasHistory(canvas, recorder);
 
       // 제스처 + 스냅
       const detachGestures = attachGestures(canvas, {
         container,
         mmToPx: (mm) => mmToPx(mm, dpi),
         onLongPress: (t, x, y) => onLongPressRef.current?.(t ?? null, x, y),
-        onUndo: () => {
-          const snap = historyRef.current.undo();
-          if (snap) restoreFromSnapshot(canvas, snap, dpi);
-          setHistoryVersion((v) => v + 1);
-          onHistoryChangeRef.current?.(
-            historyRef.current.canUndo,
-            historyRef.current.canRedo,
-          );
-        },
-        onRedo: () => {
-          const snap = historyRef.current.redo();
-          if (snap) restoreFromSnapshot(canvas, snap, dpi);
-          setHistoryVersion((v) => v + 1);
-          onHistoryChangeRef.current?.(
-            historyRef.current.canUndo,
-            historyRef.current.canRedo,
-          );
-        },
+        // 버튼·단축키 모두 같은 undo/redo 경로(가드·태그 보존 복원)를 탄다.
+        onUndo: () => undoRef.current(),
+        onRedo: () => redoRef.current(),
       });
       const snapHandle = attachSnapGuides(canvas);
 
@@ -328,17 +381,23 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       if (!readyCalledRef.current) {
         readyCalledRef.current = true;
         onReadyRef.current?.();
+      } else if (lastLoadRef.current) {
+        // 크기(widthMm 등)가 바뀌어 캔버스를 새로 만들었다 — 새 캔버스는 비어 있다.
+        // 크기 변경은 항상 문서 교체(구규격 표지 재생성·템플릿·최신본 재로드)와 함께 오므로
+        // 마지막 문서를 다시 올린다. 안 하면 빈 캔버스가 자동저장돼 표지가 비워진다.
+        const last = lastLoadRef.current;
+        void loadDocRef.current?.(last.doc, last.photoUrls);
       }
 
       return () => {
         if (resizeTimer) clearTimeout(resizeTimer);
         refitRef.current = null;
+        recorder.cancel();
+        if (recorderRef.current === recorder) recorderRef.current = null;
         ro.disconnect();
         snapHandle.detach();
         detachGestures();
-        canvas.off("object:modified", handler);
-        canvas.off("object:added", handler);
-        canvas.off("object:removed", handler);
+        disconnectHistory();
         canvas.off();
         canvas.dispose();
         canvasRef.current = null;
@@ -352,9 +411,12 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       const detach = startUrlRefresher({
         pageId,
         onRefresh: async (urls) => {
+          photoUrlsRef.current = { ...photoUrlsRef.current, ...urls };
           const c = canvasRef.current;
           if (!c) return;
           await applyPhotoUrlsToCanvas(c, urls);
+          // src 만 바뀐 것은 편집이 아니다 — 포인터 내용을 맞춰 다음 이벤트가 dirty 를 만들지 않게.
+          if (canvasRef.current === c) recorderRef.current?.rebaseCurrent();
         },
       });
       return () => detach();
@@ -363,43 +425,70 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
     // ---------- Imperative API ----------
     const loadDoc = useCallback(
       async (doc: PageDoc, photoUrls: Record<string, string>) => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        isRestoringRef.current = true;
-        try {
-          // 기존 사용자 객체 제거 (chrome 보존)
-          const toRemove: fabric.FabricObject[] = canvas
-            .getObjects()
-            .filter((o) => (o as TaggedFabricObject).oType !== undefined);
-          for (const o of toRemove) canvas.remove(o);
-
-          canvas.backgroundColor = doc.backgroundColor;
-          // backgroundImage 처리 — photoId 우선, 그다음 url.
-          (canvas as unknown as { backgroundImage: unknown }).backgroundImage =
-            undefined;
-          if (doc.backgroundImage) {
-            const url =
-              (doc.backgroundImage.photoId &&
-                photoUrls[doc.backgroundImage.photoId]) ||
-              doc.backgroundImage.url;
-            if (url) {
-              await applyBackgroundImageToCanvas(
-                canvas,
-                {
-                  url,
-                  cropMode: doc.backgroundImage.cropMode,
-                  opacity: doc.backgroundImage.opacity,
-                },
-                stagePxSize,
-              );
-            }
+        const initialCanvas = canvasRef.current;
+        if (!initialCanvas) return;
+        lastLoadRef.current = { doc, photoUrls };
+        photoUrlsRef.current = { ...photoUrlsRef.current, ...photoUrls };
+        const seq = ++loadSeqRef.current;
+        // 진행 중인 undo/redo 복원은 무효 — 새 문서가 이긴다.
+        restoreSeqRef.current += 1;
+        loadingCountRef.current += 1;
+        const endIdle = idleRef.current.begin();
+        let loadingEnded = false;
+        // 객체 교체가 끝나면 즉시 해제한다 — 배경 이미지는 직렬화와 무관하므로 기다리지 않는다.
+        const endLoading = () => {
+          if (loadingEnded) return;
+          loadingEnded = true;
+          loadingCountRef.current -= 1;
+          endIdle();
+        };
+        // 로드 구간의 히스토리 기록 중지 — **await 전에 동기로** 건다(QA-4 회귀).
+        // 예전에는 이미지 로드(await)가 끝난 뒤에야 suspend 해서, 그 사이 예약된 push 가
+        // 가드 없이 돌아 편집 없이 onModified → dirty → 자동저장이 됐다.
+        // 로드 중 사용자 이벤트는 기록하지 않는다 — 교체되는 옛 객체의 편집은 사라지고,
+        // 새로 추가된 객체는 교체 뒤 보존 객체 전체를 한 단계로 commit 한다(아래).
+        // 캔버스가 재생성되면 recorder 도 바뀌므로, 멈춘 recorder 를 모아 두고 전부 재개한다.
+        const suspended: HistoryRecorder[] = [];
+        const suspendActiveRecorder = (): HistoryRecorder | null => {
+          const r = recorderRef.current;
+          if (r && !suspended.includes(r)) {
+            r.suspend();
+            suspended.push(r);
           }
-
+          return r;
+        };
+        const resumeRecorders = () => {
+          for (const r of suspended.splice(0)) r.resume();
+        };
+        // 호출 시점의 사용자 객체 = 교체 대상. **await 전에 동기로** 찍는다.
+        // 기다리는 동안 툴바로 추가한 텍스트·사진은 여기에 없으므로 교체에서 살아남는다
+        // (예전에는 교체 때 전부 지워 조용히 사라졌다 — lib/fabric/load-guards.ts).
+        const previousAtStart = captureUserObjects(initialCanvas.getObjects());
+        // 배경도 호출 시점에 등록 — 기다리는 동안 사용자가 고른 배경(에디터 저장 메타에는 이미
+        // 반영됨)을 교체 시점에 덮어 화면과 저장본이 어긋나지 않게.
+        const bgClaim = bgGateRef.current.claim(["color", "image"]);
+        suspendActiveRecorder();
+        try {
+          // 새 객체를 먼저 전부 만든 뒤 한 번에 교체한다.
+          // (먼저 지우고 이미지 로드를 기다리면 그 사이 저장·스냅샷이 빈 캔버스를 본다.)
           const objs = await pageDocToFabric(doc, {
-            canvas,
+            canvas: initialCanvas,
             dpi,
             photoUrls,
           });
+          // 기다리는 동안 더 새 로드가 들어왔거나 캔버스가 재생성됐을 수 있다 — 현재 캔버스 기준.
+          const canvas = canvasRef.current;
+          if (seq !== loadSeqRef.current || !canvas) return;
+
+          // 재생성된 캔버스의 recorder 도 교체 동안 멈춘다(이미 멈췄으면 no-op).
+          const recorder = suspendActiveRecorder();
+          // 재생성은 항상 새 loadDoc(순번 증가)을 부르므로 여기선 같은 캔버스다. 방어적으로만 다시 찍는다.
+          const previous =
+            canvas === initialCanvas
+              ? previousAtStart
+              : captureUserObjects(canvas.getObjects());
+          releaseSelectionFor(canvas, previous);
+
           // bleed 만큼 좌표 보정: PageDoc 좌표는 trim 기준 → 캔버스 좌표는 trim+bleed
           const bleedPx = mmToPx(bleedMm, dpi);
           for (const o of objs) {
@@ -407,26 +496,71 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
               left: (o.left ?? 0) + bleedPx,
               top: (o.top ?? 0) + bleedPx,
             });
-            canvas.add(o);
+          }
+          // 기존 사용자 객체 제거(chrome 보존, 태그가 깨진 객체 포함) + 새 객체를 보존 객체 아래에 삽입.
+          const { preserved } = replaceUserObjects(canvas, previous, objs);
+
+          if (bgClaim.isCurrent("color")) {
+            canvas.backgroundColor = doc.backgroundColor;
+          }
+          const applyDocBackgroundImage = bgClaim.isCurrent("image");
+          if (applyDocBackgroundImage) {
+            (canvas as unknown as { backgroundImage: unknown }).backgroundImage =
+              undefined;
           }
           canvas.requestRenderAll();
 
-          // 초기 스냅샷
-          const json = JSON.stringify(
-            (canvas as unknown as { toJSON: (props?: string[]) => unknown }).toJSON(FABRIC_EXTRA_PROPS as unknown as string[]),
-          );
-          historyRef.current.reset(json);
-          setHistoryVersion((v) => v + 1);
-          onHistoryChangeRef.current?.(
-            historyRef.current.canUndo,
-            historyRef.current.canRedo,
-          );
+          // 기준점 = 로드한 문서. 이후 같은 내용의 push 는 no-op 이라 dirty 가 안 된다.
+          // 보존 객체가 있으면 기준점에서 빼고, 그 위 편집 한 단계로 push 한다(undo 대상 + onModified).
+          if (preserved.length === 0) {
+            if (recorder) recorder.resetToCurrent();
+            else historyRef.current.reset(createSnapshot(canvas));
+          } else {
+            const baseline = createSnapshotWithout(canvas, new Set(preserved));
+            if (recorder) recorder.resetTo(baseline);
+            else historyRef.current.reset(baseline);
+          }
+          resumeRecorders();
+          if (preserved.length > 0 && !recorder?.commit()) {
+            // 다른 복원이 recorder 를 멈춰 push 하지 못했다 — 저장 대상임은 직접 알린다.
+            onModifiedRef.current?.();
+          }
+          endLoading();
+
+          // backgroundImage 처리 — photoId 우선, 그다음 url. (스냅샷과 무관)
+          // 기다리지 않는다: loadDoc 을 기다리는 저장 큐(최신본 확인)가 느린 배경 이미지에
+          // 막히지 않게. 늦게 끝난 옛 요청·그 뒤 사용자가 바꾼 배경은 isCurrent 로 가려진다.
+          if (applyDocBackgroundImage && doc.backgroundImage) {
+            const url =
+              (doc.backgroundImage.photoId &&
+                photoUrls[doc.backgroundImage.photoId]) ||
+              doc.backgroundImage.url;
+            if (url) {
+              void applyBackgroundImageToCanvas(
+                canvas,
+                {
+                  url,
+                  cropMode: doc.backgroundImage.cropMode,
+                  opacity: doc.backgroundImage.opacity,
+                },
+                stagePxSize,
+                {
+                  isCurrent: () =>
+                    seq === loadSeqRef.current &&
+                    canvasRef.current === canvas &&
+                    bgClaim.isCurrent("image"),
+                },
+              );
+            }
+          }
         } finally {
-          isRestoringRef.current = false;
+          resumeRecorders();
+          endLoading();
         }
       },
       [bleedMm, dpi, stagePxSize],
     );
+    loadDocRef.current = loadDoc;
 
     const serialize = useCallback(
       (meta: PageDocMeta): PageDoc => {
@@ -461,6 +595,29 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       [bleedMm, dpi],
     );
 
+    const serializeForSave = useCallback(
+      (meta: PageDocMeta): SerializeForSaveResult => {
+        const canvas = canvasRef.current;
+        if (!canvas) {
+          return { ok: false, reason: "not_ready", untaggedCount: 0 };
+        }
+        // 태그 없는 사용자 객체가 있으면 직렬화가 그 객체들을 조용히 버린다 →
+        // 화면에 보이는 내용이 저장본에서 사라진다. 저장 자체를 막는다.
+        const untagged = findUntaggedUserObjects(
+          canvas.getObjects() as TaggedFabricObject[],
+        );
+        if (untagged.length > 0) {
+          return {
+            ok: false,
+            reason: "untagged_objects",
+            untaggedCount: untagged.length,
+          };
+        }
+        return { ok: true, doc: serialize(meta) };
+      },
+      [serialize],
+    );
+
     const addPhoto = useCallback(
       async (photoId: string, url: string) => {
         const canvas = canvasRef.current;
@@ -483,6 +640,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
           originX: "center",
           originY: "center",
         });
+        photoUrlsRef.current = { ...photoUrlsRef.current, [photoId]: url };
         const tagged = img as TaggedFabricObject;
         tagged.objectId = nanoid(12);
         tagged.oType = "photo";
@@ -579,6 +737,9 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       async (obj: LayoutObject, photoUrls?: Record<string, string>) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
+        if (photoUrls) {
+          photoUrlsRef.current = { ...photoUrlsRef.current, ...photoUrls };
+        }
 
         const built = await pageDocToFabric(
           {
@@ -649,6 +810,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         if (!sel || sel.oType !== "photo") return;
 
         const img = sel as fabric.FabricImage & TaggedFabricObject;
+        photoUrlsRef.current = { ...photoUrlsRef.current, [photoId]: url };
 
         // 위치/스케일/회전/origin 보존, source 만 교체.
         try {
@@ -742,9 +904,14 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         if (!canvas) return;
 
         const applyImage = (url: string, photoId?: string) => {
+          // 호출 순서로 판정 — 늦게 끝난 이미지가 그 뒤 요청된 배경(다른 선택·문서 로드)을 덮지 않게.
+          const claim = bgGateRef.current.claim(["image"]);
           void fabric.FabricImage.fromURL(url, {
             crossOrigin: "anonymous",
           }).then((img) => {
+            if (!claim.isCurrent("image") || canvasRef.current !== canvas) {
+              return;
+            }
             const sx = stagePxSize.w / (img.width ?? 1);
             const sy = stagePxSize.h / (img.height ?? 1);
             img.set({
@@ -763,6 +930,8 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
             (img as unknown as { __bgUrl?: string }).__bgUrl = url;
             canvas.backgroundImage = img;
             canvas.requestRenderAll();
+          }).catch((err: unknown) => {
+            console.warn("[FabricStage] 배경 이미지 로드 실패", err);
           });
         };
 
@@ -773,6 +942,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
 
         // null / { type: "none" } — 배경 제거 (흰색 채움)
         if (value === null || (typeof value === "object" && value.type === "none")) {
+          bgGateRef.current.claim(["color", "image"]);
           canvas.backgroundColor = "#ffffff";
           clearImage();
           canvas.requestRenderAll();
@@ -788,6 +958,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
           if (looksLikeUrl) {
             applyImage(value);
           } else {
+            bgGateRef.current.claim(["color", "image"]);
             canvas.backgroundColor = value;
             clearImage();
             canvas.requestRenderAll();
@@ -797,6 +968,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
 
         switch (value.type) {
           case "color":
+            bgGateRef.current.claim(["color", "image"]);
             canvas.backgroundColor = value.color;
             clearImage();
             canvas.requestRenderAll();
@@ -812,31 +984,96 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       [stagePxSize],
     );
 
+    /**
+     * 히스토리 스냅샷으로 사용자 객체를 교체한다(chrome·배경은 그대로).
+     *
+     * - 복원 중 object:removed/added 는 recorder 가 무시한다 → push 가 없어 redo 스택이 산다.
+     * - 스냅샷은 태그를 보존하므로(snapshot.ts) 복원 객체도 그대로 저장된다.
+     * - 성공하면 onModified 를 한 번 부른다: undo/redo 는 저장해야 하는 사용자 변경이다.
+     * - 복원 시작 시점의 객체만 교체한다. 기다리는 동안 추가된 객체는 보존되고, 복원 결과 위의
+     *   새 편집 한 단계로 push 된다(새 편집이므로 redo 는 비워진다).
+     */
+    const restoreSnapshot = useCallback(
+      async (snapshot: string, direction: "undo" | "redo") => {
+        const canvas = canvasRef.current;
+        const recorder = recorderRef.current;
+        if (!canvas || !recorder) return;
+        const seq = ++restoreSeqRef.current;
+        const done = idleRef.current.begin();
+        // 복원 시작 시점의 사용자 객체 = 교체 대상(await 전에 동기로 — loadDoc 과 같은 규약).
+        const previous = captureUserObjects(canvas.getObjects());
+        recorder.suspend();
+        let applied = false;
+        let preservedCount = 0;
+        try {
+          let objs: TaggedFabricObject[];
+          try {
+            objs = await restoreSnapshotObjects(snapshot, {
+              dpi,
+              photoUrls: photoUrlsRef.current,
+            });
+          } catch (err) {
+            if (
+              seq === restoreSeqRef.current &&
+              recorderRef.current === recorder
+            ) {
+              // 캔버스는 마지막으로 반영된 상태 그대로다. 연속 undo 로 앞선 복원이 순번에 밀려
+              // 반영되지 않았을 수 있으므로, 그 뒤로 움직인 포인터를 전부 되돌린다.
+              recorder.revertUnapplied();
+              console.warn("[FabricStage] 히스토리 복원 실패", err);
+              toast({
+                description:
+                  direction === "undo"
+                    ? "되돌리기를 적용하지 못했어요. 잠시 후 다시 시도해주세요."
+                    : "다시 실행을 적용하지 못했어요. 잠시 후 다시 시도해주세요.",
+                variant: "destructive",
+              });
+            }
+            return;
+          }
+          if (seq !== restoreSeqRef.current || canvasRef.current !== canvas) {
+            return;
+          }
+          releaseSelectionFor(canvas, previous);
+          const { preserved } = replaceUserObjects(canvas, previous, objs);
+          canvas.requestRenderAll();
+          // 포인터 내용을 복원된 캔버스의 실제 스냅샷으로 맞춘다(사진 src 최신 URL 치환 등).
+          // 보존 객체는 복원 결과에 넣지 않는다 — 아래에서 그 위의 새 편집으로 push 한다.
+          recorder.markRestored(
+            preserved.length === 0
+              ? createSnapshot(canvas)
+              : createSnapshotWithout(canvas, new Set(preserved)),
+          );
+          preservedCount = preserved.length;
+          applied = true;
+        } finally {
+          recorder.resume();
+          done();
+        }
+        if (applied) {
+          if (preservedCount > 0) recorder.commit();
+          onModifiedRef.current?.();
+        }
+      },
+      [dpi],
+    );
+
     const undo = useCallback(() => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const snap = historyRef.current.undo();
-      if (!snap) return;
-      restoreFromSnapshot(canvas, snap, dpi);
-      setHistoryVersion((v) => v + 1);
-      onHistoryChangeRef.current?.(
-        historyRef.current.canUndo,
-        historyRef.current.canRedo,
-      );
-    }, [dpi]);
+      // 로드 중에는 옛 문서의 히스토리라 되돌릴 대상이 아니다.
+      if (loadingCountRef.current > 0) return;
+      const snap = recorderRef.current?.undo();
+      if (snap == null) return;
+      void restoreSnapshot(snap, "undo");
+    }, [restoreSnapshot]);
 
     const redo = useCallback(() => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const snap = historyRef.current.redo();
-      if (!snap) return;
-      restoreFromSnapshot(canvas, snap, dpi);
-      setHistoryVersion((v) => v + 1);
-      onHistoryChangeRef.current?.(
-        historyRef.current.canUndo,
-        historyRef.current.canRedo,
-      );
-    }, [dpi]);
+      if (loadingCountRef.current > 0) return;
+      const snap = recorderRef.current?.redo();
+      if (snap == null) return;
+      void restoreSnapshot(snap, "redo");
+    }, [restoreSnapshot]);
+    undoRef.current = undo;
+    redoRef.current = redo;
 
     const remove = useCallback(() => {
       const canvas = canvasRef.current;
@@ -874,10 +1111,18 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
 
     const refreshPhotoUrls = useCallback(
       async (urls: Record<string, string>) => {
+        photoUrlsRef.current = { ...photoUrlsRef.current, ...urls };
         const canvas = canvasRef.current;
         if (!canvas) return;
         await applyPhotoUrlsToCanvas(canvas, urls);
+        // src 만 바뀐 것은 편집이 아니다 — 포인터 내용을 캔버스에 맞춘다.
+        if (canvasRef.current === canvas) recorderRef.current?.rebaseCurrent();
       },
+      [],
+    );
+
+    const whenIdle = useCallback(
+      (timeoutMs?: number) => idleRef.current.whenIdle(timeoutMs),
       [],
     );
 
@@ -887,6 +1132,8 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       () => ({
         loadDoc,
         serialize,
+        serializeForSave,
+        whenIdle,
         addPhoto,
         addText,
         addClipart,
@@ -909,6 +1156,8 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       [
         loadDoc,
         serialize,
+        serializeForSave,
+        whenIdle,
         addPhoto,
         addText,
         addClipart,
@@ -962,6 +1211,22 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
 );
 
 /**
+ * 교체로 지워질 객체가 선택돼 있으면 교체 전에 선택을 푼다.
+ * 여러 객체 선택(ActiveSelection)은 그룹 변환을 객체에 반영하려면 먼저 풀어야 한다.
+ * 교체 대기 중 추가된(보존될) 단일 객체 선택은 유지한다 — 텍스트 편집 중일 수 있다.
+ */
+function releaseSelectionFor(
+  canvas: fabric.Canvas,
+  previous: ReadonlySet<fabric.FabricObject>,
+) {
+  const active = canvas.getActiveObject();
+  if (!active) return;
+  const preservedSingle =
+    !previous.has(active) && canvas.getObjects().includes(active);
+  if (!preservedSingle) canvas.discardActiveObject();
+}
+
+/**
  * 안전선(bleed 안쪽 점선) 그리기 — 캔버스 chrome 객체.
  * oType 을 부여하지 않아 PageDoc 직렬화에서 제외된다.
  */
@@ -1012,29 +1277,6 @@ function drawSafeLineOverlay(
 
   canvas.add(trimRect);
   canvas.add(safeRect);
-}
-
-function restoreFromSnapshot(canvas: fabric.Canvas, snapshot: string, dpi: number) {
-  const data = JSON.parse(snapshot) as Record<string, unknown>;
-  // chrome 객체(safe line / trim rect)는 excludeFromExport=true 이므로 toJSON 에 포함되지 않음.
-  // 복원 시엔 사용자 객체만 다시 그려진다 — chrome 은 살아있는 객체를 보존하기 위해
-  // loadFromJSON 전에 분리한 뒤 재삽입한다.
-  const chromeObjects = canvas
-    .getObjects()
-    .filter((o) => (o as { excludeFromExport?: boolean }).excludeFromExport);
-  void canvas.loadFromJSON(data).then(() => {
-    const present = new Set(canvas.getObjects());
-    for (const c of chromeObjects) {
-      if (!present.has(c)) canvas.add(c);
-    }
-    // 사진 clip 은 absolutePositioned 라 JSON 라운드트립에서 온전히 살아나지 않는다.
-    // 슬롯 태그는 FABRIC_EXTRA_PROPS 로 보존되므로, 그 값으로 clip 을 다시 만든다.
-    // (빠뜨리면 undo 직후 크롭이 풀려 사진이 슬롯 밖으로 번진다.)
-    for (const o of canvas.getObjects() as TaggedFabricObject[]) {
-      if (o.oType === "photo") syncPhotoClip(o as fabric.FabricImage, dpi);
-    }
-    canvas.requestRenderAll();
-  });
 }
 
 export default FabricStage;

@@ -4,6 +4,16 @@ import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
+import { computeDocVersion, parseBaseVersion } from "@/lib/editor/doc-version";
+import {
+  EDIT_CONFLICT_CODE,
+  EDIT_CONFLICT_MESSAGE,
+} from "@/lib/editor/edit-conflict";
+import {
+  guardFailureResponse,
+  isStaleBase,
+  writeWithVersionGuard,
+} from "@/lib/editor/version-guard";
 import { THUMBS_BUCKET } from "@/lib/image/constants";
 import { isPageDoc, type PageDoc } from "@/lib/layout/types";
 
@@ -18,7 +28,8 @@ interface Params {
 
 /**
  * GET /api/pages/[id]
- *   응답: { id, pageNo, layoutMode, fabricJson, photoUrls }
+ *   응답: { id, projectId, pageNo, layoutMode, fabricJson, updatedAt, version, photoUrls }
+ *   version: fabric_json 내용 해시 — PATCH baseVersion 으로 되돌려 보낸다.
  *
  *   해당 페이지가 참조하는 photoId 들의 thumb signed URL 을 일괄 발급한다
  *   (signedUrl 만료 시 클라가 재요청하는 url-refresher 의 백엔드).
@@ -109,6 +120,7 @@ export async function GET(_req: Request, { params }: Params) {
       layoutMode: row.layout_mode,
       fabricJson: doc,
       updatedAt: row.updated_at,
+      version: computeDocVersion(row.fabric_json),
       photoUrls,
     });
   } catch (err) {
@@ -118,17 +130,22 @@ export async function GET(_req: Request, { params }: Params) {
 
 interface PatchBody {
   fabricJson?: unknown;
+  baseVersion?: unknown;
 }
 
 /**
  * PATCH /api/pages/[id]
- *   body: { fabricJson: PageDoc }
+ *   body: { fabricJson: PageDoc, baseVersion?: string }
+ *   응답: { id, pageNo, fabricJson, updatedAt, version }
  *
  * 검증:
  *   1. 로그인.
  *   2. page → project 소유권 확인.
  *   3. isPageDoc() 가드 통과.
  *   4. fabricJson.bookSizeId / pageNo 가 DB 와 일치하는지 확인 (실수 방지).
+ *   5. baseVersion 이 있으면 stale-write 방어 — 서버 fabric_json 해시가 다르면
+ *      409 EDIT_CONFLICT { details: { currentVersion } }. 저장 이전 화면(라우터 캐시 재생·
+ *      다른 탭)이 최신 저장본을 덮어쓰지 못하게 한다. 없으면(구 클라이언트) 기존 동작.
  */
 export async function PATCH(req: Request, { params }: Params) {
   try {
@@ -145,11 +162,23 @@ export async function PATCH(req: Request, { params }: Params) {
       );
     }
     const doc = raw.fabricJson;
+    const base = parseBaseVersion(raw.baseVersion);
+    if (!base.ok) {
+      return fail(
+        "INVALID_BODY",
+        "baseVersion 은 비어있지 않은 문자열이어야 합니다.",
+        400,
+      );
+    }
+    const baseVersion = base.value;
+    // 보내온 문서의 내용 버전 — 서버 문서와 같으면 base 가 옛것이어도 충돌이 아니다(멱등 재시도).
+    const incomingVersion =
+      baseVersion !== null ? computeDocVersion(doc) : undefined;
 
     const supabase = createServerSupabase();
     const { data: row, error } = await supabase
       .from("pages")
-      .select("id, project_id, page_no")
+      .select("id, project_id, page_no, fabric_json, updated_at")
       .eq("id", pageId)
       .maybeSingle();
     if (error) return fail("PAGE_QUERY_FAILED", error.message, 500);
@@ -164,6 +193,18 @@ export async function PATCH(req: Request, { params }: Params) {
     if (!project) return fail("NOT_FOUND", "프로젝트를 찾을 수 없습니다.", 404);
     if (project.user_id !== user.id) {
       return fail("FORBIDDEN", "해당 페이지에 대한 권한이 없습니다.", 403);
+    }
+
+    // stale 기준이면 다른 검증보다 먼저 409 — 클라이언트가 최신본을 다시 불러와야 한다.
+    if (baseVersion !== null) {
+      const stale = isStaleBase(baseVersion, row.fabric_json, {
+        incomingVersion,
+      });
+      if (stale.stale) {
+        return fail(EDIT_CONFLICT_CODE, EDIT_CONFLICT_MESSAGE, 409, {
+          currentVersion: stale.currentVersion,
+        });
+      }
     }
 
     if (doc.bookSizeId !== project.book_size_id) {
@@ -213,27 +254,81 @@ export async function PATCH(req: Request, { params }: Params) {
       }
     }
 
-    const { data: updated, error: upErr } = await supabase
-      .from("pages")
-      .update({
-        fabric_json: doc as unknown as Record<string, unknown>,
-      })
-      .eq("id", pageId)
-      .select("id, page_no, fabric_json, updated_at")
-      .single();
-    if (upErr || !updated) {
-      return fail(
-        "PAGE_UPDATE_FAILED",
-        upErr?.message ?? "페이지 저장에 실패했습니다.",
-        500,
-      );
+    const fabricJson = doc as unknown as Record<string, unknown>;
+
+    if (baseVersion === null) {
+      // 구 클라이언트 — 기준 버전 없이 기존처럼 무조건 저장.
+      const { data: updated, error: upErr } = await supabase
+        .from("pages")
+        .update({ fabric_json: fabricJson })
+        .eq("id", pageId)
+        .select("id, page_no, fabric_json, updated_at")
+        .single();
+      if (upErr || !updated) {
+        return fail(
+          "PAGE_UPDATE_FAILED",
+          upErr?.message ?? "페이지 저장에 실패했습니다.",
+          500,
+        );
+      }
+      return ok({
+        id: updated.id,
+        pageNo: updated.page_no,
+        fabricJson: updated.fabric_json,
+        updatedAt: updated.updated_at,
+        version: computeDocVersion(updated.fabric_json),
+      });
     }
 
+    const guarded = await writeWithVersionGuard({
+      baseVersion,
+      incomingVersion,
+      initial: { content: row.fabric_json, updatedAt: row.updated_at },
+      reread: async () => {
+        const { data, error: reErr } = await supabase
+          .from("pages")
+          .select("fabric_json, updated_at")
+          .eq("id", pageId)
+          .maybeSingle();
+        if (reErr) return { ok: false, message: reErr.message };
+        return {
+          ok: true,
+          row: data
+            ? { content: data.fabric_json, updatedAt: data.updated_at }
+            : null,
+        };
+      },
+      write: async (expectedUpdatedAt) => {
+        let query = supabase
+          .from("pages")
+          .update({ fabric_json: fabricJson })
+          .eq("id", pageId);
+        if (expectedUpdatedAt !== null) {
+          query = query.eq("updated_at", expectedUpdatedAt);
+        }
+        const { data, error: upErr } = await query
+          .select("id, page_no, fabric_json, updated_at")
+          .maybeSingle();
+        if (upErr) return { ok: false, message: upErr.message };
+        return { ok: true, row: data };
+      },
+    });
+
+    if (guarded.kind !== "written") {
+      // 0행(RLS 거부·동시 삭제)도 기존 경로와 같은 500 PAGE_UPDATE_FAILED — 근거는 guardFailureResponse.
+      const f = guardFailureResponse(guarded, {
+        code: "PAGE_UPDATE_FAILED",
+        fallbackMessage: "페이지 저장에 실패했습니다.",
+      });
+      return fail(f.code, f.message, f.status, f.details);
+    }
+    const updated = guarded.row;
     return ok({
       id: updated.id,
       pageNo: updated.page_no,
       fabricJson: updated.fabric_json,
       updatedAt: updated.updated_at,
+      version: computeDocVersion(updated.fabric_json),
     });
   } catch (err) {
     return failFromError(err);

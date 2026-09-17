@@ -8,6 +8,16 @@ import { requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize } from "@/lib/db/types";
+import { computeDocVersion } from "@/lib/editor/doc-version";
+import {
+  EDIT_CONFLICT_CODE,
+  EDIT_CONFLICT_MESSAGE,
+} from "@/lib/editor/edit-conflict";
+import {
+  guardFailureResponse,
+  isStaleBase,
+  writeWithVersionGuard,
+} from "@/lib/editor/version-guard";
 import { THUMBS_BUCKET } from "@/lib/image/constants";
 import { buildDefaultCoverDoc } from "@/lib/layout/cover";
 import { isPageDoc, type PageDoc } from "@/lib/layout/types";
@@ -24,6 +34,8 @@ const QuerySchema = z.object({
 const PatchSchema = z.object({
   projectId: z.string().uuid(),
   fabricJson: z.unknown(),
+  /** 에디터가 기준으로 삼은 cover_json 내용 버전. 없음/null = 구 클라이언트(기존 동작). */
+  baseVersion: z.string().min(1).max(128).nullable().optional(),
 });
 
 /**
@@ -34,7 +46,8 @@ const PatchSchema = z.object({
  *       isDefault: boolean,           // true 면 위 coverJson 은 즉시 만든 기본값(아직 저장 안 됨)
  *       bookSize: BookSize,
  *       pageCount: number,
- *       photoUrls: { [photoId]: signedUrl }
+ *       photoUrls: { [photoId]: signedUrl },
+ *       version: string               // 저장된 cover_json(없으면 null)의 내용 해시
  *     }
  *
  * cover_json 이 비어있으면 buildDefaultCoverDoc() 결과를 즉시 반환 (DB 저장은 안 함).
@@ -65,6 +78,8 @@ export async function GET(req: Request) {
     if (project.user_id !== user.id) {
       return fail("FORBIDDEN", "해당 프로젝트에 대한 권한이 없습니다.", 403);
     }
+    // 기본값 빌드 전 **저장된 원본** 기준 — PATCH 가 비교하는 값과 같아야 한다.
+    const version = computeDocVersion(project.cover_json);
 
     const { data: size, error: sizeErr } = await supabase
       .from("book_sizes")
@@ -155,6 +170,7 @@ export async function GET(req: Request) {
       bookSize,
       pageCount: pageCount ?? 0,
       photoUrls,
+      version,
     });
   } catch (err) {
     return failFromError(err);
@@ -163,12 +179,16 @@ export async function GET(req: Request) {
 
 /**
  * PATCH /api/cover
- *   body: { projectId, fabricJson: PageDoc }
+ *   body: { projectId, fabricJson: PageDoc, baseVersion?: string | null }
+ *   응답: { id, coverJson, updatedAt, version }
  *
  * 검증:
  *   1. 로그인 + 소유권.
  *   2. isPageDoc + layoutMode === "cover".
  *   3. bookSizeId 일치.
+ *   4. baseVersion 이 있으면 stale-write 방어 — 서버 cover_json 내용 해시가 다르면
+ *      409 EDIT_CONFLICT { details: { currentVersion } }.
+ *      내용 해시라서 제목 변경 등 projects 의 다른 컬럼 갱신은 충돌로 보지 않는다.
  */
 export async function PATCH(req: Request) {
   try {
@@ -185,6 +205,7 @@ export async function PATCH(req: Request) {
       );
     }
     const { projectId, fabricJson } = parsed.data;
+    const baseVersion = parsed.data.baseVersion ?? null;
 
     if (!isPageDoc(fabricJson)) {
       return fail(
@@ -200,18 +221,32 @@ export async function PATCH(req: Request) {
         400,
       );
     }
+    // 보내온 문서의 내용 버전 — 서버 문서와 같으면 base 가 옛것이어도 충돌이 아니다(멱등 재시도).
+    const incomingVersion =
+      baseVersion !== null ? computeDocVersion(fabricJson) : undefined;
 
     const supabase = createServerSupabase();
 
     const { data: project, error: projErr } = await supabase
       .from("projects")
-      .select("id, user_id, book_size_id")
+      .select("id, user_id, book_size_id, cover_json, updated_at")
       .eq("id", projectId)
       .maybeSingle();
     if (projErr) return fail("PROJECT_QUERY_FAILED", projErr.message, 500);
     if (!project) return fail("NOT_FOUND", "프로젝트를 찾을 수 없습니다.", 404);
     if (project.user_id !== user.id) {
       return fail("FORBIDDEN", "해당 프로젝트에 대한 권한이 없습니다.", 403);
+    }
+    // stale 기준이면 다른 검증보다 먼저 409 — 클라이언트가 최신본을 다시 불러와야 한다.
+    if (baseVersion !== null) {
+      const stale = isStaleBase(baseVersion, project.cover_json, {
+        incomingVersion,
+      });
+      if (stale.stale) {
+        return fail(EDIT_CONFLICT_CODE, EDIT_CONFLICT_MESSAGE, 409, {
+          currentVersion: stale.currentVersion,
+        });
+      }
     }
     if (fabricJson.bookSizeId !== project.book_size_id) {
       return fail(
@@ -253,20 +288,69 @@ export async function PATCH(req: Request) {
       }
     }
 
-    const { data: updated, error: upErr } = await supabase
-      .from("projects")
-      .update({
-        cover_json: fabricJson as unknown as Record<string, unknown>,
-      })
-      .eq("id", projectId)
-      .select("id, cover_json, updated_at")
-      .single();
-    if (upErr || !updated) {
-      return fail(
-        "COVER_UPDATE_FAILED",
-        upErr?.message ?? "표지 저장에 실패했습니다.",
-        500,
-      );
+    const coverJson = fabricJson as unknown as Record<string, unknown>;
+    let updated: { id: string; cover_json: unknown; updated_at: string };
+
+    if (baseVersion === null) {
+      // 구 클라이언트 — 기준 버전 없이 기존처럼 무조건 저장.
+      const { data, error: upErr } = await supabase
+        .from("projects")
+        .update({ cover_json: coverJson })
+        .eq("id", projectId)
+        .select("id, cover_json, updated_at")
+        .single();
+      if (upErr || !data) {
+        return fail(
+          "COVER_UPDATE_FAILED",
+          upErr?.message ?? "표지 저장에 실패했습니다.",
+          500,
+        );
+      }
+      updated = data;
+    } else {
+      // updated_at CAS + 내용 해시 재판정 — 제목 변경으로 updated_at 만 바뀐 경우는 재시도로 저장.
+      const guarded = await writeWithVersionGuard({
+        baseVersion,
+        incomingVersion,
+        initial: { content: project.cover_json, updatedAt: project.updated_at },
+        reread: async () => {
+          const { data, error: reErr } = await supabase
+            .from("projects")
+            .select("cover_json, updated_at")
+            .eq("id", projectId)
+            .maybeSingle();
+          if (reErr) return { ok: false, message: reErr.message };
+          return {
+            ok: true,
+            row: data
+              ? { content: data.cover_json, updatedAt: data.updated_at }
+              : null,
+          };
+        },
+        write: async (expectedUpdatedAt) => {
+          let query = supabase
+            .from("projects")
+            .update({ cover_json: coverJson })
+            .eq("id", projectId);
+          if (expectedUpdatedAt !== null) {
+            query = query.eq("updated_at", expectedUpdatedAt);
+          }
+          const { data, error: upErr } = await query
+            .select("id, cover_json, updated_at")
+            .maybeSingle();
+          if (upErr) return { ok: false, message: upErr.message };
+          return { ok: true, row: data };
+        },
+      });
+      if (guarded.kind !== "written") {
+        // 0행(RLS 거부·동시 삭제)도 기존 경로와 같은 500 COVER_UPDATE_FAILED — 근거는 guardFailureResponse.
+        const f = guardFailureResponse(guarded, {
+          code: "COVER_UPDATE_FAILED",
+          fallbackMessage: "표지 저장에 실패했습니다.",
+        });
+        return fail(f.code, f.message, f.status, f.details);
+      }
+      updated = guarded.row;
     }
 
     // 퍼널 계측: 표지 저장 = 책 완성 시점 (S1-2).
@@ -283,6 +367,7 @@ export async function PATCH(req: Request) {
       id: updated.id,
       coverJson: updated.cover_json,
       updatedAt: updated.updated_at,
+      version: computeDocVersion(updated.cover_json),
     });
   } catch (err) {
     return failFromError(err);

@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize } from "@/lib/db/types";
+import { computeDocVersion } from "@/lib/editor/doc-version";
 import { THUMBS_BUCKET } from "@/lib/image/constants";
 import { isPageDoc } from "@/lib/layout/types";
 
@@ -81,6 +82,8 @@ export default async function EditorSinglePage({ params }: PageProps) {
   // photoUrls 발급
   const docCandidate = page.fabric_json;
   const doc = isPageDoc(docCandidate) ? docCandidate : null;
+  // 저장된 원본 기준 내용 버전 — 에디터가 PATCH baseVersion 으로 돌려보낸다(stale-write 방어).
+  const initialVersion = computeDocVersion(page.fabric_json);
   const photoUrls: Record<string, string> = {};
   if (doc) {
     const photoIdSet = new Set<string>();
@@ -126,6 +129,7 @@ export default async function EditorSinglePage({ params }: PageProps) {
       pageId={page.id}
       pageNo={page.page_no}
       initialDoc={doc}
+      initialVersion={initialVersion}
       initialPhotoUrls={photoUrls}
       bookSize={bookSize}
       prevPageId={prevPage?.id ?? null}

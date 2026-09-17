@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type Response } from "@playwright/test";
 
 import {
   cleanupProjects,
@@ -107,36 +107,43 @@ test.describe("인증 골든 플로우 — 업로드→편집→표지→주문"
 
     // ── 5. 표지 저장 — order 페이지 게이트가 cover_json 을 요구한다
     //      (order/[projectId]/page.tsx:70-103).
+    //
+    // 저장 완료 판정은 버튼 라벨이 아니라 **성공한 PATCH /api/cover 응답**으로 한다.
+    //   ① 클릭 성공이 저장 성공이 아니다. 캔버스 준비 전 save() 는 요청 없이 "skipped" 로 끝나고,
+    //      최신본 확인 중이면 저장 큐에서 기다린 뒤에야 요청이 나간다.
+    //   ② 미저장 기본 표지는 dirty 로 시작해 자동저장(캔버스 로드·최신본 확인 뒤 5초 debounce 로
+    //      재무장)이 같은 PATCH 를 보낸다 — 수동 클릭보다 먼저 끝날 수 있다.
+    // 그래서 표지로 이동하기 **전에** 응답 리스너를 걸어 두고(자동저장이 먼저 끝나도 놓치지 않게),
+    // 아직 저장 응답이 없을 때만 버튼을 눌러 재시도한다. 이미 저장됐으면 기다리지 않는다.
+    // (예전 주석의 "save() 가 캔버스를 갱신하면 onModified 가 다시 발화해 dirty 가 되살아난다" 는
+    //  더 이상 사실이 아니다 — 로드·저장은 dirty 를 만들지 않는다. 판정 근거만 응답으로 유지한다.)
+    let coverSaved = false;
+    const onCoverSaved = (res: Response) => {
+      if (
+        res.url().includes("/api/cover") &&
+        res.request().method() === "PATCH" &&
+        res.ok()
+      ) {
+        coverSaved = true;
+      }
+    };
+    page.on("response", onCoverSaved);
+
     await page.getByRole("link", { name: "표지 편집으로 이동" }).click();
     await expect(page).toHaveURL(new RegExp(`/cover/${projectId}`));
-    // 저장 완료 판정은 **응답**으로 한다. 이유 두 가지:
-    //   ① 버튼 라벨("저장"/"저장됨")은 dirty 를 그대로 비추는데, save() 가 setCurrentDoc 으로
-    //      캔버스를 갱신하면 FabricStage 의 onModified 가 다시 발화해 dirty 가 되살아난다.
-    //   ② Fabric 캔버스가 준비되기 전에 누르면 serializeLive() 가 null 이라 save() 가
-    //      요청도 없이 조용히 끝난다 — 클릭 성공이 저장 성공이 아니다.
-    // 그래서 캔버스가 뜬 뒤에 누르고, 눌리지 않더라도 자동저장(dirty=true 로 시작 +
-    // 5초 debounce)이 같은 PATCH 를 보내므로 응답만 기다리면 된다.
-    // ⚠️ Fabric 캔버스가 뜬 것과 준비된 것은 다르다. 준비 전에 누르면 serializeLive() 가
-    //    null 이라 save() 가 요청 없이 끝나고, 자동저장 useEffect 는 dirty 가 그대로여서
-    //    다시 돌지 않는다 — 한 번 헛치면 저장이 영영 안 나간다(2026-08-07 실측).
-    //    그래서 PATCH 응답이 실제로 올 때까지 저장을 다시 시도한다.
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 60_000 });
     await expect(async () => {
-      const saved = page.waitForResponse(
-        (res) =>
-          res.url().includes("/api/cover") &&
-          res.request().method() === "PATCH" &&
-          res.ok(),
-        { timeout: 8_000 },
-      );
-      await page
-        .getByRole("button", { name: "저장", exact: true })
-        .click({ timeout: 5_000 })
-        .catch(() => {
-          // 이미 자동저장이 끝나 라벨이 "저장됨" 이면 클릭 대상이 없다 — 응답으로 판정.
-        });
-      await saved;
+      if (!coverSaved) {
+        await page
+          .getByRole("button", { name: "저장", exact: true })
+          .click({ timeout: 5_000 })
+          .catch(() => {
+            // 라벨이 "저장 중…"/"저장됨" 이면 클릭 대상이 없다 — 응답으로 판정.
+          });
+      }
+      await expect.poll(() => coverSaved, { timeout: 8_000 }).toBe(true);
     }).toPass({ timeout: 120_000 });
+    page.off("response", onCoverSaved);
 
     // ── 6. 주문서 — "다음: 주문" 은 링크가 아니라 router.push 하는 버튼이다.
     await page.getByRole("button", { name: "다음: 주문" }).click();

@@ -33,10 +33,24 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/use-toast";
 import type { BookSize } from "@/lib/db/types";
+import {
+  createSerialQueue,
+  fetchJsonWithTimeout,
+} from "@/lib/editor/async-gates";
+import {
+  decideLatestDoc,
+  reloadEditorDoc,
+  type SaveBlockReason,
+} from "@/lib/editor/doc-sync";
+import {
+  interpretSaveResponse,
+  type SaveOutcome,
+} from "@/lib/editor/edit-conflict";
 // fabricClipboard: 실제 사용 시점에 동적으로 import (fabric.js 번들 분리)
 const getClipboard = () => import("@/lib/fabric/clipboard").then((m) => m.fabricClipboard);
 import type { TaggedFabricObject } from "@/lib/fabric/serialize";
 import {
+  isPageDoc,
   PAGEDOC_VERSION,
   type BackgroundImage,
   type PageDoc,
@@ -50,6 +64,8 @@ export interface PageEditorProps {
   pageId: string;
   pageNo: number;
   initialDoc: PageDoc | null;
+  /** 저장된 fabric_json 의 내용 버전(lib/editor/doc-version). PATCH baseVersion 기준. */
+  initialVersion: string;
   initialPhotoUrls: Record<string, string>;
   bookSize: BookSize;
   prevPageId: string | null;
@@ -59,6 +75,29 @@ export interface PageEditorProps {
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 5000;
+
+/** 저장 전 캔버스 로드·복원 대기 한도 — 이미지 로드가 멈춰도 저장·이동이 영원히 막히지 않게. */
+const STAGE_IDLE_TIMEOUT_MS = 15_000;
+
+/** 최신본 확인 GET 한도 — 저장 큐 안에서 돌기 때문에 멈추면 뒤따르는 저장·이동이 막힌다. */
+const SYNC_FETCH_TIMEOUT_MS = 10_000;
+
+const SAVE_BLOCKED_MESSAGE =
+  "편집 화면의 일부 요소를 인식하지 못해 저장을 멈췄어요. 새로고침하면 마지막 저장본을 불러와요.";
+
+const SAVE_BLOCK_MESSAGES: Record<SaveBlockReason, string> = {
+  load_failed:
+    "페이지를 화면에 불러오지 못해 저장을 멈췄어요. 새로고침하면 마지막 저장본을 다시 불러와요.",
+  server_doc_unreadable:
+    "서버에 저장된 페이지를 이 화면에서 읽을 수 없어 저장을 멈췄어요. 새로고침한 뒤 다시 편집해주세요.",
+};
+
+/** GET /api/pages/[id] 응답 중 최신본 동기화에 쓰는 필드. */
+interface PageLatestResponse {
+  fabricJson: unknown;
+  photoUrls: Record<string, string>;
+  version: string;
+}
 
 /** 사진 선택 다이얼로그의 진입 경로 — 추가/교체 플로우 분리. */
 type PhotoPickerMode = "add" | "replace";
@@ -77,6 +116,10 @@ type PhotoPickerMode = "add" | "replace";
  *
  * 저장:
  *   - 수동: "저장" 버튼. 자동: 토글(기본 ON). 변경 후 5초 debounce.
+ *   - PATCH 에 baseVersion 동봉 — 서버가 더 새로우면 409, 최신본을 다시 불러오고 알린다.
+ *   - 저장은 한 줄로 직렬화하고 캔버스 로드·복원이 끝난 뒤 직렬화한다.
+ *   - 태그 없는 객체가 섞이면 저장을 중단한다(빈 페이지 덮어쓰기 방지).
+ *   - 진입 직후 서버 최신본과 버전을 비교해 라우터 캐시로 옛 문서가 올라왔으면 교체한다.
  *   - 페이지 이동(이전/다음/점프/J·K)은 dirty 면 저장 후 이동, 저장 실패 시에만 confirm.
  *   - 하드 내비게이션(새로고침/탭 닫기)은 beforeunload 로 경고.
  *   - 배경(색/이미지)은 metaRef 로 추적해 serialize meta 로 전달 — 저장 시 보존.
@@ -87,6 +130,7 @@ export default function PageEditor({
   pageId,
   pageNo,
   initialDoc,
+  initialVersion,
   initialPhotoUrls,
   bookSize,
   prevPageId,
@@ -102,6 +146,8 @@ export default function PageEditor({
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
+  /** 최신본 재로드 완료 시각 — 로드 중 편집으로 dirty 가 true 로 유지될 때 자동저장 재무장. */
+  const [docReloadedAt, setDocReloadedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toolSheet, setToolSheet] = useState<ToolbarTool | null>(null);
   const [collageOpen, setCollageOpen] = useState(false);
@@ -109,6 +155,14 @@ export default function PageEditor({
   const [photoPicker, setPhotoPicker] = useState<PhotoPickerMode | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [currentDoc, setCurrentDoc] = useState<PageDoc | null>(initialDoc);
+  /** 서버 fabric_json 기준 버전 — 저장 성공·최신본 재로드 때 갱신. */
+  const baseVersionRef = useRef(initialVersion);
+  /** 저장·최신본 확인 직렬화 — 동시에 나간 저장이 서로를 409 로 만들지 않게. */
+  const saveQueueRef = useRef(createSerialQueue());
+  /** photoId → signed URL. 최신본 재로드 시 새 사진 URL 이 합쳐진다. */
+  const photoUrlsRef = useRef<Record<string, string>>(initialPhotoUrls);
+  /** 저장을 서버 호출 없이 멈춘 사유(doc-sync SaveBlockReason). */
+  const saveBlockRef = useRef<SaveBlockReason | null>(null);
 
   // M17-9: 모바일 탭 바 상태
   // null = 모든 시트 닫힘, 값 = 해당 시트 오픈
@@ -147,60 +201,245 @@ export default function PageEditor({
     }
   }, [shouldAutoShowShortcuts]);
 
+  /**
+   * 캔버스에 문서를 올린다. 실패해도 던지지 않고 false — 저장을 멈추고 새로고침을 안내한다
+   * (캔버스가 문서를 반영하지 못한 채 저장하면 저장된 객체가 빠진 페이지가 서버를 덮는다).
+   */
+  const loadIntoStage = useCallback(
+    async (doc: PageDoc, urls: Record<string, string>): Promise<boolean> => {
+      const handle = stageRef.current;
+      if (!handle) return false;
+      try {
+        await handle.loadDoc(doc, urls);
+      } catch (err) {
+        console.warn("[PageEditor] 페이지 캔버스 로드 실패", err);
+        if (saveBlockRef.current === null) saveBlockRef.current = "load_failed";
+        setError(SAVE_BLOCK_MESSAGES.load_failed);
+        toast({
+          title: "페이지를 불러오지 못했어요",
+          description: SAVE_BLOCK_MESSAGES.load_failed,
+          variant: "destructive",
+        });
+        return false;
+      }
+      if (saveBlockRef.current === "load_failed") {
+        saveBlockRef.current = null;
+        setError(null);
+      }
+      return true;
+    },
+    [],
+  );
+
+  /**
+   * 서버 최신 페이지와 기준 버전을 맞춘다. 저장 큐 안에서만 호출할 것.
+   *  - "stale": 진입 직후 확인. 라우터 캐시(staleTimes.dynamic)·뒤로가기로 저장 이전 문서가
+   *    올라왔으면 최신본으로 교체한다(QA-2: 옛 문서가 자동저장으로 최신본을 덮던 문제).
+   *  - "conflict": 저장이 409 로 거절됨 — 로컬 변경을 버리고 최신본을 올린다.
+   * 버전이 같으면 아무것도 하지 않는다. 서버 문서를 해석할 수 없으면 저장을 멈춘다(무한 409 방지).
+   */
+  const syncWithServer = useCallback(
+    async (reason: "stale" | "conflict"): Promise<void> => {
+      const handle = stageRef.current;
+      if (!handle) return;
+      let data: PageLatestResponse | undefined;
+      try {
+        const res = await fetchJsonWithTimeout(
+          `/api/pages/${pageId}`,
+          { cache: "no-store" },
+          SYNC_FETCH_TIMEOUT_MS,
+        );
+        const json = res.body as {
+          ok?: boolean;
+          data?: PageLatestResponse;
+        } | null;
+        data = res.ok && json?.ok ? json.data : undefined;
+      } catch {
+        data = undefined;
+      }
+      const decision = decideLatestDoc(
+        data ? { version: data.version, doc: data.fabricJson } : undefined,
+        baseVersionRef.current,
+        isPageDoc,
+      );
+      if (decision.kind === "unavailable") {
+        // 진입 확인 실패는 조용히 넘긴다 — 저장 시 서버가 409 로 다시 막아준다.
+        if (reason === "conflict") {
+          setError("최신 페이지를 불러오지 못했어요. 새로고침해주세요.");
+        }
+        return;
+      }
+      if (decision.kind === "up_to_date") return;
+      if (decision.kind === "unreadable") {
+        // 서버 문서를 해석할 수 없다(더 새 포맷·손상). 기준을 바꾸지 않으면 저장마다 409 → 이 분기가
+        // 반복되고, 빈 페이지로 간주해 덮으면 모르는 내용을 지운다. 새로고침 전까지 저장을 멈춘다.
+        saveBlockRef.current = "server_doc_unreadable";
+        setError(SAVE_BLOCK_MESSAGES.server_doc_unreadable);
+        toast({
+          title: "저장을 멈췄어요",
+          description: SAVE_BLOCK_MESSAGES.server_doc_unreadable,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const discardedLocalEdits =
+        reason === "conflict" || editSeqRef.current > 0;
+      const latestPhotoUrls = data?.photoUrls ?? {};
+      // 메타 커밋(동기) → 캔버스 로드 → 기준 버전 커밋(lib/editor/doc-sync.ts 순서 규약).
+      const result = await reloadEditorDoc({
+        doc: decision.doc,
+        version: decision.version,
+        commitMeta: (doc) => {
+          photoUrlsRef.current = { ...photoUrlsRef.current, ...latestPhotoUrls };
+          metaRef.current = {
+            layoutMode: doc.layoutMode,
+            backgroundColor: doc.backgroundColor,
+            backgroundImage: doc.backgroundImage ?? null,
+          };
+          setCurrentDoc(doc);
+        },
+        loadCanvas: (doc) => loadIntoStage(doc, photoUrlsRef.current),
+        commitVersion: (version) => {
+          baseVersionRef.current = version;
+        },
+        readEditSeq: () => editSeqRef.current,
+      });
+      if (!result.loaded) return;
+      editSeqRef.current += 1;
+      // 로드를 기다리는 동안 추가한 객체는 캔버스에 보존됐다 — dirty 를 내리지 않는다.
+      setDirty(result.editedDuringLoad);
+      if (saveBlockRef.current === null) setError(null);
+      setDocReloadedAt(Date.now());
+      if (discardedLocalEdits) {
+        toast({
+          title: "최신 페이지를 불러왔어요",
+          description:
+            "다른 곳에서 먼저 저장된 내용이 있어 방금 변경은 저장되지 않았어요.",
+          variant: "warning",
+        });
+      }
+    },
+    [loadIntoStage, pageId],
+  );
+
   // 페이지 doc 로드 — FabricStage 준비 완료 시 (lazy load 지원)
   const handleStageReady = useCallback(() => {
-    if (!initialDoc) return;
-    void stageRef.current?.loadDoc(initialDoc, initialPhotoUrls);
-  }, [initialDoc, initialPhotoUrls]);
+    void (async () => {
+      // 로드하는 문서와 기준 버전·메타·사진 URL 을 **같은 props** 에서 맞춘다.
+      // lazy 캔버스가 준비되기 전에 push→refresh 재렌더가 도착하면 initialDoc 은 새 값인데
+      // baseVersionRef·metaRef(첫 렌더 값)는 옛 값이라, 최신본 확인이 불필요한 재로드를 하고
+      // 확인이 실패하면 옛 기준으로 저장해 거짓 409 가 났다.
+      // onReady 는 캔버스 생성 시 1회뿐이고 그 전에는 저장이 돌지 않으므로(핸들 없음) 덮어써도 안전하다.
+      baseVersionRef.current = initialVersion;
+      photoUrlsRef.current = { ...photoUrlsRef.current, ...initialPhotoUrls };
+      try {
+        if (initialDoc) {
+          metaRef.current = {
+            layoutMode: initialDoc.layoutMode,
+            backgroundColor: initialDoc.backgroundColor,
+            backgroundImage: initialDoc.backgroundImage ?? null,
+          };
+          setCurrentDoc(initialDoc);
+          // 실패하면 loadIntoStage 가 저장을 멈추고 안내한다(던지지 않는다).
+          await loadIntoStage(initialDoc, initialPhotoUrls);
+        }
+        // 진입 직후 서버 최신본 확인 — 저장 큐에 넣어 자동저장과 섞이지 않게 한다.
+        await saveQueueRef.current.run(() => syncWithServer("stale"));
+      } catch (err) {
+        console.warn("[PageEditor] 진입 직후 페이지 확인 실패", err);
+      }
+    })();
+  }, [initialDoc, initialPhotoUrls, initialVersion, loadIntoStage, syncWithServer]);
 
-  const save = useCallback(async (): Promise<boolean> => {
-    const handle = stageRef.current;
-    if (!handle) return false;
-    // 저장 시작 시점의 편집 시퀀스 캡처 — 완료 시 값이 그대로일 때만 dirty 해제.
-    const seq = editSeqRef.current;
-    const doc = handle.serialize({
-      version: PAGEDOC_VERSION,
-      bookSizeId: bookSize.id,
-      pageNo,
-      layoutMode: metaRef.current.layoutMode,
-      widthMm: bookSize.width_mm,
-      heightMm: bookSize.height_mm,
-      bleedMm: 2,
-      backgroundColor: metaRef.current.backgroundColor,
-      backgroundImage: metaRef.current.backgroundImage ?? undefined,
-    });
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/pages/${pageId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ fabricJson: doc }),
-      });
-      const json = (await res.json()) as {
-        ok: boolean;
-        error?: { message: string };
-      };
-      if (!res.ok || !json.ok) {
-        throw new Error(json.error?.message ?? "저장에 실패했어요.");
-      }
-      setSavedAt(Date.now());
-      // 저장 요청 중 새 편집이 없을 때만 해제 — 있으면 dirty 유지해 다음 자동저장이 돈다.
-      if (editSeqRef.current === seq) {
-        setDirty(false);
-      }
-      setCurrentDoc(doc);
-      return true;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "저장에 실패했어요.");
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  }, [bookSize, pageId, pageNo]);
+  const save = useCallback(
+    (): Promise<SaveOutcome> =>
+      saveQueueRef.current.run(async (): Promise<SaveOutcome> => {
+        const handle = stageRef.current;
+        if (!handle) return "skipped";
+        // 콜라주 적용·undo 복원이 진행 중이면 끝난 캔버스를 저장한다.
+        if (!(await handle.whenIdle(STAGE_IDLE_TIMEOUT_MS))) {
+          setError("페이지를 불러오는 중이라 저장하지 못했어요. 잠시 후 다시 시도해주세요.");
+          return "failed";
+        }
+        const blockReason = saveBlockRef.current;
+        if (blockReason !== null) {
+          // 서버 호출 없이 멈춘다 — 로드 실패 캔버스·해석 불가 서버 문서를 덮지 않고 409 반복도 끊는다.
+          setError(SAVE_BLOCK_MESSAGES[blockReason]);
+          toast({
+            title: "저장을 멈췄어요",
+            description: SAVE_BLOCK_MESSAGES[blockReason],
+            variant: "destructive",
+          });
+          return "blocked";
+        }
+        // 저장 시작 시점의 편집 시퀀스 캡처 — 완료 시 값이 그대로일 때만 dirty 해제.
+        const seq = editSeqRef.current;
+        const result = handle.serializeForSave({
+          version: PAGEDOC_VERSION,
+          bookSizeId: bookSize.id,
+          pageNo,
+          layoutMode: metaRef.current.layoutMode,
+          widthMm: bookSize.width_mm,
+          heightMm: bookSize.height_mm,
+          bleedMm: 2,
+          backgroundColor: metaRef.current.backgroundColor,
+          backgroundImage: metaRef.current.backgroundImage ?? undefined,
+        });
+        if (!result.ok) {
+          if (result.reason === "not_ready") return "skipped";
+          // 서버에 보내면 화면에 보이는 요소가 저장본에서 사라진다 — 덮어쓰기 금지.
+          setError(SAVE_BLOCKED_MESSAGE);
+          toast({
+            title: "저장을 멈췄어요",
+            description: SAVE_BLOCKED_MESSAGE,
+            variant: "destructive",
+          });
+          return "blocked";
+        }
+        const doc = result.doc;
+        setSaving(true);
+        setError(null);
+        try {
+          const res = await fetch(`/api/pages/${pageId}`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              fabricJson: doc,
+              baseVersion: baseVersionRef.current,
+            }),
+          });
+          const json: unknown = await res.json().catch(() => null);
+          const outcome = interpretSaveResponse(res.status, json);
+          if (outcome.kind === "conflict") {
+            // 조용히 덮어쓰지 않는다 — 최신본을 불러오고 알린다.
+            await syncWithServer("conflict");
+            return "conflict";
+          }
+          if (outcome.kind === "failed") {
+            throw new Error(outcome.message ?? "저장에 실패했어요.");
+          }
+          if (outcome.version) baseVersionRef.current = outcome.version;
+          setSavedAt(Date.now());
+          // 저장 요청 중 새 편집이 없을 때만 해제 — 있으면 dirty 유지해 다음 자동저장이 돈다.
+          if (editSeqRef.current === seq) {
+            setDirty(false);
+          }
+          setCurrentDoc(doc);
+          return "saved";
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "저장에 실패했어요.");
+          return "failed";
+        } finally {
+          setSaving(false);
+        }
+      }),
+    [bookSize, pageId, pageNo, syncWithServer],
+  );
 
   // 자동 저장 debounce.
   // savedAt 의존 포함: 저장 중 편집(dirty 유지)된 경우 저장 완료 후 타이머를 재무장한다.
+  // docReloadedAt 의존 포함: 최신본 재로드 중 편집으로 dirty 가 true 로 유지된 경우 재무장한다.
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!dirty || !autosave) return;
@@ -212,7 +451,7 @@ export default function PageEditor({
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dirty, autosave, savedAt]);
+  }, [dirty, autosave, savedAt, docReloadedAt]);
 
   // beforeunload guard — 하드 내비게이션(새로고침/탭 닫기) 전용.
   useEffect(() => {
@@ -233,18 +472,25 @@ export default function PageEditor({
   const navigateTo = useCallback(
     async (href: string) => {
       if (dirty) {
-        const ok = await save();
-        if (!ok) {
+        const outcome = await save();
+        // conflict: 최신본을 불러왔다(토스트 안내됨) — 사용자가 확인한 뒤 다시 이동한다.
+        if (outcome === "conflict") return;
+        if (outcome !== "saved") {
           const proceed = window.confirm(
             "저장에 실패했어요. 저장하지 않고 이동하면 최근 변경 사항이 사라져요. 그래도 이동할까요?",
           );
           if (!proceed) return;
         }
       }
-      // staleTimes.dynamic=30 하에서 refresh 없이 push 하면 30초 동안
-      // 저장 이전 RSC 페이로드가 재생된다(미리보기·주문 게이트가 옛 상태로 보임).
-      router.refresh();
+      // 저장 뒤 목적지가 최신 서버 렌더를 보여주게 하는 순서: push → refresh.
+      // (Next 14.2.35 shared/lib/router/action-queue.js dispatchAction 근거)
+      //  - 예전 순서(refresh → push)는 대기 중인 REFRESH 가 뒤이은 NAVIGATE 에 의해
+      //    discarded 되어 결과가 버려졌다 → staleTimes.dynamic=30 캐시가 그대로 재생(QA-2).
+      //  - push 를 먼저 하면 REFRESH 는 NAVIGATE 뒤에 큐잉되어 이동 완료 후 실행되고,
+      //    목적지 트리를 다시 받아오며 prefetchCache 를 비운다.
+      //  - 에디터 목적지는 props 를 첫 로드에만 쓰므로 진입 시 syncWithServer 가 함께 막는다.
       router.push(href);
+      router.refresh();
     },
     [dirty, save, router],
   );
@@ -255,9 +501,12 @@ export default function PageEditor({
       setPreviewOpen(true);
       return;
     }
-    void save().then((ok) => {
-      if (ok) {
+    void save().then((outcome) => {
+      if (outcome === "saved") {
         setPreviewOpen(true);
+      } else if (outcome === "conflict" || outcome === "blocked") {
+        // 최신본 재로드·저장 중단 안내가 이미 떴다.
+        return;
       } else {
         toast({
           title: "저장 실패",
@@ -336,10 +585,10 @@ export default function PageEditor({
     }
     const obj = clipboard.read();
     if (!obj) return;
-    await handle.pasteLayoutObject(obj, initialPhotoUrls);
+    await handle.pasteLayoutObject(obj, photoUrlsRef.current);
     markDirty();
     toast({ description: "붙여넣기 완료", variant: "success" });
-  }, [initialPhotoUrls, markDirty]);
+  }, [markDirty]);
 
   const duplicateSelection = useCallback(async () => {
     const handle = stageRef.current;
@@ -1033,7 +1282,8 @@ export default function PageEditor({
               backgroundColor: next.backgroundColor,
               backgroundImage: next.backgroundImage ?? null,
             };
-            void stageRef.current?.loadDoc(next, initialPhotoUrls);
+            void loadIntoStage(next, photoUrlsRef.current);
+            // 로드는 dirty 를 만들지 않는다 — 템플릿 적용은 저장 대상이므로 명시적으로 표시.
             markDirty();
           }}
         />
