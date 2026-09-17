@@ -3,12 +3,13 @@ import "server-only";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize, Photo } from "@/lib/db/types";
 import { generatePages } from "@/lib/layout/generate";
 import { asCollageTemplateId } from "@/lib/layout/templates";
+import { assertProjectsEditable } from "@/lib/orders/edit-lock";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -25,7 +26,7 @@ const BodySchema = z.object({
 /**
  * POST /api/layout/generate
  *
- * 1. 소유권 검증
+ * 1. 소유권 검증 + 결제 후 편집 잠금 (DEBT-2 — 409 PROJECT_LOCKED)
  * 2. book_sizes + photos 로드
  * 3. generatePages()
  * 4. 기존 pages 전체 삭제 → 일괄 insert (admin 클라로 RLS 우회, 소유권 선검증됨)
@@ -35,7 +36,7 @@ const BodySchema = z.object({
  */
 export async function POST(req: Request) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     const raw = (await req.json().catch(() => ({}))) as unknown;
     const parsed = BodySchema.safeParse(raw);
@@ -77,6 +78,9 @@ export async function POST(req: Request) {
       return fail("FORBIDDEN", "해당 프로젝트에 대한 권한이 없습니다.", 403);
     }
 
+    const admin = createAdminSupabase();
+    await assertProjectsEditable(admin, projectId);
+
     const { data: size, error: sizeErr } = await supabase
       .from("book_sizes")
       .select(
@@ -117,7 +121,6 @@ export async function POST(req: Request) {
     });
 
     // 4) 트랜잭션 RPC 로 update + delete + bulk insert 처리 (data loss 방지)
-    const admin = createAdminSupabase();
     const rpcRows: Record<string, unknown>[] = pages.map((doc) => ({
       page_no: doc.pageNo,
       layout_mode: layoutMode,

@@ -3,10 +3,11 @@ import "server-only";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import { buildCollagePage, type CollageTemplateId } from "@/lib/layout/collage";
+import { assertProjectsEditable } from "@/lib/orders/edit-lock";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,7 +35,7 @@ const BodySchema = z.object({
  */
 export async function POST(req: Request) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     const raw = (await req.json().catch(() => ({}))) as unknown;
     const parsed = BodySchema.safeParse(raw);
@@ -61,6 +62,10 @@ export async function POST(req: Request) {
     if (project.user_id !== user.id) {
       return fail("FORBIDDEN", "해당 프로젝트에 대한 권한이 없습니다.", 403);
     }
+
+    // 결제 이후 주문이 있으면 페이지 추가 불가 (DEBT-2 — 결제액·책등 폭과 인쇄물 불일치 방지)
+    const admin = createAdminSupabase();
+    await assertProjectsEditable(admin, projectId);
 
     const { data: size, error: sizeErr } = await supabase
       .from("book_sizes")
@@ -116,8 +121,6 @@ export async function POST(req: Request) {
         objects: [],
       };
     }
-
-    const admin = createAdminSupabase();
 
     // 1) 후속 페이지들 page_no 를 +1 (after 보다 큰 페이지). RPC 사용.
     if (after < maxPageNo) {

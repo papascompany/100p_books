@@ -49,9 +49,13 @@ interface ShareProject {
  *
  * 동작:
  *   1. token 유효성/만료 검사
- *   2. project, pages, photos 조회 (deleted_at IS NULL)
- *   3. photos 의 thumb_key → signed URL 변환
- *   4. view_count atomic 증가 (실패해도 응답엔 영향 없음)
+ *   2. project 조회 + 소유자 탈퇴 여부 확인 — profiles.deleted_at 이 있으면 404 (DEBT-3)
+ *      탈퇴는 익명화 → 콘텐츠 정리(공유 링크 폐기) → auth 순서라, 정리 단계가 실패하면
+ *      익명화된 회원의 공유 링크가 남는다. 그 사이에도 사진이 공개되지 않게 여기서 막는다.
+ *      토큰 없음과 같은 응답을 줘서 탈퇴 사실을 드러내지 않는다.
+ *   3. pages, photos 조회 (deleted_at IS NULL)
+ *   4. photos 의 thumb_key → signed URL 변환
+ *   5. view_count atomic 증가 (실패해도 응답엔 영향 없음)
  *
  * 응답: { project, pages, coverJson, photos, expiresAt, viewCount }
  */
@@ -83,13 +87,25 @@ export async function GET(_req: Request, { params }: RouteCtx) {
     const { data: project, error: projErr } = await admin
       .from("projects")
       .select(
-        "id, title, layout_mode, book_size_id, cover_json, created_at, updated_at",
+        "id, user_id, title, layout_mode, book_size_id, cover_json, created_at, updated_at",
       )
       .eq("id", tokenRow.project_id)
       .maybeSingle();
 
     if (projErr) return fail("PROJECT_QUERY_FAILED", projErr.message, 500);
     if (!project) return fail("NOT_FOUND", "프로젝트를 찾을 수 없습니다.", 404);
+
+    // 2-1. 소유자 탈퇴 여부 — 조회 실패·프로필 없음도 노출하지 않는다 (fail-closed)
+    const { data: owner, error: ownerErr } = await admin
+      .from("profiles")
+      .select("deleted_at")
+      .eq("id", project.user_id)
+      .maybeSingle();
+
+    if (ownerErr) return fail("OWNER_QUERY_FAILED", "공유 링크를 확인하지 못했습니다.", 500);
+    if (!owner || owner.deleted_at) {
+      return fail("NOT_FOUND", "유효하지 않은 공유 링크입니다.", 404);
+    }
 
     // 3. pages
     const { data: pageRows, error: pageErr } = await admin

@@ -3,7 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser } from "@/lib/auth/session";
 import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize } from "@/lib/db/types";
 import { buildDefaultCoverDoc } from "@/lib/layout/cover";
@@ -42,7 +42,7 @@ const PREVIEW_DPI = 72;
 
 export async function POST(req: Request) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     const raw = (await req.json().catch(() => ({}))) as unknown;
     const parsed = BodySchema.safeParse(raw ?? {});

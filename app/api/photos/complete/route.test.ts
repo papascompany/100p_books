@@ -33,7 +33,8 @@ const h = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/auth/session", () => ({
-  requireUser: async () => ({ id: USER_ID }),
+  // 라우트는 탈퇴 가드(requireActiveUser)를 쓴다 — 가드·편집 잠금은 lib/orders/edit-lock.routes.test.ts 가 검증
+  requireActiveUser: async () => ({ id: USER_ID }),
 }));
 
 vi.mock("@/lib/security/rate-limit", () => ({

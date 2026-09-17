@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { Photo } from "@/lib/db/types";
@@ -14,6 +14,7 @@ import {
   ORIGINALS_BUCKET,
   THUMBS_BUCKET,
 } from "@/lib/image/constants";
+import { assertProjectsEditable } from "@/lib/orders/edit-lock";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,15 +30,16 @@ const BodySchema = z.object({
  *   body: { photoIds: uuid[], targetProjectId: uuid }
  *
  * 동작:
- *   1. requireUser
+ *   1. requireActiveUser (탈퇴 가드)
  *   2. 모든 photoIds 의 project + targetProjectId 의 소유권 검증
+ *      + 대상 프로젝트 결제 후 편집 잠금 (DEBT-2 — 원본 프로젝트는 읽기만 하므로 검사하지 않음)
  *   3. Storage 객체 복사 (admin.storage.copy) — user_id 폴더 prefix 동일
  *   4. photos 테이블 새 행 INSERT (target project_id + 새 storage_key + 새 thumb_key)
  *   5. 응답: { inserted: Photo[], skipped: number }
  */
 export async function POST(req: Request) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     const raw = (await req.json().catch(() => ({}))) as unknown;
     const parsed = BodySchema.safeParse(raw);
@@ -66,6 +68,9 @@ export async function POST(req: Request) {
     if (target.user_id !== user.id) {
       return fail("FORBIDDEN", "대상 프로젝트에 권한이 없습니다.", 403);
     }
+
+    const admin = createAdminSupabase();
+    await assertProjectsEditable(admin, targetProjectId);
 
     // 2) 원본 사진 로드 (소유권 확인 — project.user_id = user.id)
     const { data: photos, error: photosErr } = await supabase
@@ -127,8 +132,6 @@ export async function POST(req: Request) {
       .limit(1)
       .maybeSingle();
     let nextOrderIdx = (maxRow?.order_idx ?? -1) + 1;
-
-    const admin = createAdminSupabase();
 
     // 5) Storage copy + photos insert
     const insertedRows: Photo[] = [];

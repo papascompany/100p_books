@@ -1,7 +1,9 @@
 import "server-only";
 
+import type { User } from "@supabase/supabase-js";
+
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser, requireUser } from "@/lib/auth/session";
 import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize } from "@/lib/db/types";
 import { isPageDoc, type PageDoc } from "@/lib/layout/types";
@@ -23,7 +25,7 @@ export const maxDuration = 60;
  *   { pngDataUrl: "data:image/png;base64,..." }
  *
  * 동작:
- *   1. requireUser + page → project 소유권 확인.
+ *   1. 인증(GET: requireUser, POST: requireActiveUser) + page → project 소유권 확인.
  *   2. pages.fabric_json (PageDoc) 로드 + isPageDoc 가드.
  *   3. 폰트 등록 + 사진/리소스 resolver 준비.
  *   4. renderPageToPng(doc, { dpi: 72 }) — 빠른 미리보기 (300dpi 대비 ~17배 빠름).
@@ -33,6 +35,7 @@ export const maxDuration = 60;
  *      너무 짧으면 부하, 너무 길면 자동저장 직후의 변경이 반영되지 않음.
  *
  * GET / POST 모두 허용 — fetch(method)/<button>form 양쪽에서 호출 편의.
+ * 탈퇴 가드(DEBT-3): POST 만 requireActiveUser. GET 은 편집 중 잦은 읽기 경로라 RTT 를 늘리지 않는다.
  */
 
 const PREVIEW_DPI = 72;
@@ -44,9 +47,13 @@ interface Params {
   params: { id: string };
 }
 
-async function handle(_req: Request, { params }: Params): Promise<Response> {
+async function handle(
+  _req: Request,
+  { params }: Params,
+  authenticate: () => Promise<User>,
+): Promise<Response> {
   try {
-    const user = await requireUser();
+    const user = await authenticate();
     const pageId = params.id;
     if (!pageId) return fail("INVALID_PARAM", "잘못된 페이지 ID 입니다.", 400);
 
@@ -128,9 +135,9 @@ async function handle(_req: Request, { params }: Params): Promise<Response> {
 }
 
 export async function GET(req: Request, ctx: Params) {
-  return handle(req, ctx);
+  return handle(req, ctx, requireUser);
 }
 
 export async function POST(req: Request, ctx: Params) {
-  return handle(req, ctx);
+  return handle(req, ctx, requireActiveUser);
 }

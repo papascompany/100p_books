@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import {
@@ -13,6 +13,7 @@ import {
   extForMime,
 } from "@/lib/image/constants";
 import { validateFile } from "@/lib/image/validate";
+import { assertProjectsEditable } from "@/lib/orders/edit-lock";
 import { enforceRateLimit } from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +41,7 @@ const BodySchema = z.object({
  */
 export async function POST(req: Request) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     // 🛡 Rate limit — 분당 30회 (한 번에 100장이 1 회 요청, 동시 호출 폭주 차단)
     const rl = await enforceRateLimit("photo-upload", req, user.id);
@@ -83,6 +84,11 @@ export async function POST(req: Request) {
       return fail("FORBIDDEN", "해당 프로젝트에 대한 권한이 없습니다.", 403);
     }
 
+    // 결제된 포토북이면 업로드 URL 을 내주지 않는다 — complete 에서 409 로 거부될 원본이
+    // Storage 에 고아로 남지 않게 앞단에서 막는다 (DEBT-2, 최종 게이트는 complete)
+    const admin = createAdminSupabase();
+    await assertProjectsEditable(admin, projectId);
+
     // 현재 사진 수 + 요청 배치가 100장 넘지 않는지 (active 만 카운트)
     const { count: existingCount, error: countErr } = await supabase
       .from("photos")
@@ -100,9 +106,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 서명 URL 생성은 service_role 사용 (createSignedUploadUrl)
-    const admin = createAdminSupabase();
-
+    // 서명 URL 생성은 service_role 사용 (createSignedUploadUrl — admin 은 위에서 생성)
     const results: Array<{ photoId: string; uploadUrl: string; storageKey: string; token: string }> = [];
 
     for (const f of files) {

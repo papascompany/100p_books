@@ -3,10 +3,11 @@ import "server-only";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import { MAX_PHOTOS_PER_PROJECT } from "@/lib/image/constants";
+import { excludeLockedProjectRows } from "@/lib/orders/edit-lock";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,10 +24,12 @@ const BodySchema = z.object({
  *
  * 제약:
  *   - 복원 대상 프로젝트의 active 사진 수가 100장을 넘지 않도록 — 넘는 분은 skip.
+ *   - 결제 후 편집 잠금 (DEBT-2): 결제 이후 주문이 있는 포토북의 사진은 skip(skippedLocked).
+ *     요청 사진이 전부 잠긴 포토북 소속이면 409 PROJECT_LOCKED.
  */
 export async function POST(req: Request) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     const raw = (await req.json().catch(() => ({}))) as unknown;
     const parsed = BodySchema.safeParse(raw);
@@ -66,9 +69,15 @@ export async function POST(req: Request) {
       return fail("FORBIDDEN", "사진에 대한 권한이 없습니다.", 403);
     }
 
+    // 복원하면 PDF 빌드의 사진 resolver(deleted_at IS NULL)가 다시 찾게 돼 인쇄물이 바뀐다 → 잠금 (DEBT-2).
+    // 휴지통 전체 선택처럼 여러 포토북이 섞인 배치는 잠긴 포토북 사진만 빼고 처리한다.
+    const admin = createAdminSupabase();
+    const { editable, skippedLocked } = await excludeLockedProjectRows(admin, found);
+    const editableProjectIds = Array.from(new Set(editable.map((r) => r.project_id)));
+
     // 2) 프로젝트별 quota 검사
     const counts = new Map<string, number>();
-    for (const pid of projectIds) {
+    for (const pid of editableProjectIds) {
       const { count } = await supabase
         .from("photos")
         .select("id", { count: "exact", head: true })
@@ -80,7 +89,7 @@ export async function POST(req: Request) {
     const idsToRestore: string[] = [];
     let skippedQuota = 0;
     // 결정성 위해 photoIds 입력 순서 유지
-    const foundById = new Map(found.map((r) => [r.id, r]));
+    const foundById = new Map(editable.map((r) => [r.id, r]));
     for (const pid of photoIds) {
       const r = foundById.get(pid);
       if (!r) continue;
@@ -98,10 +107,10 @@ export async function POST(req: Request) {
         restored: 0,
         skipped: photoIds.length,
         reason: "QUOTA_EXCEEDED",
+        skippedLocked,
       });
     }
 
-    const admin = createAdminSupabase();
     const { error: upErr, data: updated } = await admin
       .from("photos")
       .update({ deleted_at: null })
@@ -113,6 +122,7 @@ export async function POST(req: Request) {
       restored: updated?.length ?? 0,
       skipped: photoIds.length - (updated?.length ?? 0),
       skippedQuota,
+      skippedLocked,
     });
   } catch (err) {
     return failFromError(err);

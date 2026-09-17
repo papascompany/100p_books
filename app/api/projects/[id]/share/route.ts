@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser, requireUser } from "@/lib/auth/session";
 import { createServerSupabase } from "@/lib/db/server";
 
 export const dynamic = "force-dynamic";
@@ -88,7 +88,7 @@ export async function GET(_req: Request, { params }: RouteCtx) {
  */
 export async function POST(req: Request, { params }: RouteCtx) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     const raw = (await req.json().catch(() => ({}))) as unknown;
     const parsed = CreateSchema.safeParse(raw ?? {});

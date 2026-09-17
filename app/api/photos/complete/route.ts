@@ -3,7 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { Photo } from "@/lib/db/types";
@@ -18,6 +18,7 @@ import {
 } from "@/lib/image/constants";
 import { UNTRUSTED_INPUT_OPTIONS, loadHardenedSharp } from "@/lib/image/sharp-safe";
 import { sniffAllowedImage } from "@/lib/image/sniff";
+import { assertProjectsEditable } from "@/lib/orders/edit-lock";
 import { enforceRateLimit } from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -86,7 +87,7 @@ type CompleteResult = {
  */
 export async function POST(req: Request) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     // 🛡 Rate limit — sharp 회전/재업로드/썸네일 등 무거운 동기 파이프라인 보호 (sign-upload 와 동일 프리셋)
     const rl = await enforceRateLimit("photo-upload", req, user.id);
@@ -144,6 +145,12 @@ export async function POST(req: Request) {
     if (existErr) return fail("PHOTO_COUNT_FAILED", existErr.message, 500);
     const existingIds = new Set((existingRows ?? []).map((r) => r.id as string));
     const pending = photos.filter((p) => !existingIds.has(p.photoId));
+
+    // 결제 이후 주문이 있는 포토북에는 사진을 추가하지 않는다 (DEBT-2).
+    // 이미 확정된 photoId 만 다시 온 요청(재시도·sendBeacon)은 쓰기가 없으므로 잠금과 무관하게 기존처럼 처리한다.
+    if (pending.length > 0) {
+      await assertProjectsEditable(admin, projectId);
+    }
 
     // 4) 100장 한도 재검증 (TOCTOU 방어) — active 사진 수 + 신규 처리분 합산
     const { count: activeCount, error: countErr } = await admin

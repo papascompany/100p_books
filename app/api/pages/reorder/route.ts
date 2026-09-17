@@ -3,9 +3,10 @@ import "server-only";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
+import { assertProjectsEditable } from "@/lib/orders/edit-lock";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,12 +25,13 @@ const BodySchema = z.object({
  *   2. project 소유권.
  *   3. pageIds 길이 == 해당 프로젝트 페이지 수.
  *   4. pageIds 의 모든 ID 가 해당 프로젝트 소유 + 중복 없음.
+ *   5. 결제 이후 주문이 없을 것 (DEBT-2 편집 잠금 — 409 PROJECT_LOCKED).
  *
  * 처리: service_role 로 reorder_project_pages RPC 호출 (단일 트랜잭션).
  */
 export async function POST(req: Request) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     const raw = (await req.json().catch(() => ({}))) as unknown;
     const parsed = BodySchema.safeParse(raw);
@@ -63,6 +65,9 @@ export async function POST(req: Request) {
       return fail("FORBIDDEN", "해당 프로젝트에 대한 권한이 없습니다.", 403);
     }
 
+    const admin = createAdminSupabase();
+    await assertProjectsEditable(admin, projectId);
+
     // 페이지 ID 일치성 (실제 모든 페이지가 해당 프로젝트 소속인지)
     const { data: existingPages, error: pagesErr } = await supabase
       .from("pages")
@@ -88,7 +93,6 @@ export async function POST(req: Request) {
       }
     }
 
-    const admin = createAdminSupabase();
     const { data: rpcCount, error: rpcErr } = await admin.rpc(
       "reorder_project_pages",
       { p_project_id: projectId, p_page_ids: pageIds },

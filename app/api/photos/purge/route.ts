@@ -3,7 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import { ORIGINALS_BUCKET, THUMBS_BUCKET } from "@/lib/image/constants";
@@ -28,7 +28,7 @@ const BodySchema = z.object({
  */
 export async function POST(req: Request) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     const raw = (await req.json().catch(() => ({}))) as unknown;
     const parsed = BodySchema.safeParse(raw);
@@ -68,6 +68,8 @@ export async function POST(req: Request) {
       return fail("FORBIDDEN", "사진에 대한 권한이 없습니다.", 403);
     }
 
+    // 결제 후 편집 잠금(DEBT-2)은 걸지 않는다 — 휴지통 사진은 PDF 사진 resolver(deleted_at IS NULL)가
+    // 이미 제외하므로 영구 삭제해도 인쇄물이 바뀌지 않는다. 막으면 결제한 포토북의 휴지통 사진을 지울 수 없다.
     const admin = createAdminSupabase();
 
     // 2) Storage 객체 일괄 삭제 (best-effort — 실패해도 DB 삭제 진행)
