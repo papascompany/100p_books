@@ -13,7 +13,11 @@ import { AUTH_STATE_PATH } from "./e2e/fixtures/paths";
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
 
 /** 인증 픽스처가 필요한 spec — 공개 라우트 프로젝트에서는 제외한다. */
-const AUTH_ONLY_SPECS = [/auth\.setup\.ts$/, /golden-flow\.spec\.ts$/];
+const AUTH_ONLY_SPECS = [
+  /auth\.setup\.ts$/,
+  /golden-flow\.spec\.ts$/,
+  /editor-integrity\.spec\.ts$/,
+];
 
 export default defineConfig({
   testDir: "./e2e",
@@ -59,7 +63,7 @@ export default defineConfig({
       // 로그인 상태가 필요한 spec 만. 모바일 뷰포트는 제외 — 업로드 input 이
       // 바텀시트 안으로 들어가 주입 경로가 달라진다(golden-flow.spec.ts 주석 참조).
       name: "authenticated-desktop",
-      testMatch: /golden-flow\.spec\.ts$/,
+      testMatch: [/golden-flow\.spec\.ts$/, /editor-integrity\.spec\.ts$/],
       use: { ...devices["Desktop Chrome"], storageState: AUTH_STATE_PATH },
       dependencies: ["setup"],
     },
