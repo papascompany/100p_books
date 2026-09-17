@@ -113,11 +113,13 @@ export async function getLaunchStatus(): Promise<LaunchItem[]> {
     },
     {
       key: "cron",
-      label: "Cron 보호 (CRON_SECRET)",
-      status: present("CRON_SECRET") ? "ok" : "warn",
-      impact: "cron 라우트가 Vercel 헤더에만 의존",
+      label: "Cron 실행 (CRON_SECRET 필수)",
+      // lib/security/cron-auth.ts(SEC-14): 배포 환경은 Bearer CRON_SECRET 만 인정하고 미설정이면
+      // fail-closed 다. 예전처럼 "헤더에만 의존(주의)" 이 아니라 cron 자체가 돌지 않는다 → 차단.
+      status: present("CRON_SECRET") ? "ok" : "off",
+      impact: "cron 4종 전부 거부(fail-closed) — 메일 재시도·출석 리셋·PDF 보존·사진 정리 중단",
       runbook: "§1",
-      blocking: false,
+      blocking: true,
     },
   ];
 }

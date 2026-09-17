@@ -25,7 +25,9 @@ export const maxDuration = 60;
  * 인증: `Authorization: Bearer <CRON_SECRET>` 만 인정 — CRON_SECRET 이 있으면 Vercel 이
  *   자동으로 붙인다. 규칙 상세는 lib/security/cron-auth.ts (SEC-14).
  *
- * 응답: { processed, sent, failed, skipped, batches, stopReason, durationMs }
+ * 응답: { processed, sent, failed, skipped, batches, stopReason, recovered, durationMs }
+ *   - recovered: 10분 넘게 'sending' 에 갇혀 있다가 이번 호출에서 'failed' 로 되돌린 잡 수(reaper).
+ *   - 실패한 잡은 백오프(5분 → 30분 → 2시간) 뒤에 재시도된다(lib/email/retry-policy.ts).
  *   - stopReason: 적체 신호는 max_jobs(상한을 넘는 대상이 실제로 더 있음)·time_budget 뿐.
  *     rate_limited·consecutive_failures 는 Resend 한도·장애·설정 오류, drained 는 지금 대상 없음.
  *   - RESEND_API_KEY 미설정이면 { …, deferred: true, queued } — 큐는 보존된다.

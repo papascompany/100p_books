@@ -7,13 +7,19 @@ import { Resend } from "resend";
 import { createAdminSupabase } from "@/lib/db/admin";
 import type { EmailJob } from "@/lib/db/types";
 
+import {
+  STALE_SENDING_MS,
+  nextEmailRetryAt,
+  staleSendingCutoffIso,
+} from "./retry-policy";
+
 /**
  * 이메일 워커 — Vercel Cron (`/api/cron/process-emails`) 에서 호출.
  *
  * 동작:
  *   1. status in ('pending','failed') 이고 생성 유예가 지난 잡을 batch 만큼 가져옴
  *      (FOR UPDATE 는 supabase-js 미지원 → 낙관적: 가져온 후 조건부 update 로 race 회피).
- *   2. 각 잡을 sendEmail() 로 전달.
+ *   2. 각 잡을 sendEmailJob() 로 전달.
  *   3. 결과에 따라 status 마킹.
  *
  * Resend 통합:
@@ -24,11 +30,19 @@ import type { EmailJob } from "@/lib/db/types";
  *     지금은 pending 그대로 두므로 키를 넣는 순간 scheduled_at 순서대로 발송된다.
  *     attempt 도 소모하지 않는다(키 없는 상태로 cron 이 돌아 max_attempts 를 태우던 문제).
  *
- * 재시도:
- *   - 실패한 잡은 status='failed' + attempt+1.
+ * 재시도 (백오프 — lib/email/retry-policy.ts):
+ *   - 실패한 잡은 status='failed' + attempt+1, scheduled_at = now + 백오프(5분 → 30분 → 2시간).
+ *     예전에는 scheduled_at 을 그대로 둬 5분 cron 에서 max_attempts 3 이 약 15분에 소진됐고,
+ *     Resend 장애 15~20분이면 큐 앞 잡이 cancelled 됐다. 지금은 첫 시도~3번째 시도가 최소 35분.
  *   - 다음 워커 실행 시 idx_email_jobs_status_scheduled (status in ('pending','failed'))
- *     로 재시도. attempt >= max_attempts 면 영구 실패로 간주 (다음 폴링에서 제외하려면
- *     status='cancelled' 또는 attempt 조건으로 거름).
+ *     로 재시도. attempt >= max_attempts 면 영구 실패로 간주 (마지막 실패의 백오프가 지난 뒤 폴링에서 cancelled).
+ *
+ * 'sending' 에 갇힌 잡 복구 (reaper):
+ *   - claim 뒤 함수가 강제 종료되면 행이 'sending' 에 남아 조회 대상에서 영구히 빠진다.
+ *     워커 진입 시(deferred 가드 뒤, 스냅샷 전) updated_at 이 STALE_SENDING_MS(10분)보다 오래된
+ *     'sending' 을 한 번의 조건부 UPDATE 로 'failed' 로 되돌린다. attempt 는 claim 때 이미
+ *     올랐으므로 그대로 두고(max_attempts 가 무한 반복을 막는다), 같은 호출에서 바로 재시도된다.
+ *   - 재발송이 중복 메일이 되지 않는 근거는 아래 Idempotency-Key(24시간) 다.
  *
  * 한 호출에서 배치 반복 소진 (OPS-1):
  *   - cron 이 5분 주기여도 호출당 10건이면 수요를 못 따라간다. 그래서 한 호출 안에서
@@ -38,7 +52,7 @@ import type { EmailJob } from "@/lib/db/types";
  *   - 호출 시작 시 대상 id 를 maxJobs 개까지 한 번만 스냅샷하고, 배치마다 그 id 로
  *     최신 행을 다시 읽는다. **같은 호출 안에서 한 잡은 최대 한 번만** 시도된다 —
  *     방금 실패해 'failed' 가 된 잡을 같은 호출이 다시 집어 attempt 를 연달아 태우지 않는다
- *     (재시도는 기존대로 다음 cron 실행).
+ *     (재시도는 백오프로 미뤄진 scheduled_at 이 지난 뒤의 cron 실행).
  *   - claim(pending|failed → sending 조건부 UPDATE)·max_attempts·deferred 의미는 그대로다.
  *     cron 중복 호출로 **워커끼리** 실행이 겹쳐도 claim 은 한쪽만 성공한다.
  *
@@ -64,8 +78,9 @@ import type { EmailJob } from "@/lib/db/types";
  *   - payload 지문을 키에 넣는 이유: 같은 키에 다른 payload 면 409 invalid_idempotent_request
  *     이고, 문서는 오류 응답도 키에 저장되는지 밝히지 않는다. EMAIL_FROM 오설정을 고친 뒤의
  *     재시도가 24시간 동안 409 로 막히지 않게 payload 가 바뀌면 키도 바뀌게 한다.
- *   - 즉시 발송 경로도 buildEmailJobPayload + emailJobIdempotencyKey 를 쓰면 유예 창을 넘는
- *     hang(함수 강제 종료 후 pending 잔류)까지 막힌다 — queue.ts 반영은 별도 작업.
+ *   - 즉시 발송 경로(queue.ts trySendImmediate)도 sendEmailJob 으로 같은 payload·키·응답 대기
+ *     상한을 쓴다. 즉시 발송이 Resend 에 도달한 뒤 함수가 끊겨 pending 에 남아도, 유예 뒤 워커의
+ *     재시도는 같은 키라 중복 발송되지 않는다.
  *
  * Resend rate limit · 중단 조건:
  *   - 공식 문서(api-reference/rate-limit, 2026-09-17 확인) 기본 한도는 팀당 초당 10 요청,
@@ -132,6 +147,8 @@ export interface ProcessResult {
   deferred?: boolean;
   /** deferred 일 때 대기 중인 잡 수 — 방치 규모를 드러낸다. */
   queued?: number;
+  /** 진입 시 'sending' 에 STALE_SENDING_MS 넘게 갇혀 있다가 'failed' 로 복구한 잡 수. deferred 일 때는 없다. */
+  recovered?: number;
 }
 
 const DEFAULT_BATCH = 10;
@@ -144,8 +161,10 @@ const DEFAULT_MAX_CONSECUTIVE_REJECTIONS = 10;
  * 발송 1건 응답 대기 상한. 예산 마감 직전(40s)에 claim 해도 40 + 10 + DB 마킹 < maxDuration 60s 라
  * 함수가 끊겨 잡이 'sending' 에 갇히지 않는다. SDK(resend 6.12.3)는 AbortSignal 을 받지 않아
  * Promise.race 로 기다림만 끊는다 — 요청 자체가 뒤늦게 처리돼도 idempotency key 로 재발송이 막힌다.
+ * 즉시 발송 경로(queue.ts)도 같은 값을 쓴다 — 호출 라우트 응답을 Resend 지연에 묶지 않기 위함.
  */
-const DEFAULT_SEND_TIMEOUT_MS = 10_000;
+export const EMAIL_SEND_TIMEOUT_MS = 10_000;
+const DEFAULT_SEND_TIMEOUT_MS = EMAIL_SEND_TIMEOUT_MS;
 
 /**
  * 즉시 발송 경로와 겹치지 않게 워커가 건너뛰는 생성 직후 구간. 상세는 파일 상단 주석.
@@ -158,6 +177,37 @@ const JOB_COLUMNS =
 
 function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 'sending' 에 STALE_SENDING_MS 넘게 머문 잡을 'failed' 로 되돌린다 (단일 조건부 UPDATE).
+ * 워커끼리 동시에 돌아도 같은 결과(멱등). 실패해도 발송은 막지 않고 로그만 남긴다.
+ */
+async function recoverStaleSendingJobs(
+  admin: ReturnType<typeof createAdminSupabase>,
+  wallNow: number,
+): Promise<number> {
+  const { data, error } = await admin
+    .from("email_jobs")
+    .update({
+      status: "failed",
+      last_error: `발송 중 중단 — 'sending' 에 ${STALE_SENDING_MS / 60_000}분 넘게 머물러 자동 복구(재시도는 같은 Idempotency-Key)`,
+    })
+    .eq("status", "sending")
+    .lt("updated_at", staleSendingCutoffIso(wallNow))
+    .select("id");
+
+  if (error) {
+    console.error("[email/worker] stale 'sending' 복구 실패:", error.message);
+    return 0;
+  }
+  const recovered = ((data ?? []) as Array<{ id: string }>).length;
+  if (recovered > 0) {
+    console.warn(
+      `[email/worker] 'sending' 에 갇힌 잡 ${recovered}건을 failed 로 복구했습니다 — 이번 호출에서 재시도합니다.`,
+    );
+  }
+  return recovered;
 }
 
 export async function processEmailQueue(
@@ -196,12 +246,15 @@ export async function processEmailQueue(
   }
 
   const deadline = now() + timeBudgetMs;
+  // 벽시계 기준 — opts.now 는 시간 예산 측정용 단조 시계라 DB 타임스탬프와 비교하지 않는다.
+  const wallNow = Date.now();
+
+  // 0.5) 함수 강제 종료로 'sending' 에 갇힌 잡을 먼저 되살린다 — 아래 스냅샷에 바로 포함된다.
+  const recovered = await recoverStaleSendingJobs(admin, wallNow);
 
   // 1) 이번 호출의 대상 스냅샷 — pending + failed, scheduled_at 순, id 만.
   //    created_at 이 유예 구간 안인 잡은 enqueueEmail 의 즉시 발송이 진행 중일 수 있어 뺀다.
   //    maxJobs + 1 건을 읽어 "상한을 넘는 대상이 실제로 더 있는지" 를 구분한다.
-  //    (벽시계 기준 — opts.now 는 시간 예산 측정용 단조 시계라 DB 타임스탬프와 비교하지 않는다.)
-  const wallNow = Date.now();
   const { data: idRows, error } = await admin
     .from("email_jobs")
     .select("id")
@@ -220,6 +273,7 @@ export async function processEmailQueue(
       skipped: 0,
       batches: 0,
       stopReason: "fetch_error",
+      recovered,
     };
   }
 
@@ -234,6 +288,7 @@ export async function processEmailQueue(
       skipped: 0,
       batches: 0,
       stopReason: "drained",
+      recovered,
     };
   }
 
@@ -295,11 +350,14 @@ export async function processEmailQueue(
       }
 
       // 3) 'sending' 으로 마킹 — 동일 status 일 때만 (race 보호).
+      //    updated_at 은 stale 'sending' 복구의 기준(claim 시각)이다. 트리거(set_updated_at)도
+      //    갱신하지만, 트리거가 없는 환경에서 방금 claim 한 잡을 복구 대상으로 오인하지 않게 명시한다.
       const { data: claim, error: claimErr } = await admin
         .from("email_jobs")
         .update({
           status: "sending",
           attempt: job.attempt + 1,
+          updated_at: new Date().toISOString(),
         })
         .eq("id", job.id)
         .in("status", ["pending", "failed"])
@@ -319,7 +377,7 @@ export async function processEmailQueue(
       }
       lastSendStartedAt = now();
 
-      const result = await sendEmail(job, sendTimeoutMs);
+      const result = await sendEmailJob(job, sendTimeoutMs);
 
       if (result.kind === "sent") {
         await admin
@@ -343,12 +401,13 @@ export async function processEmailQueue(
           .eq("id", job.id);
         skipped += 1;
       } else {
-        // failed — 재시도는 다음 cron 실행에서.
+        // failed — 백오프만큼 scheduled_at 을 미뤄 다음 cron 들이 곧바로 attempt 를 태우지 않게 한다.
         await admin
           .from("email_jobs")
           .update({
             status: "failed",
             last_error: result.error,
+            scheduled_at: nextEmailRetryAt(job.attempt + 1, Date.now()),
           })
           .eq("id", job.id);
         failed += 1;
@@ -395,11 +454,12 @@ export async function processEmailQueue(
     skipped,
     batches,
     stopReason,
+    recovered,
   };
 }
 
 // =====================================================================
-// sendEmail — Resend SDK 발송.
+// sendEmailJob — Resend SDK 발송 (워커·즉시 발송 공용).
 // =====================================================================
 
 /**
@@ -410,7 +470,7 @@ export async function processEmailQueue(
  */
 type SendFailure = "provider_limited" | "systemic" | "rejected";
 
-interface SendResult {
+export interface SendResult {
   kind: "sent" | "failed" | "cancelled";
   error?: string;
   failure?: SendFailure;
@@ -513,15 +573,30 @@ async function waitAtMost<T>(
   }
 }
 
-async function sendEmail(job: EmailJob, timeoutMs: number): Promise<SendResult> {
+/** 발송에 필요한 잡 필드 — 워커(조회한 행)와 즉시 발송 경로(INSERT 직후 값)가 공유한다. */
+export type EmailJobSendTarget = Pick<
+  EmailJob,
+  "id" | "template" | "to_email" | "to_name" | "subject" | "body_text" | "body_html"
+>;
+
+/**
+ * Resend 발송 1건 — payload(buildEmailJobPayload)·Idempotency-Key(emailJobIdempotencyKey)·
+ * 응답 대기 상한(timeoutMs)을 워커와 즉시 발송 경로가 똑같이 쓰게 하는 단일 진입점.
+ * throw 하지 않는다. DB 상태 전이는 호출자 몫이다.
+ */
+export async function sendEmailJob(
+  job: EmailJobSendTarget,
+  timeoutMs: number,
+  logTag = "[email/worker]",
+): Promise<SendResult> {
   const resendKey = process.env.RESEND_API_KEY;
 
   if (!resendKey) {
-    // 정상 경로에서는 도달하지 않는다 — processEmailQueue 가 진입 시점에 걸러
+    // 정상 경로에서는 도달하지 않는다 — processEmailQueue·trySendImmediate 가 진입 시점에 걸러
     // 잡을 pending 그대로 남긴다. 여기까지 왔다면 그 가드를 우회한 직접 호출이므로,
     // 잡을 죽이지 않고 'failed' 로 두어 다음 실행에서 재시도되게 한다.
     console.warn(
-      `[email/worker] RESEND_API_KEY 미설정 — job ${job.id} 발송 보류 (template=${job.template})`,
+      `${logTag} RESEND_API_KEY 미설정 — job ${job.id} 발송 보류 (template=${job.template})`,
     );
     return {
       kind: "failed",
@@ -543,7 +618,7 @@ async function sendEmail(job: EmailJob, timeoutMs: number): Promise<SendResult> 
 
     if (response === SEND_TIMED_OUT) {
       // 요청이 Resend 에 도달했을 수 있다 — 재시도는 같은 idempotency key 라 중복 발송되지 않는다.
-      console.error("[email/worker] Resend 응답 대기 시간 초과:", {
+      console.error(`${logTag} Resend 응답 대기 시간 초과:`, {
         jobId: job.id,
         template: job.template,
         timeoutMs,
@@ -557,7 +632,7 @@ async function sendEmail(job: EmailJob, timeoutMs: number): Promise<SendResult> 
 
     const { error } = response;
     if (error) {
-      console.error("[email/worker] Resend error:", error, {
+      console.error(`${logTag} Resend error:`, error, {
         jobId: job.id,
         template: job.template,
       });
@@ -571,7 +646,7 @@ async function sendEmail(job: EmailJob, timeoutMs: number): Promise<SendResult> 
     return { kind: "sent" };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("[email/worker] sendEmail exception:", msg, {
+    console.error(`${logTag} sendEmail exception:`, msg, {
       jobId: job.id,
       template: job.template,
     });

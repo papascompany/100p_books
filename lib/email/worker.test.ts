@@ -30,6 +30,7 @@ vi.mock("resend", () => ({
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+import { EMAIL_RETRY_BACKOFF_MS, STALE_SENDING_MS } from "./retry-policy";
 import {
   IMMEDIATE_SEND_GRACE_MS,
   buildEmailJobPayload,
@@ -101,14 +102,21 @@ describe("processEmailQueue — 발송 인프라 설정됨", () => {
     lteMock.mockReturnValue({ lte: lteMock, order: orderMock });
     const inMock = vi.fn().mockReturnValue({ lte: lteMock });
     const selectMock = vi.fn().mockReturnValue({ in: inMock });
-    fromMock.mockReturnValue({ select: selectMock });
+    // 진입 시 stale 'sending' 복구: update → eq(status) → lt(updated_at) → select(id)
+    const reapSelectMock = vi.fn().mockResolvedValue({ data: [], error: null });
+    const reapLtMock = vi.fn().mockReturnValue({ select: reapSelectMock });
+    const reapEqMock = vi.fn().mockReturnValue({ lt: reapLtMock });
+    const updateMock = vi.fn().mockReturnValue({ eq: reapEqMock });
+    fromMock.mockReturnValue({ select: selectMock, update: updateMock });
 
     const result = await processEmailQueue();
 
     expect(result.deferred).toBeUndefined();
-    expect(result).toMatchObject({ processed: 0, sent: 0, failed: 0, skipped: 0 });
+    expect(result).toMatchObject({ processed: 0, sent: 0, failed: 0, skipped: 0, recovered: 0 });
     // head-count 가 아니라 컬럼 목록을 가져오는 본 조회여야 한다.
     expect(selectMock.mock.calls[0]?.[1]).toBeUndefined();
+    expect(reapEqMock).toHaveBeenCalledWith("status", "sending");
+    expect(reapLtMock.mock.calls[0]?.[0]).toBe("updated_at");
   });
 });
 
@@ -142,9 +150,11 @@ function createFakeEmailJobs(rows: FakeRow[]) {
     private orderCol: string | null = null;
     private limitN: number | null = null;
     private single = false;
+    private returning = false;
 
     select(columns: string): this {
       if (this.mode === "select") this.columns = columns;
+      else this.returning = true; // update(...).select("id") — 갱신된 행 반환
       return this;
     }
     update(patch: Record<string, unknown>): this {
@@ -162,6 +172,10 @@ function createFakeEmailJobs(rows: FakeRow[]) {
     }
     lte(col: string, value: string): this {
       this.filters.push((r) => String(r[col]) <= value);
+      return this;
+    }
+    lt(col: string, value: string): this {
+      this.filters.push((r) => String(r[col]) < value);
       return this;
     }
     order(col: string): this {
@@ -193,6 +207,9 @@ function createFakeEmailJobs(rows: FakeRow[]) {
         for (const r of matched) Object.assign(r, this.patch);
         if (this.single) {
           return { data: matched[0] ? { id: matched[0].id } : null, error: null };
+        }
+        if (this.returning) {
+          return { data: matched.map((r) => ({ id: r.id })), error: null };
         }
         return { data: null, error: null };
       }
@@ -525,6 +542,8 @@ describe("processEmailQueue — 즉시 발송 경로와의 중복 방지", () =>
 
     await processEmailQueue({ now: clock.now, sleep: clock.sleep });
     expect(rows[0]).toMatchObject({ status: "failed", attempt: 1 });
+    // 재시도 백오프(5분)가 지난 뒤의 cron 을 흉내 낸다.
+    rows[0]!.scheduled_at = isoAgo(1_000);
     await processEmailQueue({ now: clock.now, sleep: clock.sleep });
     expect(rows[0]).toMatchObject({ status: "sent", attempt: 2 });
 
@@ -728,5 +747,228 @@ describe("processEmailQueue — 발송 타임아웃과 실패 분류", () => {
 
     expect(result).toMatchObject({ sent: 10, stopReason: "drained" });
     expect(rows.every((r) => r.status === "sent")).toBe(true);
+  });
+});
+
+// =====================================================================
+// 재시도 백오프 · 'sending' 에 갇힌 잡 복구
+// =====================================================================
+
+describe("processEmailQueue — 재시도 백오프", () => {
+  const T0 = Date.UTC(2026, 8, 17, 0, 0, 0);
+
+  beforeEach(() => {
+    process.env.RESEND_API_KEY = "re_test_key";
+    sendMock.mockReset();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(T0);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const networkDown = () => Promise.reject(new Error("network down"));
+
+  it("실패하면 attempt 에 따라 scheduled_at 을 5분 → 30분 뒤로 미루고, 그 전에는 다시 집지 않는다", async () => {
+    const rows = [makeJob(1)];
+    const db = createFakeEmailJobs(rows);
+    fromMock.mockImplementation(() => db.query());
+    sendMock.mockImplementation(networkDown);
+    const clock = createClock();
+
+    await processEmailQueue({ now: clock.now, sleep: clock.sleep });
+    expect(rows[0]).toMatchObject({
+      status: "failed",
+      attempt: 1,
+      scheduled_at: new Date(T0 + 5 * 60_000).toISOString(),
+    });
+
+    // 1분 뒤 호출(cron 중복 전달 등) — 아직 백오프 중이라 발송하지 않는다.
+    vi.setSystemTime(T0 + 60_000);
+    await processEmailQueue({ now: clock.now, sleep: clock.sleep });
+    expect(sendMock).toHaveBeenCalledTimes(1);
+
+    const t2 = T0 + 5 * 60_000;
+    vi.setSystemTime(t2);
+    await processEmailQueue({ now: clock.now, sleep: clock.sleep });
+    expect(sendMock).toHaveBeenCalledTimes(2);
+    expect(rows[0]).toMatchObject({
+      status: "failed",
+      attempt: 2,
+      scheduled_at: new Date(t2 + 30 * 60_000).toISOString(),
+    });
+  });
+
+  it("Resend 장애 20분 동안 5분 cron 이 돌아도 큐 앞 잡이 cancelled 되지 않고, 회복 후 전부 발송된다", async () => {
+    const rows = Array.from({ length: 5 }, (_, i) => makeJob(i + 1));
+    const db = createFakeEmailJobs(rows);
+    fromMock.mockImplementation(() => db.query());
+    const outageEndsAt = T0 + 20 * 60_000;
+    sendMock.mockImplementation(async () => {
+      if (Date.now() <= outageEndsAt) throw new Error("Resend 503");
+      return SENT;
+    });
+    const clock = createClock();
+
+    // 장애 구간: t = 0, 5, 10, 15, 20분
+    for (let minute = 0; minute <= 20; minute += 5) {
+      vi.setSystemTime(T0 + minute * 60_000);
+      await processEmailQueue({ now: clock.now, sleep: clock.sleep });
+    }
+    expect(rows.some((r) => r.status === "cancelled")).toBe(false);
+    expect(rows.every((r) => r.attempt < 3)).toBe(true);
+
+    // 회복 후 5분 cron 을 2시간까지
+    for (let minute = 25; minute <= 120; minute += 5) {
+      vi.setSystemTime(T0 + minute * 60_000);
+      await processEmailQueue({ now: clock.now, sleep: clock.sleep });
+    }
+    expect(rows.every((r) => r.status === "sent")).toBe(true);
+  });
+
+  it("백오프 도입 후에도 발송 인프라 미설정(deferred)이면 큐를 건드리지 않는다", async () => {
+    delete process.env.RESEND_API_KEY;
+    const inMock = vi.fn().mockResolvedValue({ count: 2, error: null });
+    fromMock.mockReturnValue({ select: () => ({ in: inMock }) });
+
+    const result = await processEmailQueue();
+
+    expect(result).toEqual({
+      processed: 0,
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+      deferred: true,
+      queued: 2,
+    });
+    expect(fromMock).toHaveBeenCalledTimes(1);
+    expect(EMAIL_RETRY_BACKOFF_MS).toEqual([5 * 60_000, 30 * 60_000, 2 * 60 * 60_000]);
+  });
+});
+
+describe("processEmailQueue — 'sending' 에 갇힌 잡 복구", () => {
+  beforeEach(() => {
+    process.env.RESEND_API_KEY = "re_test_key";
+    sendMock.mockReset();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("STALE_SENDING_MS 넘게 'sending' 인 잡만 되살려 같은 Idempotency-Key 로 재시도한다", async () => {
+    const old = isoAgo(24 * 60 * 60_000);
+    const rows = [
+      // 함수 강제 종료로 갇힌 잡 (claim 11분 전)
+      makeJob(1, {
+        status: "sending",
+        attempt: 1,
+        created_at: old,
+        scheduled_at: old,
+        updated_at: isoAgo(STALE_SENDING_MS + 60_000),
+      }),
+      // 다른 워커가 방금 claim 해 발송 중인 잡 — 건드리면 안 된다
+      makeJob(2, {
+        status: "sending",
+        attempt: 1,
+        created_at: old,
+        scheduled_at: old,
+        updated_at: isoAgo(30_000),
+      }),
+    ];
+    const db = createFakeEmailJobs(rows);
+    fromMock.mockImplementation(() => db.query());
+    sendMock.mockResolvedValue(SENT);
+    const clock = createClock();
+
+    const result = await processEmailQueue({ now: clock.now, sleep: clock.sleep });
+
+    expect(result).toMatchObject({ recovered: 1, sent: 1, stopReason: "drained" });
+    expect(rows[0]).toMatchObject({ status: "sent", attempt: 2 });
+    expect(rows[1]).toMatchObject({ status: "sending", attempt: 1 });
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const [payload, options] = sendMock.mock.calls[0] as [
+      { to: string },
+      { idempotencyKey?: string },
+    ];
+    expect(payload.to).toBe("user1@example.com");
+    // 갇히기 전 요청이 Resend 에 도달했더라도 같은 키 → 24시간 안에는 재발송되지 않는다.
+    expect(options.idempotencyKey).toBe(
+      emailJobIdempotencyKey("job-001", buildEmailJobPayload(payloadSource(1))),
+    );
+  });
+
+  it("복구한 잡도 max_attempts 를 넘었으면 재발송 없이 cancelled — 사유는 복구 메시지로 남는다", async () => {
+    const old = isoAgo(24 * 60 * 60_000);
+    const rows = [
+      makeJob(1, {
+        status: "sending",
+        attempt: 3,
+        max_attempts: 3,
+        created_at: old,
+        scheduled_at: old,
+        updated_at: isoAgo(STALE_SENDING_MS + 60_000),
+      }),
+    ];
+    const db = createFakeEmailJobs(rows);
+    fromMock.mockImplementation(() => db.query());
+    sendMock.mockResolvedValue(SENT);
+    const clock = createClock();
+
+    const result = await processEmailQueue({ now: clock.now, sleep: clock.sleep });
+
+    expect(result).toMatchObject({ recovered: 1, sent: 0, skipped: 1 });
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(rows[0]).toMatchObject({ status: "cancelled", attempt: 3 });
+    expect(String(rows[0]?.last_error)).toContain("발송 중 중단");
+  });
+
+  it("claim 은 updated_at 을 직접 갱신한다 — 트리거가 없어도 방금 claim 한 잡을 복구 대상으로 오인하지 않는다", async () => {
+    const rows = [makeJob(1)];
+    const db = createFakeEmailJobs(rows);
+    fromMock.mockImplementation(() => db.query());
+    let updatedAtDuringSend: unknown;
+    sendMock.mockImplementation(async () => {
+      updatedAtDuringSend = rows[0]?.updated_at;
+      return SENT;
+    });
+    const clock = createClock();
+    const before = Date.now();
+
+    await processEmailQueue({ now: clock.now, sleep: clock.sleep });
+
+    expect(Date.parse(String(updatedAtDuringSend))).toBeGreaterThanOrEqual(before);
+  });
+});
+
+describe("STALE_SENDING_MS — 'sending' 을 만드는 호출 경로의 maxDuration 보다 충분히 길다", () => {
+  const REPO_ROOT = path.resolve(__dirname, "../..");
+
+  it("processEmailQueue 를 부르는 파일은 process-emails 라우트뿐이고, STALE_SENDING_MS 는 그 maxDuration 의 5배 이상", () => {
+    const callers = readdirSync(path.join(REPO_ROOT, "app"), { recursive: true, encoding: "utf8" })
+      .filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f))
+      .map((f) => path.join("app", f).split(path.sep).join("/"))
+      .filter((rel) => /\bprocessEmailQueue\b/.test(readFileSync(path.join(REPO_ROOT, rel), "utf8")));
+    expect(callers).toEqual(["app/api/cron/process-emails/route.ts"]);
+
+    const rel = "app/api/cron/process-emails/route.ts";
+    const exported = readFileSync(path.join(REPO_ROOT, rel), "utf8").match(
+      /export const maxDuration\s*=\s*(\d+)/,
+    );
+    const vercel = JSON.parse(readFileSync(path.join(REPO_ROOT, "vercel.json"), "utf8")) as {
+      functions?: Record<string, { maxDuration?: number }>;
+    };
+    const seconds = Math.max(
+      exported ? Number(exported[1]) : 300,
+      vercel.functions?.[rel]?.maxDuration ?? 0,
+    );
+    // 앱↔DB 시계 오차·cron 중복 호출 여유로 5배 이상.
+    expect(seconds * 1000 * 5).toBeLessThanOrEqual(STALE_SENDING_MS);
   });
 });

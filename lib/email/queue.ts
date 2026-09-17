@@ -1,7 +1,5 @@
 import "server-only";
 
-import { Resend } from "resend";
-
 import { createAdminSupabase } from "@/lib/db/admin";
 
 import {
@@ -9,6 +7,7 @@ import {
   type EmailTemplate,
   type TemplateContext,
 } from "./templates";
+import { EMAIL_SEND_TIMEOUT_MS, sendEmailJob, type EmailJobSendTarget } from "./worker";
 
 /**
  * 이메일 잡 큐 — INSERT + 즉시 발송 시도.
@@ -18,9 +17,15 @@ import {
  * 전략:
  *   1. email_jobs 에 INSERT (항상 — 감사 기록 + 재시도 안전망).
  *   2. RESEND_API_KEY 가 있으면 INSERT 직후 Resend 즉시 발송 시도.
+ *      워커와 같은 sendEmailJob(lib/email/worker.ts)을 쓴다 — payload·Idempotency-Key
+ *      (잡 id + payload 지문)·응답 대기 상한(EMAIL_SEND_TIMEOUT_MS 10s)이 워커와 같다.
  *      성공 → status='sent', sent_at=now
- *      실패 → status 는 'pending' 그대로 → 익일 cron 에서 재처리.
- *   3. Vercel Hobby 플랜에서 cron 이 일 1회라도 운영 이메일은 실시간 발송됨.
+ *      실패·시간 초과 → status 는 'pending' 그대로 → 5분 주기 cron 워커가 재처리.
+ *        워커는 즉시 발송과 겹치지 않게 생성 6분(IMMEDIATE_SEND_GRACE_MS) 이 지난 잡만 집으므로
+ *        보통 생성 후 6~11분 안에 재시도된다. 즉시 발송이 실제로는 Resend 에 도달했더라도
+ *        같은 키라 재시도가 두 번째 메일이 되지 않는다(24시간 이내).
+ *   3. 키가 없으면 발송하지 않고 pending 으로 둔다 — 워커도 키가 없으면 큐를 보존(deferred)하고,
+ *      키를 등록하면 다음 cron 에서 밀린 잡까지 발송한다.
  *
  * INSERT/send 실패는 throw 하지 않고 로깅만 → 이메일 큐 실패가 정상 응답을 막지 않음.
  */
@@ -94,10 +99,16 @@ export async function enqueueEmail(
 
     // 즉시 발송 시도 (RESEND_API_KEY 있을 때만)
     const sent = await trySendImmediate({
-      jobId,
       admin,
-      to: args.to,
-      rendered,
+      job: {
+        id: jobId,
+        template: insert.template,
+        to_email: insert.to_email,
+        to_name: insert.to_name,
+        subject: insert.subject,
+        body_text: insert.body_text,
+        body_html: insert.body_html,
+      },
     });
 
     return { ok: true, jobId, sent };
@@ -109,62 +120,40 @@ export async function enqueueEmail(
 }
 
 // =====================================================================
-// 즉시 발송 — Resend SDK.
+// 즉시 발송 — 워커와 같은 sendEmailJob (payload·Idempotency-Key·응답 대기 상한 공유).
 // =====================================================================
 
 interface TrySendArgs {
-  jobId: string;
   admin: ReturnType<typeof createAdminSupabase>;
-  to: { email: string; name?: string };
-  rendered: { subject: string; text: string; html?: string };
+  /** INSERT 한 값 그대로 — 워커가 나중에 읽을 행과 같아야 Idempotency-Key 가 같다. */
+  job: EmailJobSendTarget;
 }
 
-async function trySendImmediate({
-  jobId,
-  admin,
-  to,
-  rendered,
-}: TrySendArgs): Promise<boolean> {
-  const resendKey = process.env.RESEND_API_KEY;
-  if (!resendKey) return false; // 키 없으면 cron 에 위임
+async function trySendImmediate({ admin, job }: TrySendArgs): Promise<boolean> {
+  if (!process.env.RESEND_API_KEY) return false; // 키 없으면 cron 에 위임
 
-  try {
-    const resend = new Resend(resendKey);
-    const from = process.env.EMAIL_FROM ?? "100p Books <noreply@100pbooks.com>";
-    const toAddress = to.name ? `${to.name} <${to.email}>` : to.email;
-
-    const { error } = await resend.emails.send({
-      from,
-      to: toAddress,
-      subject: rendered.subject,
-      text: rendered.text,
-      ...(rendered.html ? { html: rendered.html } : {}),
-    });
-
-    if (error) {
-      console.error("[email/queue] immediate send failed:", error.message, {
-        jobId,
-        to: to.email,
-      });
-      // pending 상태로 남겨 cron 에서 재시도
-      return false;
-    }
-
-    // 발송 성공 → DB 업데이트
-    await admin
-      .from("email_jobs")
-      .update({
-        status: "sent",
-        attempt: 1,
-        sent_at: new Date().toISOString(),
-        last_error: null,
-      })
-      .eq("id", jobId);
-
-    return true;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("[email/queue] immediate send exception:", msg, { jobId });
+  // throw 하지 않는다 — 예외·Resend 오류·시간 초과는 모두 kind 'failed' 로 돌아온다.
+  const result = await sendEmailJob(job, EMAIL_SEND_TIMEOUT_MS, "[email/queue] immediate");
+  if (result.kind !== "sent") {
+    // pending 상태로 남겨 cron 에서 재시도 (같은 Idempotency-Key)
     return false;
   }
+
+  // 발송 성공 → DB 업데이트. 실패하면 pending 으로 남지만 워커 재시도는 같은 키라 재발송되지 않는다.
+  const { error } = await admin
+    .from("email_jobs")
+    .update({
+      status: "sent",
+      attempt: 1,
+      sent_at: new Date().toISOString(),
+      last_error: null,
+    })
+    .eq("id", job.id);
+  if (error) {
+    console.error("[email/queue] immediate send 성공 후 상태 갱신 실패:", error.message, {
+      jobId: job.id,
+    });
+  }
+
+  return true;
 }

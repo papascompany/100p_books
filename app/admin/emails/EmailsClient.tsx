@@ -6,6 +6,7 @@ import DataTable, { type Column } from "@/components/admin/DataTable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
+import { isStaleSending } from "@/lib/email/retry-policy";
 
 const DT = new Intl.DateTimeFormat("ko-KR", {
   year: "2-digit",
@@ -218,7 +219,10 @@ export default function EmailsClient() {
       header: "",
       className: "text-right",
       cell: (r) =>
-        r.status === "failed" || r.status === "cancelled" ? (
+        // 오래된 'sending'(함수 강제 종료로 갇힌 잡)도 재시도 대상 — 라우트와 같은 판정.
+        r.status === "failed" ||
+        r.status === "cancelled" ||
+        isStaleSending(r, Date.now()) ? (
           <Button
             size="sm"
             variant="outline"
