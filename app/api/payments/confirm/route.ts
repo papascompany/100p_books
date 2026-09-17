@@ -1,24 +1,42 @@
 import "server-only";
 
-import { waitUntil } from "@vercel/functions";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { trackFunnelEvent } from "@/lib/analytics/funnel";
+import { type ApiFail, fail, failFromError, ok } from "@/app/api/_lib/response";
 import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
+import type { Database, OrderStatus } from "@/lib/db/types";
+import { reasonMessage } from "@/lib/discounts/validate";
 import { enqueueEmail } from "@/lib/email/queue";
+import { calcCoverDimensions } from "@/lib/layout/cover";
+import { isPageDoc } from "@/lib/layout/types";
+import { finalizePaidOrder, isPaidLikeStatus } from "@/lib/orders/finalize-paid";
+import { detectOrderPricingDrift } from "@/lib/orders/pricing";
+import {
+  releaseOrderCredits,
+  reserveOrderCredits,
+  type ReserveOrderCreditsResult,
+} from "@/lib/orders/refund";
 import { assertTransition } from "@/lib/orders/state";
-import { confirmTossPayment, TossError } from "@/lib/payments/toss";
-import { enqueuePdfJob, runPdfJob } from "@/lib/pdf/job-runner";
-import { REFERRAL_REWARD } from "@/lib/referrals/code";
-import { storigeOrderPatch } from "@/lib/storige/order-fields";
+import {
+  buildConfirmIdempotencyKey,
+  classifyTossConfirmError,
+  classifyTossPaymentStatus,
+  confirmTossPayment,
+  fetchTossPayment,
+  findTossPaymentMismatch,
+  isTossLookupNotFound,
+  TossError,
+  type TossConfirmResponse,
+} from "@/lib/payments/toss";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-// PDF 빌드는 waitUntil 백그라운드로 분리 — 응답은 즉시, 함수 수명은 빌드가 끝날 때까지
-// (최대 300s) 유지된다. 100p 사진북 빌드 시간 확보용.
+// PDF 빌드는 finalizePaidOrder 가 waitUntil 백그라운드로 분리 — 응답은 즉시, 함수 수명은
+// 빌드가 끝날 때까지(최대 300s) 유지된다. 100p 사진북 빌드 시간 확보용.
 export const maxDuration = 300;
 
 const BodySchema = z.object({
@@ -28,23 +46,49 @@ const BodySchema = z.object({
   tossOrderId: z.string().min(1),
 });
 
+type Admin = SupabaseClient<Database>;
+
+interface ConfirmOrderRow {
+  id: string;
+  project_id: string;
+  user_id: string;
+  qty: number;
+  amount: number;
+  status: OrderStatus;
+  toss_payment_key: string | null;
+  toss_order_id: string | null;
+  discount_code_id: string | null;
+  discount_amount: number;
+  points_used: number;
+}
+
+interface ExpectedPayment {
+  paymentKey: string;
+  orderId: string;
+  amount: number;
+}
+
 /**
  * POST /api/payments/confirm
  *
  *   body: { orderId, paymentKey, amount, tossOrderId }
  *
- *   1. requireActiveUser + orders 소유권 + status === "pending" + 자체 amount 일치.
- *   2. 토스 confirm API 호출 (Authorization Basic).
- *   3. 토스 응답 amount 도 검증 → orders UPDATE: status='paid', toss_payment_key, paid_at=now().
- *   4. PDF 빌드 잡 — enqueue 후 waitUntil 백그라운드 실행 (응답 비블로킹).
- *      산출: `pdfs/${userId}/${orderId}/cover.pdf`, `interior.pdf`.
- *      성공 시 orders UPDATE: cover_pdf_key, interior_pdf_key.
- *      실패 시 status='paid' 유지 — pdf_build_jobs 행 기준 관리자 재시도.
- *   5. 응답: { orderId, status, redirectUrl }.
+ *   1. requireActiveUser + orders 소유권 + status === "pending" + 자체 amount·tossOrderId 일치.
+ *   2. 이미 이 paymentKey 로 선점된 주문(바인딩된 재시도)이면 토스 결제를 먼저 조회 — 이전 시도가
+ *      캡처 뒤 중단됐다면(DONE) 캡처 없이 확정으로 수렴한다(DEBT-1). 조회 실패는 선점 유지 + 재확인
+ *      안내, 취소된 결제(CANCELED)는 승인을 재시도하지 않는다. 가격 재검증은 하지 않는다.
+ *   3. (첫 시도만) 결제 시점 재검증 — 현재 페이지 수·책 사이즈·표지 규격·할인으로 금액을 다시
+ *      계산해 주문 행과 다르면 캡처하지 않는다(DEBT-2). 같은 paymentKey 가 다른 주문에 묶였으면 거부.
+ *   4. 크레딧 선점 — 포인트 차감 + 할인 사용 기록을 캡처 **전**에 원자적으로(0033 RPC).
+ *      주문 간 동시 confirm 의 이중 사용을 구조적으로 막는다(SEC-7, DEBT-7).
+ *   5. 토스 승인 — Idempotency-Key(주문 id + paymentKey). ALREADY_PROCESSED 는 조회로 수렴,
+ *      캡처 여부를 모르는 실패(타임아웃 등)는 선점을 유지한 채 재시도 안내, 확실한 거절만 해제.
+ *   6. 응답 대조(paymentKey·orderId·금액·DONE) → pending→paid 조건부 클레임.
+ *   7. finalizePaidOrder — 부수효과(차감 확정·할인 기록·PDF 잡·퍼널·메일) 멱등 실행.
  *
- * 멱등성:
- *   - 동일 paymentKey 로 재호출 시 이미 paid 라면 기존 응답을 그대로 반환 (성공으로 간주).
- *   - 토스 confirm 은 동일 (paymentKey, orderId, amount) 조합에 대해 idempotent.
+ * 멱등성·복구:
+ *   - 이미 paid 인 주문 + 같은 paymentKey 재호출은 성공 응답 + finalize 복구 트리거.
+ *   - 클레임 DB 오류로 pending 에 남아도 이 페이지를 새로고침하거나 웹훅이 오면 2번 경로로 확정된다.
  */
 export async function POST(req: Request) {
   try {
@@ -66,35 +110,28 @@ export async function POST(req: Request) {
     const admin = createAdminSupabase();
 
     // 1) 소유권 + 상태 + amount 검증
-    const { data: order, error: orderErr } = await supabase
+    const { data: orderData, error: orderErr } = await supabase
       .from("orders")
       .select(
-        "id, project_id, user_id, qty, amount, address, status, toss_payment_key, toss_order_id, cover_pdf_key, interior_pdf_key, paid_at, discount_code_id, discount_amount, points_used, created_at, updated_at",
+        "id, project_id, user_id, qty, amount, status, toss_payment_key, toss_order_id, discount_code_id, discount_amount, points_used",
       )
       .eq("id", orderId)
       .maybeSingle();
     if (orderErr) return fail("ORDER_QUERY_FAILED", orderErr.message, 500);
+    const order = orderData as ConfirmOrderRow | null;
     if (!order) return fail("NOT_FOUND", "주문을 찾을 수 없습니다.", 404);
     if (order.user_id !== user.id) {
       return fail("FORBIDDEN", "해당 주문에 대한 권한이 없습니다.", 403);
     }
 
-    // 멱등 — 이미 결제된 주문 + 동일 paymentKey 면 정상 응답
+    // 멱등 — 이미 결제된 주문 + 동일 paymentKey 면 정상 응답(+ 빠진 부수효과 복구).
     if (order.status !== "pending") {
       if (
         order.toss_payment_key === paymentKey &&
         order.amount === amount &&
-        (order.status === "paid" ||
-          order.status === "in_production" ||
-          order.status === "shipped" ||
-          order.status === "delivered")
+        isPaidLikeStatus(order.status)
       ) {
-        return ok({
-          orderId: order.id,
-          status: order.status,
-          redirectUrl: `/order/${order.id}/success`,
-          idempotent: true,
-        });
+        return idempotentPaid(admin, order.id, order.status);
       }
       return fail(
         "ORDER_NOT_PENDING",
@@ -118,340 +155,491 @@ export async function POST(req: Request) {
         { expected: order.amount, received: amount },
       );
     }
+    if (order.toss_payment_key && order.toss_payment_key !== paymentKey) {
+      return fail(
+        "PAYMENT_KEY_CONFLICT",
+        "이 주문은 다른 결제로 진행 중입니다. 주문 내역을 확인해주세요.",
+        409,
+      );
+    }
 
-    // 1-1) 포인트 잔액 재확인 — 결제 캡처 **전**에 검증한다.
-    //    주문 생성(create)은 검증만 하고 홀드하지 않으므로, 다중 탭 동시 주문 등으로
-    //    같은 포인트를 이중 사용한 주문이 캡처까지 가는 것을 여기서 차단한다.
-    //    (캡처 후 아래 5번 차감까지의 ms 단위 TOCTOU 창은 잔존 — 감수,
-    //     차감 실패 시 관리자 보정 경로가 백스톱.)
-    if (order.points_used && order.points_used > 0) {
-      const { data: pts, error: ptsErr } = await admin
-        .from("user_points")
-        .select("balance")
-        .eq("user_id", order.user_id)
-        .maybeSingle();
-      if (ptsErr) return fail("POINTS_QUERY_FAILED", ptsErr.message, 500);
-      const balance = pts?.balance ?? 0;
-      if (balance < order.points_used) {
+    const expected: ExpectedPayment = { paymentKey, orderId: tossOrderId, amount };
+
+    if (order.toss_payment_key === paymentKey) {
+      // 2) 바인딩된 재시도 — 이전 시도가 이 paymentKey 로 선점·바인딩까지 갔다.
+      //    캡처됐는지 모르므로 **토스가 확실히 답하기 전에는 아무것도 되돌리지 않는다.**
+      //    가격 재검증(3)도 하지 않는다: 첫 시도가 바인딩 전에 이미 검증했고, 여기서 편집 드리프트나
+      //    일시적 DB 오류로 선점·바인딩을 풀면 이미 캡처된 결제가 크레딧·키 없는 pending 주문으로
+      //    떨어져 주문서 재사용 → 재결제(이중 과금) 경로가 열린다.
+      let prior: TossConfirmResponse | null = null;
+      try {
+        prior = await fetchTossPayment(paymentKey);
+      } catch (e) {
+        if (!isTossLookupNotFound(e)) {
+          console.warn("[payments/confirm] 바인딩된 결제 조회 실패 — 선점 유지", {
+            orderId: order.id,
+            tossCode: e instanceof TossError ? e.code : null,
+          });
+          return paymentStatusUnknown(
+            e instanceof TossError ? e.code : "TOSS_LOOKUP_FAILED",
+          );
+        }
+        // 404 — 승인된 결제가 없다. 아래 같은 멱등키 승인이 캡처하거나 확실히 거절한다.
+      }
+      if (prior) {
+        // DONE → 재캡처 없이 확정 · ABORTED/EXPIRED → 해제 · CANCELED → 승인 재시도 금지.
+        const resolved = await resolveTossPayment(admin, order, prior, expected);
+        if (resolved !== "awaiting_confirm") return resolved;
+      }
+    } else {
+      // 3) 결제 시점 재검증 (DEBT-2) — 아직 아무것도 잡지 않은 첫 시도에서만.
+      const pricingFailure = await checkPricingBasis(admin, order);
+      if (pricingFailure) return pricingFailure;
+
+      // 같은 paymentKey 가 이미 다른 주문에 묶여 있으면 바인딩하지 않는다 — 한 결제 키가 두 주문에
+      // 묶이면 웹훅의 키 조회가 다중 행 오류로 막히고(그 주문의 환불 처리 불가) 이 주문도 잠긴다.
+      const { data: holders, error: holdersErr } = await admin
+        .from("orders")
+        .select("id")
+        .eq("toss_payment_key", paymentKey)
+        .neq("id", order.id)
+        .limit(1);
+      if (holdersErr) return fail("ORDER_QUERY_FAILED", holdersErr.message, 500);
+      if ((holders ?? []).length > 0) {
         return fail(
-          "POINTS_INSUFFICIENT",
-          "포인트 잔액이 부족해 결제를 진행할 수 없습니다. 주문을 다시 생성해주세요.",
-          400,
-          { requested: order.points_used, balance },
+          "PAYMENT_KEY_CONFLICT",
+          "이미 다른 주문에 사용된 결제입니다. 주문 내역을 확인해주세요.",
+          409,
         );
       }
     }
 
-    // 1-2) 할인 코드 재확인 — 포인트와 같은 이유로 결제 캡처 **전**에 본다.
-    //    `discount_uses` 에는 unique(code_id, user_id) 가 있지만, 그 INSERT 는 캡처 **후**
-    //    (아래 6번)에 일어난다. 그래서 같은 코드로 pending 주문을 여러 개 만들어 두면
-    //    전부 할인된 금액으로 캡처되고, 두 번째부터는 23505 를 조용히 무시해
-    //    "할인은 N번 먹었는데 사용 기록은 1건" 이 된다 — 그만큼 금전 손실이다.
-    //    여기서 미리 막으면 캡처 자체가 일어나지 않는다.
-    //    (이 지점은 status === 'pending' 인 주문만 도달한다 — 위 멱등 분기가 재시도를
-    //     먼저 걸러낸다. 그래도 같은 주문의 기록은 방어적으로 제외한다.)
-    if (order.discount_code_id) {
-      const { count, error: duErr } = await admin
-        .from("discount_uses")
-        .select("id", { count: "exact", head: true })
-        .eq("code_id", order.discount_code_id)
-        .eq("user_id", order.user_id)
-        .neq("order_id", order.id);
-      if (duErr) return fail("DISCOUNT_QUERY_FAILED", duErr.message, 500);
-      if ((count ?? 0) > 0) {
+    // 4) 크레딧 선점 + paymentKey 바인딩 (캡처 전, 원자적)
+    const reservation = await reserveOrderCredits(admin, {
+      orderId: order.id,
+      paymentKey,
+      amount,
+      tossOrderId,
+    });
+    if (!reservation.ok) {
+      if (reservation.code === "NOT_PENDING") {
+        // 같은 결제의 동시 confirm·웹훅이 먼저 확정했다면 실패가 아니라 멱등 성공이다.
+        const paidStatus = await paidWithPaymentKey(admin, order.id, paymentKey);
+        if (paidStatus) return idempotentPaid(admin, order.id, paidStatus);
+      }
+      return reserveFailure(reservation);
+    }
+
+    // 5) 토스 결제 승인 (멱등키)
+    let tossRes: TossConfirmResponse;
+    try {
+      tossRes = await confirmTossPayment({
+        paymentKey,
+        orderId: tossOrderId,
+        amount,
+        idempotencyKey: buildConfirmIdempotencyKey(order.id, paymentKey),
+      });
+    } catch (e) {
+      if (!(e instanceof TossError)) throw e;
+      const kind = classifyTossConfirmError(e);
+      if (kind === "already_processed") {
+        const fetched = await fetchTossPayment(paymentKey).catch(() => null);
+        if (!fetched) return paymentStatusUnknown(e.code);
+        tossRes = fetched;
+      } else if (kind === "in_progress") {
+        return fail(
+          "PAYMENT_CONFIRM_IN_PROGRESS",
+          "결제 승인이 처리 중입니다. 잠시 후 이 페이지를 새로고침해주세요.",
+          409,
+          { tossCode: e.code },
+        );
+      } else if (kind === "outcome_unknown") {
+        // 캡처됐을 수 있다 — 선점을 유지한다. 새로고침(같은 멱등키) 또는 웹훅이 확정/해제로 수렴.
+        console.error("[payments/confirm] 토스 승인 결과 불명 — 선점 유지", {
+          orderId: order.id,
+          tossCode: e.code,
+        });
+        return paymentStatusUnknown(e.code, e.status >= 500 ? e.status : 502);
+      } else {
+        await releaseOrderCredits(admin, {
+          orderId: order.id,
+          paymentKey,
+          clearPaymentKey: true,
+        });
+        return fail("PAYMENT_VERIFY_FAILED", e.message, e.status, {
+          tossCode: e.code,
+        });
+      }
+    }
+
+    const resolved = await resolveTossPayment(admin, order, tossRes, expected);
+    if (resolved === "awaiting_confirm") {
+      // 승인 응답(또는 ALREADY_PROCESSED 뒤 조회)이 아직 승인 전 상태 — 선점 유지, 재확인 안내.
+      return paymentStatusUnknown(tossRes.status);
+    }
+    return resolved;
+  } catch (err) {
+    return failFromError(err);
+  }
+}
+
+/** 캡처 여부를 확인하지 못함 — 아무것도 되돌리지 않고 새로고침(같은 멱등키 재시도)을 안내. */
+function paymentStatusUnknown(tossCode: string, status = 502): NextResponse<ApiFail> {
+  return fail(
+    "PAYMENT_STATUS_UNKNOWN",
+    "결제 승인 결과를 확인하지 못했습니다. 잠시 후 이 페이지를 새로고침해주세요.",
+    status,
+    { tossCode },
+  );
+}
+
+/** 주문이 이 paymentKey 로 이미 확정(paid 계열)됐으면 그 상태, 아니면 null. */
+async function paidWithPaymentKey(
+  admin: Admin,
+  orderId: string,
+  paymentKey: string,
+): Promise<OrderStatus | null> {
+  const { data } = await admin
+    .from("orders")
+    .select("status, toss_payment_key")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (data && isPaidLikeStatus(data.status) && data.toss_payment_key === paymentKey) {
+    return data.status;
+  }
+  return null;
+}
+
+/** 이미 확정된 주문의 재호출 — 성공 응답 + 빠진 부수효과 복구 트리거. */
+async function idempotentPaid(
+  admin: Admin,
+  orderId: string,
+  status: OrderStatus,
+): Promise<NextResponse> {
+  const fin = await finalizePaidOrder(admin, orderId, {
+    claimed: false,
+    trigger: "confirm_retry",
+    sendEmail: enqueueEmail,
+  });
+  return ok({
+    orderId,
+    status,
+    redirectUrl: `/order/${orderId}/success`,
+    idempotent: true,
+    pdfError: fin.pdfError,
+    pdfJobId: fin.pdfJobId,
+  });
+}
+
+/**
+ * 토스 결제(승인 응답 또는 조회) 해석 → 대조 → 클레임 → finalize.
+ *
+ *   - 다른 주문·다른 결제의 응답           → 선점·바인딩 해제 (이 주문을 캡처할 수 없는 결제)
+ *   - READY·IN_PROGRESS                   → "awaiting_confirm" (호출측이 승인 진행/재확인 안내)
+ *   - ABORTED·EXPIRED                     → 선점·바인딩 해제
+ *   - CANCELED                            → 선점 해제·키 유지, 승인 재시도 금지(관리자 확인)
+ *   - PARTIAL_CANCELED·WAITING_FOR_DEPOSIT → 아무것도 하지 않음(관리자 확인)
+ *   - DONE + 금액 불일치                   → 선점 해제·키 유지(캡처된 결제 추적)
+ *   - DONE                                → pending→paid 클레임 → finalizePaidOrder
+ */
+async function resolveTossPayment(
+  admin: Admin,
+  order: ConfirmOrderRow,
+  tossRes: TossConfirmResponse,
+  expected: ExpectedPayment,
+): Promise<NextResponse | "awaiting_confirm"> {
+  const mismatch = findTossPaymentMismatch(tossRes, expected);
+  if (mismatch.includes("paymentKey") || mismatch.includes("orderId")) {
+    // 다른 주문(또는 다른 결제)의 응답 — 이 주문의 토스 주문번호로는 캡처될 수 없는 결제다.
+    // 키를 남기면 한 결제 키가 두 주문에 묶이므로(웹훅 조회 다중 행) 바인딩까지 푼다.
+    console.error("[payments/confirm] 토스 결제가 이 주문의 결제가 아님 — 선점 해제", {
+      orderId: order.id,
+      fields: mismatch,
+      tossStatus: tossRes.status,
+    });
+    await releaseOrderCredits(admin, {
+      orderId: order.id,
+      paymentKey: expected.paymentKey,
+      clearPaymentKey: true,
+    });
+    return fail(
+      "TOSS_PAYMENT_MISMATCH",
+      "토스 결제 정보가 주문과 일치하지 않습니다.",
+      400,
+      { fields: mismatch },
+    );
+  }
+
+  switch (classifyTossPaymentStatus(tossRes.status)) {
+    case "awaiting_confirm":
+      return "awaiting_confirm";
+    case "not_captured":
+      await releaseOrderCredits(admin, {
+        orderId: order.id,
+        paymentKey: expected.paymentKey,
+        clearPaymentKey: true,
+      });
+      return fail(
+        "PAYMENT_NOT_DONE",
+        `토스 결제 상태가 정상이 아닙니다: ${tossRes.status}`,
+        400,
+        { tossStatus: tossRes.status },
+      );
+    case "canceled":
+      // 캡처 후 토스에서 취소된 결제(예: 클레임 실패로 pending 에 남은 주문을 운영자가 취소).
+      // 승인을 다시 부르면 멱등키가 첫 DONE 응답을 재생해 무과금 확정이 되므로 여기서 끝낸다.
+      // 돈이 전액 돌아갔으니 크레딧은 되돌리고, 키는 추적용으로 남긴다(같은 주문 재결제 방지).
+      console.error("[payments/confirm] 토스에서 취소된 결제 — 확정하지 않음, 관리자 확인 필요", {
+        orderId: order.id,
+      });
+      await releaseOrderCredits(admin, {
+        orderId: order.id,
+        paymentKey: expected.paymentKey,
+        clearPaymentKey: false,
+      });
+      return fail(
+        "PAYMENT_NOT_DONE",
+        "토스에서 취소된 결제라 주문을 확정하지 않았습니다. 주문 내역을 확인하거나 고객센터에 문의해주세요.",
+        400,
+        { tossStatus: tossRes.status },
+      );
+    case "needs_review":
+      console.error("[payments/confirm] 자동 처리할 수 없는 토스 결제 상태 — 관리자 확인 필요", {
+        orderId: order.id,
+        tossStatus: tossRes.status,
+      });
+      return fail(
+        "PAYMENT_NOT_DONE",
+        `토스 결제 상태가 정상이 아닙니다: ${tossRes.status}`,
+        400,
+        { tossStatus: tossRes.status },
+      );
+    case "captured":
+      break;
+  }
+
+  if (mismatch.includes("totalAmount")) {
+    console.error("[payments/confirm] 캡처된 결제 금액이 주문과 다름 — 관리자 확인 필요", {
+      orderId: order.id,
+      expectedAmount: expected.amount,
+      tossAmount: tossRes.totalAmount,
+    });
+    // 선점은 되돌리되 paymentKey 는 남긴다(캡처된 결제 추적 + 이 주문으로 재결제 방지).
+    await releaseOrderCredits(admin, {
+      orderId: order.id,
+      paymentKey: expected.paymentKey,
+      clearPaymentKey: false,
+    });
+    return fail(
+      "AMOUNT_MISMATCH",
+      "토스 응답의 결제 금액이 일치하지 않습니다.",
+      400,
+      { expected: expected.amount, toss: tossRes.totalAmount },
+    );
+  }
+
+  // pending → paid 조건부 클레임 — 동시 중복 confirm·웹훅 중 단 한 요청만 행을 잡는다.
+  // 금액·토스 주문번호·paymentKey 까지 조건에 넣어 그 사이 주문서 재사용 등으로 바뀐 행은 잡지 않는다.
+  assertTransition("pending", "paid");
+  const { data: claimed, error: upErr } = await admin
+    .from("orders")
+    .update({
+      status: "paid",
+      toss_payment_key: expected.paymentKey,
+      paid_at: new Date().toISOString(),
+    })
+    .eq("id", order.id)
+    .eq("status", "pending")
+    .eq("amount", expected.amount)
+    .eq("toss_order_id", expected.orderId)
+    .eq("toss_payment_key", expected.paymentKey)
+    .select("id")
+    .maybeSingle();
+  if (upErr) {
+    // 결제는 캡처됨 — 주문은 pending + paymentKey 바인딩 상태로 남아 새로고침·웹훅이 복구한다.
+    console.error("[payments/confirm] 캡처 후 주문 반영 실패", {
+      orderId: order.id,
+      message: upErr.message,
+    });
+    return fail(
+      "ORDER_UPDATE_FAILED",
+      "결제는 승인됐지만 주문 반영이 지연되고 있습니다. 잠시 후 이 페이지를 새로고침하면 자동으로 복구됩니다.",
+      500,
+    );
+  }
+  if (!claimed) {
+    // 다른 요청(동시 confirm·웹훅)이 먼저 확정했는지 확인.
+    const { data: current } = await admin
+      .from("orders")
+      .select("status, toss_payment_key")
+      .eq("id", order.id)
+      .maybeSingle();
+    if (
+      current &&
+      isPaidLikeStatus(current.status) &&
+      current.toss_payment_key === expected.paymentKey
+    ) {
+      return idempotentPaid(admin, order.id, current.status);
+    }
+    return fail(
+      "ORDER_NOT_PENDING",
+      "주문 상태가 바뀌어 결제를 확정하지 못했습니다. 주문 내역을 확인해주세요.",
+      409,
+      { status: current?.status ?? null },
+    );
+  }
+
+  const fin = await finalizePaidOrder(admin, order.id, {
+    claimed: true,
+    trigger: "confirm",
+    sendEmail: enqueueEmail,
+  });
+
+  return ok({
+    orderId: order.id,
+    status: "paid" as const,
+    redirectUrl: `/order/${order.id}/success`,
+    // PDF 는 백그라운드 빌드 — 응답 시점엔 결과를 모른다.
+    // enqueue 실패 시에만 pdfError 로 안내 (관리자 재처리 대상).
+    pdfError: fin.pdfError,
+    pdfJobId: fin.pdfJobId,
+  });
+}
+
+const PRICING_CHANGED_MESSAGE =
+  "주문서를 만든 뒤 책 구성(페이지 수·사이즈·할인)이 바뀌어 결제 금액이 달라졌어요. 주문서를 새로고침한 뒤 다시 결제해주세요.";
+
+/**
+ * 결제 시점 가격 기준 재검증 (DEBT-2).
+ *   orders/create 와 같은 규칙(quoteOrder·표지 규격 게이트)으로 현재 프로젝트를 다시 계산한다.
+ * @returns 캡처를 막아야 하면 fail 응답, 아니면 null.
+ */
+async function checkPricingBasis(
+  admin: Admin,
+  order: ConfirmOrderRow,
+): Promise<NextResponse<ApiFail> | null> {
+  const { data: project, error: projErr } = await admin
+    .from("projects")
+    .select("id, book_size_id, cover_json")
+    .eq("id", order.project_id)
+    .maybeSingle();
+  if (projErr) return fail("PROJECT_QUERY_FAILED", projErr.message, 500);
+  if (!project) return fail("ORDER_PRICING_CHANGED", PRICING_CHANGED_MESSAGE, 409);
+
+  const { count: pageCount, error: pagesErr } = await admin
+    .from("pages")
+    .select("id", { count: "exact", head: true })
+    .eq("project_id", order.project_id);
+  if (pagesErr) return fail("PAGES_QUERY_FAILED", pagesErr.message, 500);
+
+  const { data: bookSize, error: sizeErr } = await admin
+    .from("book_sizes")
+    .select("id, name, cover_width_mm, cover_height_mm, spine_formula_per_page")
+    .eq("id", project.book_size_id)
+    .maybeSingle();
+  if (sizeErr) return fail("BOOK_SIZE_QUERY_FAILED", sizeErr.message, 500);
+
+  const pages = pageCount ?? 0;
+  const stored = project.cover_json as unknown;
+  if (
+    !bookSize ||
+    pages === 0 ||
+    !stored ||
+    !isPageDoc(stored) ||
+    stored.layoutMode !== "cover"
+  ) {
+    return fail("ORDER_PRICING_CHANGED", PRICING_CHANGED_MESSAGE, 409, {
+      reason: !bookSize ? "book_size" : pages === 0 ? "no_pages" : "no_cover",
+    });
+  }
+
+  // 표지 규격 게이트 — orders/create 와 동일(페이지 수가 바뀌면 책등 폭도 바뀐다).
+  const expectedCover = calcCoverDimensions({ bookSize, pageCount: pages });
+  if (Math.abs(expectedCover.totalWidthMm - stored.widthMm) > 0.5) {
+    return fail(
+      "COVER_FORMAT_OUTDATED",
+      "표지 규격이 갱신되었어요. 표지 편집기에서 '새 규격으로 다시 만들기'를 실행한 뒤 다시 주문해주세요.",
+      409,
+    );
+  }
+
+  let discount: { type: "percent" | "amount"; value: number } | null = null;
+  if (order.discount_code_id) {
+    const { data: dc, error: dcErr } = await admin
+      .from("discount_codes")
+      .select("type, value")
+      .eq("id", order.discount_code_id)
+      .maybeSingle();
+    if (dcErr) return fail("DISCOUNT_QUERY_FAILED", dcErr.message, 500);
+    discount = dc ?? null;
+  }
+
+  const drift = detectOrderPricingDrift({
+    order,
+    bookSize: bookSize.name,
+    pageCount: pages,
+    discount,
+  });
+  if (drift) {
+    return fail("ORDER_PRICING_CHANGED", PRICING_CHANGED_MESSAGE, 409, drift);
+  }
+  return null;
+}
+
+/** 선점 실패 → 응답. 선점 실패는 아무것도 바꾸지 않았으므로 되돌릴 것이 없다. */
+function reserveFailure(
+  r: Extract<ReserveOrderCreditsResult, { ok: false }>,
+): NextResponse<ApiFail> {
+  switch (r.code) {
+    case "NOT_FOUND":
+      return fail("NOT_FOUND", "주문을 찾을 수 없습니다.", 404);
+    case "NOT_PENDING":
+      return fail(
+        "ORDER_NOT_PENDING",
+        `이미 처리된 주문입니다 (현재 상태: ${r.status ?? "unknown"}).`,
+        409,
+      );
+    case "ORDER_CHANGED":
+      return fail(
+        "ORDER_CHANGED",
+        "주문 정보가 바뀌었습니다. 주문서를 새로고침한 뒤 다시 결제해주세요.",
+        409,
+      );
+    case "PAYMENT_KEY_CONFLICT":
+      return fail(
+        "PAYMENT_KEY_CONFLICT",
+        "이 주문은 다른 결제로 진행 중입니다. 주문 내역을 확인해주세요.",
+        409,
+      );
+    case "POINTS_INSUFFICIENT":
+      return fail(
+        "POINTS_INSUFFICIENT",
+        "포인트 잔액이 부족해 결제를 진행할 수 없습니다. 주문을 다시 생성해주세요.",
+        400,
+        { requested: r.requested, balance: r.balance },
+      );
+    case "DISCOUNT_INVALID":
+      if (r.reason === "already_used") {
         return fail(
           "DISCOUNT_ALREADY_USED",
           "이미 사용한 할인 코드예요. 주문을 다시 만들어 주세요.",
           400,
         );
       }
-    }
-
-    // 2) 토스 결제 승인
-    let tossRes;
-    try {
-      tossRes = await confirmTossPayment({
-        paymentKey,
-        orderId: tossOrderId,
-        amount,
-      });
-    } catch (e) {
-      if (e instanceof TossError) {
-        return fail("PAYMENT_VERIFY_FAILED", e.message, e.status, {
-          tossCode: e.code,
-        });
-      }
-      throw e;
-    }
-
-    // 3) 토스 응답 amount 추가 검증
-    if (tossRes.totalAmount !== amount) {
       return fail(
-        "AMOUNT_MISMATCH",
-        "토스 응답의 결제 금액이 일치하지 않습니다.",
+        "DISCOUNT_INVALID",
+        `${r.reason ? reasonMessage(r.reason) : "사용할 수 없는 코드입니다."} 주문서를 새로고침해 할인 코드를 확인해주세요.`,
         400,
-        { expected: amount, toss: tossRes.totalAmount },
+        { reason: r.reason },
       );
-    }
-    // 정상 승인 상태 — DONE 만 허용
-    if (tossRes.status !== "DONE") {
+    case "CREDITS_STATE_INVALID":
       return fail(
-        "PAYMENT_NOT_DONE",
-        `토스 결제 상태가 정상이 아닙니다: ${tossRes.status}`,
-        400,
+        "CREDITS_STATE_INVALID",
+        "주문의 포인트·할인 상태를 확인할 수 없어 결제를 중단했습니다. 고객센터에 문의해주세요.",
+        409,
       );
-    }
-
-    // 4) orders 멱등 클레임 — pending → paid 를 **조건부 UPDATE** 로 선점.
-    //    동시 중복 confirm(더블클릭/재시도/탭 중복) 시 status='pending' 조건을 만족하는
-    //    단 한 요청만 행을 잡으며, 이후 포인트차감/할인마킹/추천보상/이메일 등 모든
-    //    side-effect 를 그 승자만 1회 실행한다(이중 차감/이중 보상 방지).
-    assertTransition("pending", "paid");
-    const { data: claimed, error: upErr } = await admin
-      .from("orders")
-      .update({
-        status: "paid",
-        toss_payment_key: paymentKey,
-        paid_at: new Date().toISOString(),
-      })
-      .eq("id", order.id)
-      .eq("status", "pending")
-      .select("id")
-      .maybeSingle();
-    if (upErr) {
-      return fail("ORDER_UPDATE_FAILED", upErr.message, 500);
-    }
-    if (!claimed) {
-      // 다른 요청이 먼저 선점함 — 멱등 응답(side-effect 재실행 금지).
-      return ok({
-        orderId: order.id,
-        status: "paid" as const,
-        redirectUrl: `/order/${order.id}/success`,
-        idempotent: true,
-      });
-    }
-
-    // 퍼널 계측: 결제 확정 (S1-2) — 클레임 승자에서만 1회 기록.
-    await trackFunnelEvent({
-      event: "order_paid",
-      userId: order.user_id,
-      projectId: order.project_id,
-      props: { orderId: order.id, amount: order.amount },
-    });
-
-    // 5) 포인트 차감 (atomic) — 클레임 승자만 1회 실행.
-    //    Toss 결제는 이미 성공했으므로 차감 실패 시에도 결제는 살린다 (관리자 보정).
-    if (order.points_used && order.points_used > 0) {
-      const { data: newBalance, error: dedErr } = await admin.rpc(
-        "deduct_user_points_v2",
-        {
-          p_user_id: order.user_id,
-          p_amount: order.points_used,
-          p_reason: "order_use",
-          p_ref_type: "orders",
-          p_ref_id: order.id,
-          p_memo: `주문 ${order.id.slice(0, 8)} 결제 시 포인트 사용`,
-        },
-      );
-      if (dedErr) {
-        console.warn(
-          "[payments/confirm] deduct_user_points_v2 호출 실패:",
-          dedErr.message,
-        );
-      } else if (typeof newBalance === "number" && newBalance < 0) {
-        // 잔액 부족이지만 결제는 이미 성공 — 0 으로 표시(충전 0원) + 경고
-        console.warn(
-          "[payments/confirm] 포인트 잔액 부족이나 결제는 진행됨",
-          { orderId: order.id, requested: order.points_used },
-        );
-      }
-    }
-
-    // projects.status = 'ordered' 로 마킹 (선택 — 사용자 마이페이지 표시용).
-    await admin
-      .from("projects")
-      .update({ status: "ordered" })
-      .eq("id", order.project_id);
-
-    // 5-1) 친구 추천 보상 (M16-4) — 결제가 paid 로 확정된 클레임 승자에서 1회 호출.
-    //   '첫 결제' 카운트 가드는 제거한다: 이미 결제 이력이 있는 사용자에게 뒤늦게
-    //   pending referral 이 생긴 엣지(재로그인/쿠키 지연 등)에서 보상이 영구 누락되던
-    //   문제를 막기 위함. award_referral_reward_v2 는 referee 의 pending referral 1건만
-    //   잡아 1회 rewarded 로 전이시키므로(없으면 null), 매 결제 호출해도 중복 지급이 없다.
-    //   조건부 클레임(4) 승자에서만 실행되므로 동일 주문의 중복 confirm 으로도 재호출되지 않는다.
-    //   실패해도 결제는 살림.
-    try {
-      const { data: referrerId, error: rwdErr } = await admin.rpc(
-        "award_referral_reward_v2",
-        { p_referee_id: order.user_id, p_reward: REFERRAL_REWARD },
-      );
-      if (rwdErr) {
-        console.warn(
-          "[payments/confirm] award_referral_reward 실패:",
-          rwdErr.message,
-        );
-      } else if (referrerId) {
-        console.info(
-          `[payments/confirm] 추천 보상 +${REFERRAL_REWARD}P 지급`,
-          { referrerId, refereeId: order.user_id, orderId: order.id },
-        );
-      }
-    } catch (e) {
-      console.warn(
-        "[payments/confirm] 추천 보상 처리 예외:",
-        e instanceof Error ? e.message : String(e),
-      );
-    }
-
-    // 4-1) 할인 코드 사용 마킹 — 결제 성공 후에만 기록.
-    //   - discount_uses INSERT (UNIQUE(code_id, user_id) 로 중복 방지 — 멱등 호출 안전)
-    //   - discount_codes.used_count 증가는 atomic RPC(increment_discount_used)로
-    //     처리해 동시 결제 시 lost-update / 한도 초과를 방어한다.
-    //   실패해도 결제는 살림 (관리자 보정 가능). console.warn 로 추적.
-    if (order.discount_code_id) {
-      const { error: useErr } = await admin.from("discount_uses").insert({
-        code_id: order.discount_code_id,
-        user_id: order.user_id,
-        order_id: order.id,
-      });
-      if (useErr && (useErr as { code?: string }).code !== "23505") {
-        console.warn(
-          "[payments/confirm] discount_uses insert failed:",
-          useErr.message,
-        );
-      } else if (!useErr) {
-        // 신규 사용 기록 — used_count atomic 증가
-        const { error: incErr } = await admin.rpc("increment_discount_used", {
-          p_code_id: order.discount_code_id,
-        });
-        if (incErr) {
-          console.warn(
-            "[payments/confirm] increment_discount_used failed:",
-            incErr.message,
-          );
-        }
-      }
-    }
-
-    // 5) PDF 빌드 잡 — 영속 큐(pdf_build_jobs) 등록 후 **백그라운드 실행**.
-    //    - 등록만 동기로 하고 runPdfJob 은 waitUntil 로 분리 → confirm 응답은
-    //      빌드를 기다리지 않는다 (100p 사진북 빌드 수 분 → 기존 인라인 await 는
-    //      클라 타임아웃 + UX 블로킹 유발).
-    //    - 실패해도 결제는 살려둠. pdf_build_jobs 행이 남아 관리자가 재시도 가능
-    //      (admin orders 의 retry-pdf / rebuild-pdf).
-    let pdfJobId: string | null = null;
-    try {
-      const { jobId } = await enqueuePdfJob({
-        orderId: order.id,
-        projectId: order.project_id,
-        userId: order.user_id,
-        target: "all",
-      });
-      pdfJobId = jobId;
-      waitUntil(
-        runPdfJob(jobId, {
-          signUrls: false,
-          uploadPath: (key) => `${order.user_id}/${order.id}/${key}`,
-          meta: { author: "100p_books" },
-          onSuccess: async (r) => {
-            const patch = storigeOrderPatch(r, new Date().toISOString());
-            if (Object.keys(patch).length === 0) return;
-            // 실패 시 throw — job-runner 가 잡을 failed 로 남겨 재시도 가능하게.
-            const { error: upErr } = await admin
-              .from("orders")
-              .update(patch)
-              .eq("id", order.id);
-            if (upErr) {
-              throw new Error(`orders storige update failed: ${upErr.message}`);
-            }
-          },
-        }).catch((e) => {
-          console.error(
-            "[payments/confirm] background PDF build failed for order",
-            order.id,
-            e instanceof Error ? e.message : String(e),
-          );
-        }),
-      );
-    } catch (e) {
-      // enqueue 자체 실패 — 결제는 유지, 관리자 rebuild-pdf 로 복구.
-      console.error(
-        "[payments/confirm] PDF job enqueue failed for order",
-        order.id,
-        e instanceof Error ? e.message : String(e),
-      );
-    }
-
-    // 6) order.paid 이메일 enqueue — 실패해도 confirm 응답은 그대로 성공.
-    try {
-      const [{ data: profile }, { data: project }, { count: pageCount }] =
-        await Promise.all([
-          admin
-            .from("profiles")
-            .select("email, display_name")
-            .eq("id", order.user_id)
-            .maybeSingle(),
-          admin
-            .from("projects")
-            .select("title, book_size_id")
-            .eq("id", order.project_id)
-            .maybeSingle(),
-          admin
-            .from("pages")
-            .select("id", { count: "exact", head: true })
-            .eq("project_id", order.project_id),
-        ]);
-
-      const { data: bookSize } = project?.book_size_id
-        ? await admin
-            .from("book_sizes")
-            .select("name")
-            .eq("id", project.book_size_id)
-            .maybeSingle()
-        : { data: null };
-
-      const recipientEmail = profile?.email ?? user.email ?? "";
-      const addr = (order.address ?? {}) as { name?: string };
-      const customerName =
-        addr?.name ??
-        profile?.display_name ??
-        (recipientEmail ? recipientEmail.split("@")[0]! : "고객");
-
-      if (recipientEmail) {
-        await enqueueEmail({
-          template: "order.paid",
-          to: { email: recipientEmail, name: customerName },
-          context: {
-            kind: "order",
-            orderId: order.id,
-            tossOrderId: tossOrderId,
-            customerName,
-            bookSizeName: bookSize?.name ?? "포토북",
-            pageCount: pageCount ?? 0,
-            qty: order.qty,
-            amount: order.amount,
-          },
-          relatedType: "order",
-          relatedId: order.id,
-        });
-      }
-    } catch (e) {
-      console.warn(
-        "[payments/confirm] enqueue order.paid email failed:",
-        e instanceof Error ? e.message : String(e),
-      );
-    }
-
-    return ok({
-      orderId: order.id,
-      status: "paid" as const,
-      redirectUrl: `/order/${order.id}/success`,
-      // PDF 는 백그라운드 빌드 — 응답 시점엔 결과를 모른다.
-      // enqueue 실패 시에만 pdfError 로 안내 (관리자 재처리 대상).
-      pdfError: pdfJobId ? null : "PDF 작업 등록 실패",
-      pdfJobId,
-    });
-  } catch (err) {
-    return failFromError(err);
+    case "INVALID_ARGS":
+    default:
+      return fail("INVALID_BODY", "요청 본문이 올바르지 않습니다.", 400);
   }
 }

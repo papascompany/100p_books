@@ -5,13 +5,21 @@ import { z } from "zod";
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { createAdminSupabase } from "@/lib/db/admin";
 import type { OrderStatus } from "@/lib/db/types";
-import { restoreOrderCredits } from "@/lib/orders/refund";
+import { enqueueEmail } from "@/lib/email/queue";
+import { finalizePaidOrder, isPaidLikeStatus } from "@/lib/orders/finalize-paid";
+import { releaseOrderCredits, restoreOrderCredits } from "@/lib/orders/refund";
 import { canTransition } from "@/lib/orders/state";
-import { fetchTossPayment } from "@/lib/payments/toss";
+import {
+  classifyTossPaymentStatus,
+  fetchTossPayment,
+  findTossPaymentMismatch,
+} from "@/lib/payments/toss";
 import { enforceRateLimit } from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+// paid 전이 시 finalizePaidOrder 가 PDF 빌드를 waitUntil 백그라운드로 실행한다.
+export const maxDuration = 300;
 
 /**
  * 토스 웹훅 페이로드는 이벤트별로 약간씩 다른데, 결제 관련 이벤트에서는 공통적으로
@@ -61,8 +69,11 @@ function mapTossStatus(s: string | undefined | null): OrderStatus | null {
  * POST /api/payments/webhook
  *
  *   - 본문은 토스가 보낸 이벤트 — paymentKey/orderId/status 추출.
- *   - 진위 검증: paymentKey 로 토스 API 직접 조회 → totalAmount/status 비교.
+ *   - 진위 검증: paymentKey 로 토스 API 직접 조회 → paymentKey·orderId·totalAmount 대조(SEC-8).
  *   - 상태 전이 가능하면 orders 업데이트.
+ *     · pending → paid 클레임 승자, 또는 이미 paid 인 같은 결제 → finalizePaidOrder
+ *       (포인트 차감 확정·할인 기록·PDF 잡·퍼널·메일을 confirm 과 같은 함수로 멱등 실행).
+ *     · → refunded / cancelled 클레임 승자 → 실제로 잡힌 크레딧만 복원.
  *
  * ⚠️ 이 라우트는 **의도적으로 무인증**이다. 되돌리기 전에 아래를 읽을 것.
  *
@@ -75,12 +86,17 @@ function mapTossStatus(s: string | undefined | null): OrderStatus | null {
  *   이전 구현은 `x-webhook-secret` 헤더를 요구했는데, 그러면 미설정 시 500·설정 시 401 로
  *   **어느 쪽이든 토스 웹훅이 전량 거부**됐다(2026-08-07 실측·수정).
  *
- *   대신 진위는 아래 4겹으로 보장한다 — 위조 페이로드가 상태를 바꿀 수 없다:
+ *   대신 진위는 아래 겹으로 보장한다 — 위조 페이로드가 상태를 바꿀 수 없다:
  *     ① 우리 DB 에 있는 주문만 처리(없으면 200 ack)
  *     ② paymentKey 없으면 상태를 건드리지 않음
- *     ③ 토스 API 재조회로 totalAmount·status 확인 — 페이로드의 status 는 신뢰하지 않음
- *     ④ canTransition + 조건부 클레임(status 일치할 때만 UPDATE)
+ *     ③ 토스 API 재조회로 paymentKey·orderId·totalAmount·status 확인 — 페이로드의 status 는 신뢰하지 않음
+ *     ④ 주문에 다른 paymentKey 가 묶여 있으면 무시(같은 토스 주문번호의 다른 결제 시도)
+ *     ⑤ canTransition + 조건부 클레임(status 일치할 때만 UPDATE)
  *   남는 위험은 무인증 POST 폭주뿐이라 rate limit 으로 막는다.
+ *
+ *   응답 503 FINALIZE_IN_PROGRESS: 다른 요청(보통 confirm)이 부수효과를 실행 중이다. 토스는
+ *   200 이 아니면 웹훅을 재전송하므로, 그 요청이 중간에 죽었더라도 재전송 때 복구된다.
+ *   응답 503 FINALIZE_INCOMPLETE: 부수효과 일부가 일시 실패로 남았다 — 재전송 때 남은 것만 실행.
  */
 export async function POST(req: Request) {
   try {
@@ -121,11 +137,13 @@ export async function POST(req: Request) {
       points_used: number;
       discount_code_id: string | null;
     };
+    const columns =
+      "id, status, amount, toss_payment_key, toss_order_id, user_id, points_used, discount_code_id";
     let order: Row | null = null;
     if (paymentKey) {
       const { data, error: qErr } = await admin
         .from("orders")
-        .select("id, status, amount, toss_payment_key, toss_order_id, user_id, points_used, discount_code_id")
+        .select(columns)
         .eq("toss_payment_key", paymentKey)
         .maybeSingle();
       if (qErr) return fail("ORDER_QUERY_FAILED", qErr.message, 500);
@@ -134,7 +152,7 @@ export async function POST(req: Request) {
     if (!order && tossOrderId) {
       const { data, error: qErr } = await admin
         .from("orders")
-        .select("id, status, amount, toss_payment_key, toss_order_id, user_id, points_used, discount_code_id")
+        .select(columns)
         .eq("toss_order_id", tossOrderId)
         .maybeSingle();
       if (qErr) return fail("ORDER_QUERY_FAILED", qErr.message, 500);
@@ -163,28 +181,155 @@ export async function POST(req: Request) {
       return ok({ received: true, orderId: order.id, retry: true });
     }
 
-    if (tossRes.totalAmount !== order.amount) {
+    // SEC-8 — 재조회한 결제가 **이 주문의** 결제인지 대조한다.
+    //   금액만 같으면 다른 주문번호의 DONE 결제로 남의 pending 주문을 paid 로 만들 수 있었다.
+    const mismatch = findTossPaymentMismatch(tossRes, {
+      paymentKey,
+      orderId: order.toss_order_id,
+      amount: order.amount,
+    });
+    if (mismatch.includes("totalAmount")) {
       return fail("AMOUNT_MISMATCH", "웹훅 검증 — 결제 금액 불일치", 400);
+    }
+    if (mismatch.length > 0) {
+      console.warn("[payments/webhook] 토스 결제와 주문 불일치 — 전이 안 함", {
+        orderId: order.id,
+        fields: mismatch,
+      });
+      return fail("TOSS_ORDER_MISMATCH", "웹훅 검증 — 결제·주문 식별자 불일치", 400, {
+        fields: mismatch,
+      });
+    }
+    // 같은 토스 주문번호로 다른 결제 시도가 이 주문에 묶여 있다 — 그 시도의 상태를 덮어쓰지 않는다.
+    if (order.toss_payment_key && order.toss_payment_key !== paymentKey) {
+      return ok({
+        received: true,
+        orderId: order.id,
+        ignored: true,
+        reason: "payment key not bound to order",
+      });
     }
 
     const mapped = mapTossStatus(tossRes.status);
-    if (mapped && canTransition(order.status, mapped)) {
-      const patch: Record<string, unknown> = { status: mapped };
-      if (mapped === "paid") {
-        patch.paid_at = new Date().toISOString();
-        patch.toss_payment_key = paymentKey;
+
+    if (mapped === "paid") {
+      let claimedNow = false;
+      if (order.status === "pending") {
+        // 조건부 클레임 — confirm 과 동시에 와도 한 곳만 전이한다.
+        const { data: claimed, error: claimErr } = await admin
+          .from("orders")
+          .update({
+            status: "paid",
+            paid_at: new Date().toISOString(),
+            toss_payment_key: paymentKey,
+          })
+          .eq("id", order.id)
+          .eq("status", "pending")
+          .eq("amount", order.amount)
+          .eq("toss_order_id", tossRes.orderId)
+          .select("id")
+          .maybeSingle();
+        if (claimErr) return fail("ORDER_UPDATE_FAILED", claimErr.message, 500);
+        claimedNow = Boolean(claimed);
       }
+
+      if (!claimedNow) {
+        // 이미 paid(보통 confirm 이 먼저) 이거나 방금 다른 요청이 클레임 — 같은 결제일 때만 복구 트리거.
+        const { data: current, error: curErr } = await admin
+          .from("orders")
+          .select("status, toss_payment_key")
+          .eq("id", order.id)
+          .maybeSingle();
+        if (curErr) return fail("ORDER_QUERY_FAILED", curErr.message, 500);
+        if (
+          !current ||
+          !isPaidLikeStatus(current.status) ||
+          current.toss_payment_key !== paymentKey
+        ) {
+          // 토스는 승인(DONE)인데 우리 주문은 확정할 수 없는 상태(취소·재사용 등) — 수동 확인 대상.
+          console.warn("[payments/webhook] 토스 DONE 이지만 주문을 확정하지 않음", {
+            orderId: order.id,
+            status: current?.status ?? null,
+          });
+          return ok({ received: true, orderId: order.id, mapped, transitioned: false });
+        }
+      }
+
+      const fin = await finalizePaidOrder(admin, order.id, {
+        claimed: claimedNow,
+        trigger: "webhook",
+        sendEmail: enqueueEmail,
+      });
+      if (fin.outcome === "skipped" && fin.skipReason === "in_progress") {
+        return fail(
+          "FINALIZE_IN_PROGRESS",
+          "결제 확정 후처리가 진행 중입니다 — 재전송 시 다시 확인합니다.",
+          503,
+        );
+      }
+      // 일시 실패가 남았거나(PDF 잡·메일·원장 조회 등) 주문·리스 조회 자체가 실패 — 200 이면 토스가
+      // 재전송하지 않아 복구가 사용자의 새로고침에만 의존한다. 503 으로 재전송을 유도한다.
+      if (
+        fin.outcome === "incomplete" ||
+        (fin.outcome === "skipped" && fin.skipReason === "load_failed")
+      ) {
+        return fail(
+          "FINALIZE_INCOMPLETE",
+          "결제 확정 후처리가 끝나지 않았습니다 — 재전송 시 남은 작업을 다시 실행합니다.",
+          503,
+          { retryable: fin.retryable, skipReason: fin.skipReason ?? null },
+        );
+      }
+      return ok({
+        received: true,
+        orderId: order.id,
+        mapped,
+        transitioned: claimedNow,
+        finalize: fin.outcome,
+      });
+    }
+
+    // 캡처 후 토스에서 전액 취소됐는데 우리 주문은 아직 pending(클레임 실패 등으로 확정 전) —
+    // pending→refunded 전이는 없으므로 상태는 두고, 선점된 크레딧만 되돌린다(키는 추적용으로 유지).
+    if (
+      order.status === "pending" &&
+      order.toss_payment_key === paymentKey &&
+      classifyTossPaymentStatus(tossRes.status) === "canceled"
+    ) {
+      const released = await releaseOrderCredits(admin, {
+        orderId: order.id,
+        paymentKey,
+        clearPaymentKey: false,
+      });
+      if (!released.ok && released.code === "RELEASE_FAILED") {
+        return fail("CREDITS_RELEASE_FAILED", "크레딧 해제 실패 — 재전송 시 다시 시도합니다.", 500);
+      }
+      console.error("[payments/webhook] 확정 전 pending 주문의 결제가 토스에서 취소됨 — 관리자 확인 필요", {
+        orderId: order.id,
+        creditsReleased: released.ok,
+      });
+      return ok({
+        received: true,
+        orderId: order.id,
+        mapped,
+        transitioned: false,
+        creditsReleased: released.ok,
+      });
+    }
+
+    if (mapped && canTransition(order.status, mapped)) {
       // 조건부 클레임 — status=현재값 일 때만 전이. 동시 중복 웹훅이 같은 전이를
       // 두 번 적용해 환불 복원이 이중 실행되는 것을 막는다.
       const { data: claimed } = await admin
         .from("orders")
-        .update(patch)
+        .update({ status: mapped })
         .eq("id", order.id)
         .eq("status", order.status)
         .select("id")
         .maybeSingle();
-      // 환불 전이 클레임 승자만 사용 포인트 + 할인 복원 (1회).
-      if (claimed && mapped === "refunded") {
+      // 환불·취소 전이 클레임 승자만 크레딧 복원 — 실제로 잡혀 있던 것만 되돌린다
+      // (pending 에서 선점 후 결제가 만료·중단된 주문 포함).
+      if (claimed && (mapped === "refunded" || mapped === "cancelled")) {
         await restoreOrderCredits(admin, {
           id: order.id,
           user_id: order.user_id,
@@ -192,6 +337,7 @@ export async function POST(req: Request) {
           discount_code_id: order.discount_code_id,
         });
       }
+      return ok({ received: true, orderId: order.id, mapped, transitioned: Boolean(claimed) });
     }
     return ok({ received: true, orderId: order.id, mapped });
   } catch (err) {

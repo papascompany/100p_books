@@ -12,6 +12,9 @@
  * (관리자 페이지에서 향후 조정 가능하도록 DB 테이블로 이전 예정 — 본 단계는 상수.)
  */
 
+import type { DiscountCode } from "@/lib/db/types";
+import { computeDiscountAmount } from "@/lib/discounts/amount";
+
 /** 책 사이즈별 단가 (KRW) — book_sizes.name 기반 매칭. */
 export const BASE_PRICE_BY_SIZE: Record<string, number> = {
   A5: 18000,
@@ -137,4 +140,106 @@ export function clampPointsForMinPayment(
     ) * POINTS_UNIT;
   const pointsUsed = Math.min(requested, cap);
   return { pointsUsed, finalAmount: subtotalAfterDiscount - pointsUsed };
+}
+
+export interface QuoteOrderArgs {
+  /** book_sizes.name. */
+  bookSize: string;
+  /** 내지 페이지 수. */
+  pageCount: number;
+  /** 1~10. */
+  qty: number;
+  /** 적용할 할인 코드 정책 (null = 미적용). 유효성(active·만료·한도)은 호출측 책임. */
+  discount: Pick<DiscountCode, "type" | "value"> | null;
+  /** 사용 요청 포인트 (1P = 1원). */
+  requestedPoints: number;
+}
+
+export interface OrderQuote {
+  breakdown: CalcOrderAmountResult;
+  /** 할인 코드 차감액 (KRW). */
+  discountAmount: number;
+  /** 클램프 반영 후 실제 사용 포인트. */
+  pointsUsed: number;
+  /** 최종 결제 금액 (KRW). */
+  finalAmount: number;
+}
+
+/**
+ * 주문 금액 정본 — 주문 생성(orders/create)과 결제 시점 재검증(payments/confirm)이
+ * **같은 함수**로 계산해야 "생성 때와 결제 때 금액 규칙이 다르다"는 드리프트가 없다.
+ *
+ *   breakdown    = calcOrderAmount(책 사이즈·페이지 수·수량)
+ *   discount     = computeDiscountAmount(code, breakdown.total)
+ *   points/final = clampPointsForMinPayment(...)
+ */
+export function quoteOrder(args: QuoteOrderArgs): OrderQuote {
+  const breakdown = calcOrderAmount({
+    bookSize: args.bookSize,
+    pageCount: args.pageCount,
+    qty: args.qty,
+  });
+  const discountAmount = args.discount
+    ? computeDiscountAmount(args.discount, breakdown.total)
+    : 0;
+  const { pointsUsed, finalAmount } = clampPointsForMinPayment({
+    subtotal: breakdown.total,
+    discountAmount,
+    requestedPoints: args.requestedPoints,
+  });
+  return { breakdown, discountAmount, pointsUsed, finalAmount };
+}
+
+/** 주문 행에 저장된 가격 스냅샷 (orders 컬럼). */
+export interface StoredOrderPricing {
+  qty: number;
+  amount: number;
+  discount_amount: number;
+  points_used: number;
+}
+
+export type OrderPricingDriftField = "amount" | "discount_amount" | "points_used";
+
+export interface OrderPricingDrift {
+  fields: OrderPricingDriftField[];
+  expected: Record<OrderPricingDriftField, number>;
+  stored: Record<OrderPricingDriftField, number>;
+}
+
+/**
+ * 결제 시점 재검증 (DEBT-2) — 주문 생성 이후 페이지 수·책 사이즈·할인 정책이 바뀌어
+ * 현재 기준 금액이 주문 행과 달라졌는지 판정한다. 드리프트가 있으면 캡처하지 않는다.
+ *
+ * 포인트는 주문 행의 points_used 를 "요청값"으로 다시 클램프한다 — 페이지가 줄어
+ * 최소 결제 금액 확보 상한이 내려가면 points_used 도 달라져 드리프트로 잡힌다.
+ *
+ * @returns 드리프트 없으면 null.
+ */
+export function detectOrderPricingDrift(args: {
+  order: StoredOrderPricing;
+  bookSize: string;
+  pageCount: number;
+  discount: Pick<DiscountCode, "type" | "value"> | null;
+}): OrderPricingDrift | null {
+  const quote = quoteOrder({
+    bookSize: args.bookSize,
+    pageCount: args.pageCount,
+    qty: args.order.qty,
+    discount: args.discount,
+    requestedPoints: args.order.points_used,
+  });
+  const expected: Record<OrderPricingDriftField, number> = {
+    amount: quote.finalAmount,
+    discount_amount: quote.discountAmount,
+    points_used: quote.pointsUsed,
+  };
+  const stored: Record<OrderPricingDriftField, number> = {
+    amount: args.order.amount,
+    discount_amount: args.order.discount_amount,
+    points_used: args.order.points_used,
+  };
+  const fields = (Object.keys(expected) as OrderPricingDriftField[]).filter(
+    (k) => expected[k] !== stored[k],
+  );
+  return fields.length > 0 ? { fields, expected, stored } : null;
 }

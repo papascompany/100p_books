@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 
@@ -7,15 +8,16 @@ import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
-import type { BookSize, OrderAddress } from "@/lib/db/types";
+import type { BookSize, Database, DiscountCode, OrderAddress } from "@/lib/db/types";
 import { reasonMessage, validateDiscount } from "@/lib/discounts/validate";
 import { calcCoverDimensions } from "@/lib/layout/cover";
 import { isPageDoc } from "@/lib/layout/types";
 import {
   calcOrderAmount,
-  clampPointsForMinPayment,
   MIN_PAYMENT_AMOUNT,
+  quoteOrder,
 } from "@/lib/orders/pricing";
+import { sumHeldOrderPoints } from "@/lib/orders/refund";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -64,14 +66,23 @@ const BodySchema = z.object({
  *       amount: int (KRW),
  *       tossOrderId: string,        // 토스 식별자 (8자 short id)
  *       tossOrderName: string,      // "${bookSize.name} ${pageCount}p (수량 ${qty})"
- *       breakdown: { unit, surcharge, discount, total }
+ *       breakdown: { unit, surcharge, discount, total },
+ *       reused: boolean             // 기존 pending 주문을 갱신해 재사용했는가
  *     }
  *
  * 흐름:
  *   1. 인증 + 소유권.
  *   2. pages 카운트 + cover_json 존재 확인.
- *   3. book_sizes 로드 → calcOrderAmount.
- *   4. orders INSERT (status=pending, amount, address, toss_order_id).
+ *   3. book_sizes 로드 → quoteOrder (결제 confirm 의 재검증과 같은 함수).
+ *   4. 같은 사용자·프로젝트의 재사용 가능한 pending 주문이 있으면 갱신, 없으면 INSERT.
+ *
+ * 재사용 (DEBT-6 일부):
+ *   결제창을 닫고 다시 "결제하기" 를 누를 때마다 pending 주문이 새로 쌓이던 문제.
+ *   이전 주문을 cancelled 로 정리하지 않고 **갱신해 재사용**한다 — cancelled 주문이 생기면
+ *   프로젝트 삭제가 FK 로 부분 실패하는 DEBT-9 를 자주 밟게 되기 때문이다.
+ *   재사용 조건: pending + paymentKey 미바인딩(결제 승인 시도 전) + 크레딧이 잡혀 있지 않음.
+ *   toss_order_id 는 새로 발급한다 — 이전 결제창(같은 주문번호)이 뒤늦게 승인을 시도해도
+ *   confirm 의 주문번호 대조에서 캡처 전에 막힌다.
  */
 export async function POST(req: Request) {
   try {
@@ -160,8 +171,7 @@ export async function POST(req: Request) {
 
     // 3-1) 할인 코드 (선택) — 서버에서 재검증 + 금액 재계산
     const admin = createAdminSupabase();
-    let discountCodeId: string | null = null;
-    let discountAmount = 0;
+    let discountCodeRow: DiscountCode | null = null;
     if (discountCode) {
       const dv = await validateDiscount({
         supabase: admin,
@@ -177,12 +187,12 @@ export async function POST(req: Request) {
           { reason: dv.reason },
         );
       }
-      discountCodeId = dv.code.id;
-      discountAmount = dv.discountAmount;
+      discountCodeRow = dv.code;
     }
+    const discountCodeId = discountCodeRow?.id ?? null;
 
     // 3-2) 포인트 사용 (선택) — 잔액 검증.
-    //   실제 차감은 결제 confirm 시점에 deduct_user_points 로 atomic 처리.
+    //   실제 차감은 결제 confirm 이 캡처 **전**에 reserve_order_credits 로 원자 선점한다.
     //   여기서는 검증만 + 주문 amount 산정.
     if (usePoints && usePoints > 0) {
       const { data: pts, error: ptsErr } = await admin
@@ -204,12 +214,15 @@ export async function POST(req: Request) {
       }
     }
 
-    // 사용 포인트·최종 금액 정본 — 클라이언트(OrderForm)와 동일한
-    // clampPointsForMinPayment 하나로 계산 (100P 단위 내림 + 토스 최소
-    // 결제 금액 100원 확보). 표시 금액과 주문 금액이 항상 일치한다.
-    const { pointsUsed, finalAmount } = clampPointsForMinPayment({
-      subtotal: breakdown.total,
-      discountAmount,
+    // 사용 포인트·최종 금액 정본 — quoteOrder 하나로 계산한다.
+    //   클라이언트(OrderForm)와 같은 clampPointsForMinPayment(100P 단위 내림 + 토스 최소
+    //   결제 금액 100원 확보)를 쓰고, 결제 confirm 의 재검증(detectOrderPricingDrift)도
+    //   같은 함수라 생성 시점과 결제 시점의 금액 규칙이 갈라지지 않는다.
+    const { discountAmount, pointsUsed, finalAmount } = quoteOrder({
+      bookSize: bookSize.name,
+      pageCount: pages,
+      qty,
+      discount: discountCodeRow,
       requestedPoints: usePoints ?? 0,
     });
 
@@ -225,27 +238,56 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4) orders INSERT (service_role 필요 — RLS 정책상 사용자 INSERT 불가)
+    // 4) orders 재사용 또는 INSERT (service_role 필요 — RLS 정책상 사용자 INSERT 불가)
     const tossOrderId = `100p-${nanoid(8)}`;
     const tossOrderName = `${bookSize.name} ${pages}p (수량 ${qty})`;
+    const orderValues = {
+      qty,
+      amount: finalAmount,
+      address: address as OrderAddress,
+      toss_order_id: tossOrderId,
+      discount_code_id: discountCodeId,
+      discount_amount: discountAmount,
+      points_used: pointsUsed,
+    };
+    const respond = (
+      row: { id: string; amount: number; toss_order_id: string | null },
+      reused: boolean,
+    ) =>
+      ok({
+        orderId: row.id,
+        amount: row.amount,
+        tossOrderId: row.toss_order_id,
+        tossOrderName,
+        breakdown,
+        discount: discountCodeId
+          ? {
+              codeId: discountCodeId,
+              amount: discountAmount,
+            }
+          : null,
+        pointsUsed,
+        reused,
+      });
+
+    const reused = await reuseAbandonedPendingOrder(admin, {
+      userId: user.id,
+      projectId,
+      values: orderValues,
+    });
+    if (reused) return respond(reused, true);
 
     const { data: inserted, error: insErr } = await admin
       .from("orders")
       .insert({
         project_id: projectId,
         user_id: user.id,
-        qty,
-        amount: finalAmount,
-        address: address as OrderAddress,
+        ...orderValues,
         status: "pending",
-        toss_order_id: tossOrderId,
         toss_payment_key: null,
         cover_pdf_key: null,
         interior_pdf_key: null,
         paid_at: null,
-        discount_code_id: discountCodeId,
-        discount_amount: discountAmount,
-        points_used: pointsUsed,
       })
       .select("id, amount, toss_order_id, created_at")
       .single();
@@ -257,21 +299,79 @@ export async function POST(req: Request) {
       );
     }
 
-    return ok({
-      orderId: inserted.id,
-      amount: inserted.amount,
-      tossOrderId: inserted.toss_order_id,
-      tossOrderName,
-      breakdown,
-      discount: discountCodeId
-        ? {
-            codeId: discountCodeId,
-            amount: discountAmount,
-          }
-        : null,
-      pointsUsed,
-    });
+    return respond(inserted, false);
   } catch (err) {
     return failFromError(err);
+  }
+}
+
+type Admin = SupabaseClient<Database>;
+
+interface ReusableOrderValues {
+  qty: number;
+  amount: number;
+  address: OrderAddress;
+  toss_order_id: string;
+  discount_code_id: string | null;
+  discount_amount: number;
+  points_used: number;
+}
+
+/**
+ * 같은 사용자·프로젝트의 "결제창에서 이탈한" pending 주문을 새 주문서 값으로 갱신해 재사용.
+ *
+ *   - paymentKey 가 묶인 주문은 결제 승인 시도가 진행 중이거나 캡처 뒤 복구 대기일 수 있어
+ *     절대 건드리지 않는다(confirm 이 캡처 전에 바인딩한다).
+ *   - 크레딧(원장 순액·할인 사용 기록)이 잡혀 있는 주문도 건너뛴다 — 금액을 바꾸면
+ *     reserve_order_credits 가 CREDITS_STATE_INVALID 로 결제를 영구히 막는다.
+ *   - 갱신은 updated_at 비교 후 교체(CAS)라 더블클릭 동시 요청 중 한쪽만 재사용하고,
+ *     진 쪽은 새 주문을 INSERT 한다(두 결제창이 서로의 주문번호를 덮지 않게).
+ *   - 조회·갱신 실패는 재사용만 포기하고 INSERT 로 진행한다(주문 자체를 막지 않음).
+ */
+async function reuseAbandonedPendingOrder(
+  admin: Admin,
+  args: { userId: string; projectId: string; values: ReusableOrderValues },
+): Promise<{ id: string; amount: number; toss_order_id: string | null } | null> {
+  try {
+    const { data: candidate, error } = await admin
+      .from("orders")
+      .select("id, updated_at")
+      .eq("user_id", args.userId)
+      .eq("project_id", args.projectId)
+      .eq("status", "pending")
+      .is("toss_payment_key", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !candidate) return null;
+
+    const [held, { count: uses, error: usesErr }] = await Promise.all([
+      sumHeldOrderPoints(admin, candidate.id),
+      admin
+        .from("discount_uses")
+        .select("id", { count: "exact", head: true })
+        .eq("order_id", candidate.id),
+    ]);
+    if (usesErr || held !== 0 || (uses ?? 0) > 0) return null;
+
+    // created_at 도 지금으로 — 재사용은 사실상 새 주문서다. 나이 기준으로 오래된 pending 을
+    // 정리하는 작업이 방금 결제창을 연 주문을 취소하지 않게 한다.
+    const { data: updated, error: upErr } = await admin
+      .from("orders")
+      .update({ ...args.values, created_at: new Date().toISOString() })
+      .eq("id", candidate.id)
+      .eq("status", "pending")
+      .is("toss_payment_key", null)
+      .eq("updated_at", candidate.updated_at)
+      .select("id, amount, toss_order_id")
+      .maybeSingle();
+    if (upErr || !updated) return null;
+    return updated;
+  } catch (e) {
+    console.warn(
+      "[orders/create] pending 주문 재사용 실패 — 새 주문으로 진행:",
+      e instanceof Error ? e.message : String(e),
+    );
+    return null;
   }
 }

@@ -17,6 +17,16 @@ export interface SuccessClientProps {
 
 type Phase = "confirming" | "success" | "failed";
 
+/**
+ * 결제는 승인됐을 수 있지만 결과 확정이 아직인 응답 — 같은 요청을 다시 보내면
+ * confirm 이 토스 조회·멱등키로 확정 또는 해제로 수렴한다(DEBT-1). 새로고침을 안내한다.
+ */
+const RETRYABLE_CONFIRM_CODES = new Set([
+  "PAYMENT_STATUS_UNKNOWN",
+  "PAYMENT_CONFIRM_IN_PROGRESS",
+  "ORDER_UPDATE_FAILED",
+]);
+
 interface ConfirmResponse {
   ok: boolean;
   data?: {
@@ -39,6 +49,7 @@ interface ConfirmResponse {
 export default function SuccessClient(props: SuccessClientProps) {
   const [phase, setPhase] = useState<Phase>("confirming");
   const [error, setError] = useState<string | null>(null);
+  const [retryable, setRetryable] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const calledRef = useRef(false);
 
@@ -60,6 +71,7 @@ export default function SuccessClient(props: SuccessClientProps) {
         });
         const json = (await res.json()) as ConfirmResponse;
         if (!res.ok || !json.ok || !json.data) {
+          setRetryable(RETRYABLE_CONFIRM_CODES.has(json.error?.code ?? ""));
           throw new Error(json.error?.message ?? "결제 확정 실패");
         }
         setPhase("success");
@@ -105,9 +117,15 @@ export default function SuccessClient(props: SuccessClientProps) {
           결제가 이미 처리되었다면 마이페이지에서 확인할 수 있습니다.
         </p>
         <div className="mt-5 flex justify-center gap-2">
-          <Button asChild variant="outline">
-            <Link href={`/order/${props.projectId}`}>다시 시도</Link>
-          </Button>
+          {retryable ? (
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              결제 결과 다시 확인
+            </Button>
+          ) : (
+            <Button asChild variant="outline">
+              <Link href={`/order/${props.projectId}`}>다시 시도</Link>
+            </Button>
+          )}
           <Button asChild variant="coral">
             <Link href="/mypage/orders">주문 내역</Link>
           </Button>

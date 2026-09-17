@@ -4,6 +4,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database, DiscountCode } from "@/lib/db/types";
 
+import { checkDiscountCodeState, computeDiscountAmount } from "./amount";
+
+export { checkDiscountCodeState, computeDiscountAmount } from "./amount";
+
 /**
  * 할인 코드 검증.
  *
@@ -57,8 +61,9 @@ export function normalizeCode(code: string): string {
 /**
  * 코드 + (subtotal, userId) 검증. used_count 와 discount_uses 모두 확인.
  *
- * 호출측은 결제 confirm 직전에 한 번 더 호출하여 race condition 을 최소화한다.
- * (실제 사용 마킹은 결제 성공 후 별도 트랜잭션.)
+ * 주문 생성 시점 검증이다. 결제 시점에는 confirm 이 캡처 **전**에
+ * reserve_order_credits(0033) 로 같은 규칙(active·expires_at·max_uses·1인 1회)을
+ * 원자적으로 재검증하면서 사용 기록을 선점한다(미적용 환경은 refund.ts 의 폴백 사전검사).
  */
 export async function validateDiscount(
   args: ValidateDiscountArgs,
@@ -88,18 +93,8 @@ export async function validateDiscount(
 
   const dc: DiscountCode = row;
 
-  if (!dc.active) return { valid: false, reason: "inactive" };
-
-  if (dc.expires_at) {
-    const expiresAt = new Date(dc.expires_at).getTime();
-    if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
-      return { valid: false, reason: "expired" };
-    }
-  }
-
-  if (dc.max_uses !== null && dc.used_count >= dc.max_uses) {
-    return { valid: false, reason: "limit_reached" };
-  }
+  const stateReason = checkDiscountCodeState(dc);
+  if (stateReason) return { valid: false, reason: stateReason };
 
   // 1인 1회 — discount_uses 확인.
   const { count: useCount, error: useErr } = await args.supabase
@@ -129,24 +124,6 @@ export async function validateDiscount(
   }
 
   return { valid: true, code: dc, discountAmount };
-}
-
-/**
- * 코드 정책 + subtotal 로 실제 할인 금액 계산. (KRW 정수, subtotal 캡)
- */
-export function computeDiscountAmount(
-  code: Pick<DiscountCode, "type" | "value">,
-  subtotal: number,
-): number {
-  const safeSubtotal = Math.max(0, Math.floor(subtotal));
-  if (safeSubtotal <= 0) return 0;
-  if (code.type === "percent") {
-    const ratio = Math.max(0, Math.min(100, Number(code.value))) / 100;
-    return Math.min(safeSubtotal, Math.round(safeSubtotal * ratio));
-  }
-  // amount
-  const v = Math.max(0, Math.floor(Number(code.value)));
-  return Math.min(safeSubtotal, v);
 }
 
 /**

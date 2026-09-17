@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   calcOrderAmount,
   clampPointsForMinPayment,
+  detectOrderPricingDrift,
   MIN_PAYMENT_AMOUNT,
   POINTS_UNIT,
+  quoteOrder,
 } from "./pricing";
 
 describe("calcOrderAmount — 단가", () => {
@@ -215,5 +217,161 @@ describe("clampPointsForMinPayment — 토스 최소 결제 금액 확보", () =
         }
       }
     }
+  });
+});
+
+describe("quoteOrder — 주문 생성·결제 재검증 공용 정본", () => {
+  it("calcOrderAmount → 할인 → 포인트 클램프 체인과 같은 결과", () => {
+    const q = quoteOrder({
+      bookSize: "A5",
+      pageCount: 80,
+      qty: 2,
+      discount: { type: "percent", value: 10 },
+      requestedPoints: 2550,
+    });
+    const b = calcOrderAmount({ bookSize: "A5", pageCount: 80, qty: 2 });
+    const discountAmount = Math.round(b.total * 0.1);
+    const c = clampPointsForMinPayment({
+      subtotal: b.total,
+      discountAmount,
+      requestedPoints: 2550,
+    });
+    expect(q.breakdown).toEqual(b);
+    expect(q.discountAmount).toBe(discountAmount);
+    expect(q.pointsUsed).toBe(c.pointsUsed);
+    expect(q.pointsUsed).toBe(2500);
+    expect(q.finalAmount).toBe(c.finalAmount);
+  });
+
+  it("할인 없음 → discountAmount 0", () => {
+    const q = quoteOrder({
+      bookSize: "A5",
+      pageCount: 50,
+      qty: 1,
+      discount: null,
+      requestedPoints: 0,
+    });
+    expect(q.discountAmount).toBe(0);
+    expect(q.finalAmount).toBe(18000);
+  });
+});
+
+describe("detectOrderPricingDrift — 결제 시점 재검증 (DEBT-2)", () => {
+  /** 주문 생성 시점 스냅샷 (orders 행). */
+  function storedFor(args: {
+    bookSize: string;
+    pageCount: number;
+    qty: number;
+    discount: { type: "percent" | "amount"; value: number } | null;
+    requestedPoints: number;
+  }) {
+    const q = quoteOrder(args);
+    return {
+      qty: args.qty,
+      amount: q.finalAmount,
+      discount_amount: q.discountAmount,
+      points_used: q.pointsUsed,
+    };
+  }
+
+  it("생성 이후 바뀐 것이 없으면 null", () => {
+    const order = storedFor({
+      bookSize: "A5",
+      pageCount: 60,
+      qty: 1,
+      discount: { type: "amount", value: 3000 },
+      requestedPoints: 1000,
+    });
+    expect(
+      detectOrderPricingDrift({
+        order,
+        bookSize: "A5",
+        pageCount: 60,
+        discount: { type: "amount", value: 3000 },
+      }),
+    ).toBeNull();
+  });
+
+  it("결제 전 페이지 추가(50p 초과 surcharge) → amount 드리프트", () => {
+    const order = storedFor({
+      bookSize: "A5",
+      pageCount: 50,
+      qty: 1,
+      discount: null,
+      requestedPoints: 0,
+    });
+    const drift = detectOrderPricingDrift({
+      order,
+      bookSize: "A5",
+      pageCount: 70,
+      discount: null,
+    });
+    expect(drift?.fields).toEqual(["amount"]);
+    expect(drift?.expected.amount).toBe(18000 + 20 * 200);
+    expect(drift?.stored.amount).toBe(18000);
+  });
+
+  it("책 사이즈 변경 → 드리프트", () => {
+    const order = storedFor({
+      bookSize: "A5",
+      pageCount: 50,
+      qty: 1,
+      discount: null,
+      requestedPoints: 0,
+    });
+    expect(
+      detectOrderPricingDrift({ order, bookSize: "20×20cm", pageCount: 50, discount: null })
+        ?.fields,
+    ).toContain("amount");
+  });
+
+  it("퍼센트 할인 코드 값이 바뀌면 discount_amount·amount 드리프트", () => {
+    const order = storedFor({
+      bookSize: "A5",
+      pageCount: 50,
+      qty: 1,
+      discount: { type: "percent", value: 10 },
+      requestedPoints: 0,
+    });
+    const drift = detectOrderPricingDrift({
+      order,
+      bookSize: "A5",
+      pageCount: 50,
+      discount: { type: "percent", value: 20 },
+    });
+    expect(drift?.fields).toEqual(["amount", "discount_amount"]);
+  });
+
+  it("할인 코드가 삭제돼 적용할 수 없으면 드리프트(할인 금액 0 기준)", () => {
+    const order = storedFor({
+      bookSize: "A5",
+      pageCount: 50,
+      qty: 1,
+      discount: { type: "amount", value: 3000 },
+      requestedPoints: 0,
+    });
+    expect(
+      detectOrderPricingDrift({ order, bookSize: "A5", pageCount: 50, discount: null })?.fields,
+    ).toEqual(["amount", "discount_amount"]);
+  });
+
+  it("더 작은 사이즈로 바뀌어 포인트 상한이 내려가면 points_used 도 드리프트", () => {
+    // 20×20cm 25000원 — 포인트 24900P 사용, 결제 100원
+    const order = storedFor({
+      bookSize: "20×20cm",
+      pageCount: 50,
+      qty: 1,
+      discount: null,
+      requestedPoints: 24900,
+    });
+    expect(order.amount).toBe(MIN_PAYMENT_AMOUNT);
+    const drift = detectOrderPricingDrift({
+      order,
+      bookSize: "A5",
+      pageCount: 50,
+      discount: null,
+    });
+    expect(drift?.fields).toEqual(["points_used"]);
+    expect(drift?.expected.points_used).toBe(17900);
   });
 });
