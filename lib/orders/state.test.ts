@@ -7,7 +7,10 @@ import {
   assertTransition,
   canDownloadPdfs,
   canTransition,
+  decideUserCancel,
+  hasPaymentKey,
   InvalidStateTransitionError,
+  isUserCancellable,
 } from "./state";
 
 const ALLOWED: Array<[OrderStatus, OrderStatus]> = [
@@ -101,5 +104,72 @@ describe("canDownloadPdfs", () => {
     expect(canDownloadPdfs("delivered")).toBe(true);
     expect(canDownloadPdfs("cancelled")).toBe(false);
     expect(canDownloadPdfs("refunded")).toBe(false);
+  });
+});
+
+describe("hasPaymentKey — DB 조건(toss_payment_key is null)과 같은 기준", () => {
+  it("null·undefined 만 '없음', 빈 문자열을 포함한 문자열은 '있음'(보수적)", () => {
+    expect(hasPaymentKey(null)).toBe(false);
+    expect(hasPaymentKey(undefined)).toBe(false);
+    expect(hasPaymentKey("")).toBe(true);
+    expect(hasPaymentKey("tgen_20260917abc")).toBe(true);
+  });
+});
+
+describe("isUserCancellable — 사용자 주문 취소 버튼 노출 (DEBT-6)", () => {
+  it("pending + 결제 키 없음만 true", () => {
+    expect(isUserCancellable("pending", null)).toBe(true);
+  });
+
+  it("pending 이어도 결제 키가 있으면 false — 토스 승인 반영 대기일 수 있음", () => {
+    expect(isUserCancellable("pending", "tgen_key")).toBe(false);
+    expect(isUserCancellable("pending", "")).toBe(false);
+  });
+
+  it("pending 외 모든 상태는 결제 키와 무관하게 false", () => {
+    for (const s of ALL_ORDER_STATUSES) {
+      if (s === "pending") continue;
+      expect(isUserCancellable(s, null)).toBe(false);
+      expect(isUserCancellable(s, "tgen_key")).toBe(false);
+    }
+  });
+});
+
+describe("decideUserCancel — POST /api/orders/[id]/cancel 판정", () => {
+  it("pending + 결제 키 없음 → cancel", () => {
+    expect(decideUserCancel({ status: "pending", toss_payment_key: null })).toEqual({
+      kind: "cancel",
+    });
+  });
+
+  it("이미 cancelled → already_cancelled (멱등 성공)", () => {
+    expect(decideUserCancel({ status: "cancelled", toss_payment_key: null })).toEqual({
+      kind: "already_cancelled",
+    });
+  });
+
+  it("pending + 결제 키 있음 → 409 PAYMENT_IN_PROGRESS", () => {
+    const d = decideUserCancel({ status: "pending", toss_payment_key: "tgen_key" });
+    expect(d).toMatchObject({ kind: "reject", status: 409, code: "PAYMENT_IN_PROGRESS" });
+  });
+
+  it("결제 이후 상태(paid~delivered·refunded)는 409 ORDER_NOT_CANCELLABLE", () => {
+    const after: OrderStatus[] = ["paid", "in_production", "shipped", "delivered", "refunded"];
+    for (const status of after) {
+      const d = decideUserCancel({ status, toss_payment_key: "tgen_key" });
+      expect(d, status).toMatchObject({
+        kind: "reject",
+        status: 409,
+        code: "ORDER_NOT_CANCELLABLE",
+      });
+    }
+  });
+
+  it("cancel 판정은 상태 머신의 pending → cancelled 허용과 일치", () => {
+    expect(canTransition("pending", "cancelled")).toBe(true);
+    for (const s of ALL_ORDER_STATUSES) {
+      const d = decideUserCancel({ status: s, toss_payment_key: null });
+      if (d.kind === "cancel") expect(canTransition(s, "cancelled")).toBe(true);
+    }
   });
 });

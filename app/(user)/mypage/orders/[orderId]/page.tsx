@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import CancelOrderButton from "../CancelOrderButton";
 import OrderPdfButtons from "./OrderPdfButtons";
 import { GiftDialog } from "@/components/orders/GiftDialog";
 import ReviewDialog from "@/components/reviews/ReviewDialog";
@@ -8,8 +9,11 @@ import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { createServerSupabase } from "@/lib/db/server";
 import type { OrderAddress, OrderStatus } from "@/lib/db/types";
+import { PENDING_ORDER_EXPIRY_HOURS } from "@/lib/orders/pending-expiry";
 import {
   canDownloadPdfs,
+  hasPaymentKey,
+  isUserCancellable,
   ORDER_STATUS_BADGE,
   ORDER_STATUS_LABEL,
 } from "@/lib/orders/state";
@@ -89,6 +93,11 @@ export default async function OrderDetailPage({ params }: PageProps) {
   const isReviewable =
     order.status === "shipped" || order.status === "delivered";
   const hasReview = (order.reviews?.length ?? 0) > 0;
+  // 결제 대기 주문 안내 (DEBT-6) — 결제 키가 없으면 취소 후보(서버가 토스 원장 확인 후 취소).
+  // awaitingApproval(pending + 결제 키)은 현재 결제 흐름에서 생기지 않는 데이터 이상에 대비한 방어 분기다.
+  const canCancel = isUserCancellable(order.status, order.toss_payment_key);
+  const awaitingApproval =
+    order.status === "pending" && hasPaymentKey(order.toss_payment_key);
 
   // PDF 다운로드 — 서버 프록시 경유 (Storige fileId 또는 레거시 키 존재 시).
   // 실제 인증/스트리밍은 /api/orders/:id/download/:kind 에서 수행.
@@ -131,6 +140,20 @@ export default async function OrderDetailPage({ params }: PageProps) {
           {ORDER_STATUS_LABEL[order.status]}
         </span>
       </header>
+
+      {canCancel ? (
+        <p className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+          결제가 확인되지 않은 주문이에요. 결제 내역이 없는 대기 주문은{" "}
+          {PENDING_ORDER_EXPIRY_HOURS}시간이 지나면 자동으로 취소되고, 지금 정리하려면 아래
+          &lsquo;주문 취소&rsquo;를 눌러 주세요. 결제를 마쳤는데 이 상태로 보이면 고객센터로 문의해
+          주세요.
+        </p>
+      ) : awaitingApproval ? (
+        <p className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+          결제 승인을 확인하고 있어요. 잠시 후 새로고침해 주시고, 계속 이 상태라면 고객센터로
+          문의해 주세요.
+        </p>
+      ) : null}
 
       <div className="mt-6 grid gap-6 md:grid-cols-2">
         {/* 주문 요약 */}
@@ -202,6 +225,13 @@ export default async function OrderDetailPage({ params }: PageProps) {
         <Button asChild variant="outline">
           <Link href={`/editor/${order.project_id}`}>프로젝트 보기</Link>
         </Button>
+        {canCancel ? (
+          <CancelOrderButton
+            orderId={order.id}
+            orderTitle={order.projects?.title}
+            size="default"
+          />
+        ) : null}
         {canDownloadPdfs(order.status) && (
           <GiftDialog orderId={order.id} />
         )}

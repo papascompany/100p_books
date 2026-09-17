@@ -30,6 +30,12 @@
     },
     "app/api/cron/storige-retention/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/cron/expire-pending-orders/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/reap-pdf-jobs/route.ts": {
+      "maxDuration": 60
     }
   },
   "crons": [
@@ -48,6 +54,14 @@
     {
       "path": "/api/cron/orphan-photos",
       "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron/expire-pending-orders",
+      "schedule": "30 * * * *"
+    },
+    {
+      "path": "/api/cron/reap-pdf-jobs",
+      "schedule": "*/10 * * * *"
     }
   ],
   "headers": [

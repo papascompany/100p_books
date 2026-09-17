@@ -1,12 +1,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import CancelOrderButton from "./CancelOrderButton";
 import ReviewDialog from "@/components/reviews/ReviewDialog";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { createServerSupabase } from "@/lib/db/server";
 import type { OrderStatus } from "@/lib/db/types";
-import { ORDER_STATUS_BADGE, ORDER_STATUS_LABEL } from "@/lib/orders/state";
+import {
+  isUserCancellable,
+  ORDER_STATUS_BADGE,
+  ORDER_STATUS_LABEL,
+} from "@/lib/orders/state";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -25,6 +30,7 @@ interface OrderRow {
   qty: number;
   amount: number;
   status: OrderStatus;
+  toss_payment_key: string | null;
   created_at: string;
   paid_at: string | null;
   project_id: string;
@@ -51,7 +57,7 @@ export default async function MyOrdersPage() {
   const { data, error } = await supabase
     .from("orders")
     .select(
-      "id, qty, amount, status, created_at, paid_at, project_id, projects(id, title, book_size_id, book_sizes(name))",
+      "id, qty, amount, status, toss_payment_key, created_at, paid_at, project_id, projects(id, title, book_size_id, book_sizes(name))",
     )
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
@@ -149,6 +155,10 @@ export default async function MyOrdersPage() {
                     <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
                       후기 작성 완료
                     </span>
+                  ) : null}
+                  {/* 결제 대기(결제 키 없음) 주문 — 결제창 이탈로 남은 주문을 직접 정리 (DEBT-6) */}
+                  {isUserCancellable(o.status, o.toss_payment_key) ? (
+                    <CancelOrderButton orderId={o.id} orderTitle={o.projects?.title} />
                   ) : null}
                   <Button asChild size="sm" variant="outline">
                     <Link href={`/mypage/orders/${o.id}`}>주문 상세</Link>

@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser, requireUser } from "@/lib/auth/session";
+import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 
 export const dynamic = "force-dynamic";
@@ -67,18 +68,24 @@ export async function GET(_req: Request, { params }: RouteCtx) {
 
 /**
  * DELETE /api/projects/[id]
- *   1. 소유권 검증
- *   2. cancelled 가 아닌 주문이 하나라도 있으면 삭제 거부 (데이터 보관 필요).
- *      pending(결제 진행 중) 도 포함 — 삭제 직후 confirm webhook 이 도착하면
- *      PDF 소스(pages/photos)가 사라져 인쇄 빌드가 영구 실패하는 레이스 방지.
- *   3. pages 하드 삭제 → photos 하드 삭제 → project 하드 삭제
+ *   1. requireActiveUser + 소유권 검증
+ *   2. 주문이 **하나라도**(상태 무관 — cancelled·refunded 포함) 연결돼 있으면 삭제 거부 (DEBT-9).
+ *      - orders.project_id 는 ON DELETE 절이 없는 FK(0001_init.sql)라 주문이 남은 프로젝트는
+ *        지울 수 없다. 예전에는 cancelled 를 통과시킨 뒤 pages·photos 를 먼저 지우고 projects 삭제가
+ *        FK 로 실패해, 사진·페이지만 영구 손실된 빈 프로젝트가 남았다.
+ *      - 주문 내역(전자상거래법 거래기록)과 그 인쇄 원본(pages·photos)은 함께 보존한다.
+ *      - pending(결제 진행 중)도 막는다 — 삭제 직후 confirm 이 paid 로 승격하면 PDF 소스가 사라진다.
+ *      - 판정은 service_role 로 한다: RLS 로 안 보이는 주문이 있어도 놓치지 않게.
+ *   3. projects 한 건만 DELETE — pages·photos·share_tokens·pdf_build_jobs 는 FK cascade 로
+ *      **같은 문장 안에서** 지워진다. 판정과 삭제 사이에 주문이 새로 붙으면 FK 위반(23503)으로
+ *      문장 전체가 실패해 자식 데이터도 남는다(부분 실패 없음) → 409 로 응답.
  *
- *   Storage 파일 삭제는 비동기 클린업 잡(별도 cron)에 위임.
+ *   Storage 파일 삭제는 비동기 클린업 잡(orphan-photos cron)에 위임.
  *   RLS 가 2차 방어선.
  */
 export async function DELETE(_req: Request, { params }: RouteCtx) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
     const supabase = createServerSupabase();
 
     // 소유권 확인
@@ -94,49 +101,50 @@ export async function DELETE(_req: Request, { params }: RouteCtx) {
       return fail("FORBIDDEN", "해당 프로젝트에 대한 권한이 없습니다.", 403);
     }
 
-    // cancelled 가 아닌 주문(pending 결제 진행 중 포함)이 연결되어 있으면 삭제 거부.
-    // pending 을 허용하면 삭제 직후 confirm webhook 이 주문을 paid 로 승격시킬 때
-    // PDF 소스(pages/photos)가 이미 사라져 인쇄 빌드가 영구 실패한다.
-    const { count: liveCount, error: ordErr } = await supabase
+    // 주문(상태 무관)이 연결돼 있으면 어떤 데이터도 지우기 전에 거부한다.
+    const admin = createAdminSupabase();
+    const { count: orderCount, error: ordErr } = await admin
       .from("orders")
       .select("id", { count: "exact", head: true })
-      .eq("project_id", params.id)
-      .neq("status", "cancelled");
+      .eq("project_id", params.id);
 
     if (ordErr) return fail("ORDER_QUERY_FAILED", ordErr.message, 500);
-    if ((liveCount ?? 0) > 0) {
-      return fail(
-        "HAS_ACTIVE_ORDERS",
-        "진행 중이거나 결제 완료된 주문이 있는 포토북은 삭제할 수 없습니다.",
-        409,
-      );
+    if ((orderCount ?? 0) > 0) {
+      return hasOrdersResponse(orderCount ?? 0);
     }
 
-    // pages 삭제
-    const { error: pagesErr } = await supabase
-      .from("pages")
-      .delete()
-      .eq("project_id", params.id);
-    if (pagesErr) return fail("PAGES_DELETE_FAILED", pagesErr.message, 500);
-
-    // photos 삭제 (storage 키는 별도 cron 처리)
-    const { error: photosErr } = await supabase
-      .from("photos")
-      .delete()
-      .eq("project_id", params.id);
-    if (photosErr) return fail("PHOTOS_DELETE_FAILED", photosErr.message, 500);
-
-    // project 삭제
-    const { error: projErr } = await supabase
+    // project 삭제 — 자식(pages·photos 등)은 FK cascade 로 같은 문장에서 원자적으로 지워진다.
+    const { data: deleted, error: projErr } = await supabase
       .from("projects")
       .delete()
-      .eq("id", params.id);
-    if (projErr) return fail("PROJECT_DELETE_FAILED", projErr.message, 500);
+      .eq("id", params.id)
+      .eq("user_id", user.id)
+      .select("id");
+    if (projErr) {
+      // 판정 직후 주문이 생긴 경합 — FK 가 문장 전체를 되돌렸으므로 아무것도 지워지지 않았다.
+      if (projErr.code === FK_VIOLATION) return hasOrdersResponse(null);
+      return fail("PROJECT_DELETE_FAILED", projErr.message, 500);
+    }
+    if (!deleted || deleted.length === 0) {
+      return fail("NOT_FOUND", "프로젝트를 찾을 수 없습니다.", 404);
+    }
 
     return ok({ deleted: true });
   } catch (err) {
     return failFromError(err);
   }
+}
+
+/** Postgres foreign_key_violation. */
+const FK_VIOLATION = "23503";
+
+function hasOrdersResponse(orderCount: number | null) {
+  return fail(
+    "HAS_ORDERS",
+    "주문 내역이 있는 포토북은 삭제할 수 없어요. 결제 대기·취소·환불된 주문을 포함해 주문 기록과 인쇄 원본을 보관해야 하기 때문이에요.",
+    409,
+    orderCount === null ? undefined : { orderCount },
+  );
 }
 
 /**
@@ -145,7 +153,8 @@ export async function DELETE(_req: Request, { params }: RouteCtx) {
  */
 export async function PATCH(req: Request, { params }: RouteCtx) {
   try {
-    const user = await requireUser();
+    // 탈퇴 가드 — 탈퇴 처리 중인 계정의 편집(인쇄물 영향 변경 포함)을 막는다.
+    const user = await requireActiveUser();
 
     const raw = (await req.json().catch(() => ({}))) as unknown;
     const parsed = PatchSchema.safeParse(raw ?? {});

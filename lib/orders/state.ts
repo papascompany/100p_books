@@ -45,6 +45,82 @@ export function assertTransition(from: OrderStatus, to: OrderStatus): void {
   }
 }
 
+/**
+ * 결제 키(toss_payment_key)가 기록된 적이 있는가.
+ * 빈 문자열도 "있음" 으로 본다 — 모르는 값이면 취소하지 않는 쪽(보수적)으로 판정한다.
+ * DB 조건부 UPDATE 의 `toss_payment_key is null` 과 정확히 같은 기준이다.
+ *
+ * 주의: 현재 결제 키는 payments/confirm·webhook 이 paid 전이와 **같은 UPDATE** 에서만 기록한다.
+ * 그래서 "키 없음" 이 "결제되지 않음" 을 뜻하지 않는다(캡처 후 클레임 UPDATE 가 실패한 주문도
+ * 키가 없다). 결제 여부의 최종 판단은 서버의 토스 원장 조회(lib/orders/toss-order-probe.ts)가 한다.
+ */
+export function hasPaymentKey(tossPaymentKey: string | null | undefined): boolean {
+  return tossPaymentKey !== null && tossPaymentKey !== undefined;
+}
+
+/**
+ * 사용자 취소 **후보** 인가 (DEBT-6) — UI 버튼 노출 판정용.
+ *
+ * pending 이면서 결제 키가 없는 주문만 후보다. 결제 키가 있는 pending 은 현재 흐름에서 생기지
+ * 않는 데이터 이상이라 방어적으로 제외한다. true 여도 실제 취소는 서버가 토스 원장에 승인된 결제가
+ * 없음을 확인한 뒤에만 한다(POST /api/orders/[id]/cancel).
+ */
+export function isUserCancellable(
+  status: OrderStatus,
+  tossPaymentKey: string | null | undefined,
+): boolean {
+  return (
+    status === "pending" &&
+    !hasPaymentKey(tossPaymentKey) &&
+    canTransition("pending", "cancelled")
+  );
+}
+
+export type UserCancelDecision =
+  | { kind: "cancel" }
+  /** 이미 취소됨 — 재요청(더블클릭·재시도)은 성공으로 응답한다(멱등). */
+  | { kind: "already_cancelled" }
+  | {
+      kind: "reject";
+      status: 409;
+      code: "PAYMENT_IN_PROGRESS" | "ORDER_NOT_CANCELLABLE";
+      message: string;
+    };
+
+/**
+ * POST /api/orders/[id]/cancel 의 DB 상태 판정 (소유권 검증 이후 단계).
+ * 라우트는 이 결과가 `cancel` 일 때만 토스 원장 확인을 거쳐 조건부 UPDATE 를 시도하고,
+ * 경합으로 UPDATE 가 빗나가면 최신 행으로 이 함수를 다시 호출한다.
+ * (`cancel` 은 "취소해도 된다" 가 아니라 "토스 확인으로 넘어가도 된다" 는 뜻이다.)
+ */
+export function decideUserCancel(order: {
+  status: OrderStatus;
+  toss_payment_key: string | null | undefined;
+}): UserCancelDecision {
+  if (order.status === "cancelled") return { kind: "already_cancelled" };
+  if (order.status === "pending") {
+    if (isUserCancellable(order.status, order.toss_payment_key)) {
+      return { kind: "cancel" };
+    }
+    return {
+      kind: "reject",
+      status: 409,
+      code: "PAYMENT_IN_PROGRESS",
+      message:
+        "결제 승인을 확인하고 있는 주문이라 지금은 취소할 수 없어요. 잠시 후 주문 내역을 새로고침해 주시고, 계속 이 상태라면 고객센터로 문의해 주세요.",
+    };
+  }
+  return {
+    kind: "reject",
+    status: 409,
+    code: "ORDER_NOT_CANCELLABLE",
+    message:
+      order.status === "refunded"
+        ? "이미 환불된 주문이에요."
+        : "결제가 완료된 주문은 직접 취소할 수 없어요. 취소·환불은 고객센터로 문의해 주세요.",
+  };
+}
+
 /** 한국어 상태 라벨 — UI 표시용. */
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   pending: "결제 대기",
