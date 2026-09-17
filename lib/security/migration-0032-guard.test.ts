@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -27,8 +27,14 @@ import { describe, expect, it } from "vitest";
  *     INSERT 는 주문 소유·후기 가능 상태·이미지 키 본인 폴더·개수·본문 길이를 WITH CHECK,
  *     UPDATE 는 likes_count/order_id/user_id 등 컬럼 제외 + 이미지 키 검사.
  *     컬럼·상태·한도는 라우트 소스와 일치해야 한다(어긋나면 앱이 깨지거나 표면이 남는다).
- *  8) storage.objects 의 reviews 버킷 사용자 세션 정책(reviews_storage_owner_all)을
- *     제거하고 service_role 정책은 유지한다.
+ *     정책 조건은 **최상위 AND 결합**이어야 한다 — 필수 조건 하나를 OR 로 바꾸면 나머지
+ *     조건이 무력화되므로, 부분 문자열 포함이 아니라 괄호 깊이를 따라 결합 구조를 검사한다.
+ *     grant 는 권한 목록 순서와 무관하게 파싱해(예: "grant select, insert on public.reviews")
+ *     컬럼 grant 대상 테이블에 테이블 수준 INSERT/UPDATE/ALL 이 섞이지 않았는지 본다.
+ *  8) storage.objects 의 reviews·photo-originals·photo-thumbs 버킷 사용자 세션 **쓰기** 정책을
+ *     제거하고, 읽기 정책과 service_role 정책은 유지한다. 드롭 목록은 0032 이전 마이그레이션이
+ *     만든 해당 버킷 사용자 쓰기 정책과 정확히 같아야 한다(누락·이름 오타는 SQL 에서 조용히 no-op).
+ *     앱은 storage 를 service_role(admin) 과 서명 업로드 토큰으로만 쓴다 — 소스와 결합해 고정한다.
  */
 
 const ROOT = process.cwd();
@@ -36,8 +42,11 @@ const MIGRATION_PATH = path.resolve(
   ROOT,
   "supabase/migrations/0032_lock_client_writes.sql",
 );
+const MIGRATIONS_DIR = path.resolve(ROOT, "supabase/migrations");
 const REVIEWS_ROUTE_PATH = path.resolve(ROOT, "app/api/reviews/route.ts");
 const REVIEW_ID_ROUTE_PATH = path.resolve(ROOT, "app/api/reviews/[id]/route.ts");
+const SIGN_UPLOAD_ROUTE_PATH = path.resolve(ROOT, "app/api/photos/sign-upload/route.ts");
+const UPLOAD_QUEUE_PATH = path.resolve(ROOT, "lib/image/upload-queue.ts");
 
 /** 라인/블록 주석을 제거해 실제 실행되는 SQL 만 남긴다. */
 function stripSqlComments(src: string): string {
@@ -128,28 +137,268 @@ function hasOwnUserIdCheck(part: string): boolean {
   return /(?<![.\w])user_id = auth\.uid\(\)/.test(part);
 }
 
-/** `grant <priv> (<cols>) on table public.reviews to <roles>;` 의 컬럼 목록들. */
+/** 마이그레이션의 모든 grant 문. */
+function grantStatements(): string[] {
+  return NORM.match(/\bgrant [^;]*;/g) ?? [];
+}
+
+// ---------------------------------------------------------------------------
+// 괄호 깊이·따옴표를 따르는 최소 SQL 스캐너 (정규화 텍스트 전용)
+// ---------------------------------------------------------------------------
+
+function isWordChar(ch: string | undefined): boolean {
+  return ch !== undefined && /[a-z0-9_]/.test(ch);
+}
+
+/**
+ * 작은따옴표 밖·괄호 깊이 0 에서 `token` 이 나타나는 위치들.
+ * 단어 토큰(and/or/on/to/using/...)은 앞뒤가 단어 문자가 아닐 때만 센다(`anon` 안의 on 제외).
+ */
+function topLevelIndexes(text: string, token: string): number[] {
+  const wordToken = isWordChar(token[0]);
+  const out: number[] = [];
+  let depth = 0;
+  let inQuote = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "'") {
+      inQuote = !inQuote;
+      continue;
+    }
+    if (inQuote) continue;
+    if (ch === "(") {
+      depth++;
+      continue;
+    }
+    if (ch === ")") {
+      depth--;
+      continue;
+    }
+    if (depth !== 0 || !text.startsWith(token, i)) continue;
+    if (wordToken && (isWordChar(text[i - 1]) || isWordChar(text[i + token.length]))) continue;
+    out.push(i);
+  }
+  return out;
+}
+
+/** 깊이 0 의 `sep`(and/or/,) 로 나눈 조각들. */
+function splitTopLevel(text: string, sep: "and" | "or" | ","): string[] {
+  const parts: string[] = [];
+  let prev = 0;
+  for (const i of topLevelIndexes(text, sep)) {
+    parts.push(text.slice(prev, i).trim());
+    prev = i + sep.length;
+  }
+  parts.push(text.slice(prev).trim());
+  return parts;
+}
+
+/** `text[open]` 이 `(` 일 때 짝이 맞는 `)` 의 위치와 안쪽 텍스트. */
+function balancedParen(text: string, open: number): { inner: string; close: number } | null {
+  if (text[open] !== "(") return null;
+  let depth = 0;
+  let inQuote = false;
+  for (let i = open; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "'") inQuote = !inQuote;
+    if (inQuote) continue;
+    if (ch === "(") depth++;
+    if (ch === ")" && --depth === 0) return { inner: text.slice(open + 1, i).trim(), close: i };
+  }
+  return null;
+}
+
+/** 정책 문의 최상위 `using (...)` / `with check (...)` 안쪽 식. 없으면 null. */
+function clauseExpr(stmt: string, clause: "using" | "with check"): string | null {
+  const at = topLevelIndexes(stmt, clause)[0];
+  if (at === undefined) return null;
+  const open = stmt.indexOf("(", at + clause.length);
+  if (open < 0 || stmt.slice(at + clause.length, open).trim() !== "") return null;
+  return balancedParen(stmt, open)?.inner ?? null;
+}
+
+/** 식 전체를 감싼 괄호를 벗긴다. `(a) and (b)` 처럼 전체를 감싸지 않으면 그대로. */
+function unwrapParens(expr: string): string {
+  let cur = expr.trim();
+  for (;;) {
+    const b = balancedParen(cur, 0);
+    if (!b || b.close !== cur.length - 1) return cur;
+    cur = b.inner;
+  }
+}
+
+/** `[not ]exists ( select ... where <조건> )` 의 최상위 where 조건. 형태가 다르면 null. */
+function existsWhere(conjunct: string): string | null {
+  const m = /^(?:not )?exists /.exec(conjunct);
+  if (!m) return null;
+  const b = balancedParen(conjunct, m[0].length);
+  if (!b || b.close !== conjunct.length - 1) return null;
+  const w = topLevelIndexes(b.inner, "where")[0];
+  return w === undefined ? null : b.inner.slice(w + "where".length).trim();
+}
+
+/** 최상위가 순수 AND 결합이면 조각들, 깊이 0 에 OR 가 하나라도 있으면 null. */
+function andConjuncts(expr: string): string[] | null {
+  const e = unwrapParens(expr);
+  return topLevelIndexes(e, "or").length > 0 ? null : splitTopLevel(e, "and");
+}
+
+/** 최상위가 순수 OR 결합이면 조각들, 깊이 0 에 AND 가 하나라도 있으면 null. */
+function orDisjuncts(expr: string): string[] | null {
+  const e = unwrapParens(expr);
+  return topLevelIndexes(e, "and").length > 0 ? null : splitTopLevel(e, "or");
+}
+
+// ---------------------------------------------------------------------------
+// grant 파서 — 권한 목록 순서·table 키워드 유무와 무관하게 구조로 판정
+// ---------------------------------------------------------------------------
+
+type GrantPrivilege = { name: string; columns: string[] | null };
+type ParsedGrant = {
+  privileges: GrantPrivilege[];
+  /** `table` 키워드와 따옴표를 뗀 대상 객체들. */
+  objects: string[];
+  /** `on all tables in schema <s>` 이면 스키마 이름. */
+  allTablesInSchema: string | null;
+  roles: string[];
+};
+
+/** `grant <privs> on <objects> to <roles>;` 파싱. 객체 권한 grant 가 아니면(역할 멤버십 등) null. */
+function parseGrant(stmt: string): ParsedGrant | null {
+  const body = stmt.replace(/^grant /, "").replace(/;$/, "").trim();
+  const onAt = topLevelIndexes(body, "on")[0];
+  if (onAt === undefined) return null;
+  const toAt = topLevelIndexes(body, "to").find((i) => i > onAt);
+  if (toAt === undefined) return null;
+
+  const privileges: GrantPrivilege[] = [];
+  for (const item of splitTopLevel(body.slice(0, onAt), ",")) {
+    const m = /^([a-z]+(?: [a-z]+)?)\s*(?:\(([^)]*)\))?$/.exec(item);
+    if (!m) return null;
+    const cols = m[2];
+    privileges.push({
+      name: (m[1] ?? "").trim(),
+      columns:
+        cols === undefined
+          ? null
+          : cols
+              .split(",")
+              .map((c) => c.trim().replace(/"/g, ""))
+              .filter((c) => c.length > 0)
+              .sort(),
+    });
+  }
+
+  const objPart = body.slice(onAt + "on".length, toAt).trim();
+  const schema = /^all tables in schema (.+)$/.exec(objPart);
+  const objects = schema
+    ? []
+    : splitTopLevel(objPart.replace(/^table /, ""), ",").map((o) => o.replace(/"/g, ""));
+  const roles = splitTopLevel(
+    body.slice(toAt + "to".length).replace(/ with grant option$/, ""),
+    ",",
+  ).map((r) => r.replace(/"/g, ""));
+
+  return {
+    privileges,
+    objects,
+    allTablesInSchema: schema ? (schema[1] ?? "").replace(/"/g, "").trim() : null,
+    roles,
+  };
+}
+
+/** grant 대상이 public.<table> 인가(스키마 생략 포함). */
+function grantTargetsTable(g: ParsedGrant, table: string): boolean {
+  return (
+    g.allTablesInSchema === "public" ||
+    g.objects.some((o) => o === table || o === `public.${table}`)
+  );
+}
+
+function parsedGrants(): ParsedGrant[] {
+  return grantStatements()
+    .map(parseGrant)
+    .filter((g): g is ParsedGrant => g !== null);
+}
+
+/** reviews 에 대한 `<priv> (<cols>)` 컬럼 grant 들 — 같은 문에 다른 권한이 섞여 있어도 잡는다. */
 function reviewsColumnGrants(priv: "insert" | "update"): {
   columns: string[];
   roles: string;
 }[] {
-  const re = new RegExp(
-    `grant ${priv} \\(([^)]*)\\) on (?:table )?public\\.reviews to ([^;]*);`,
-    "g",
-  );
-  return Array.from(NORM.matchAll(re)).map((m) => ({
-    columns: (m[1] ?? "")
-      .split(",")
-      .map((c) => c.trim().replace(/"/g, ""))
-      .filter((c) => c.length > 0)
-      .sort(),
-    roles: (m[2] ?? "").trim(),
-  }));
+  return parsedGrants()
+    .filter((g) => g.allTablesInSchema === null && grantTargetsTable(g, "reviews"))
+    .flatMap((g) =>
+      g.privileges.flatMap((p) =>
+        p.name === priv && p.columns !== null
+          ? [{ columns: p.columns, roles: g.roles.join(", ") }]
+          : [],
+      ),
+    );
 }
 
-/** 마이그레이션의 모든 grant 문. */
-function grantStatements(): string[] {
-  return NORM.match(/\bgrant [^;]*;/g) ?? [];
+/** 테이블 수준(컬럼 목록 없음)으로 주면 컬럼 grant 를 무력화하는 권한. */
+const TABLE_LEVEL_WIDENING_PRIVS = new Set(["insert", "update", "all", "all privileges"]);
+
+// ---------------------------------------------------------------------------
+// storage.objects 정책 이력 — 0032 이전 마이그레이션을 순서대로 재생
+// ---------------------------------------------------------------------------
+
+/** 사용자 세션 쓰기 정책을 0032 가 제거해야 하는 버킷. */
+const USER_WRITE_LOCKED_BUCKETS = ["photo-originals", "photo-thumbs", "reviews"] as const;
+
+type StoragePolicy = { name: string; cmd: string; roles: string[]; buckets: string[] };
+
+function parseStoragePolicy(name: string, rest: string): StoragePolicy {
+  const head = /^(?:as (?:permissive|restrictive) )?(?:for (all|select|insert|update|delete) )?(?:to ([a-z_, ]+?) )?(?:using|with check)\b/.exec(
+    rest,
+  );
+  const buckets = new Set<string>();
+  for (const m of rest.matchAll(/bucket_id = '([^']+)'/g)) buckets.add(m[1] ?? "");
+  for (const m of rest.matchAll(/bucket_id in \(([^)]*)\)/g)) {
+    for (const b of (m[1] ?? "").matchAll(/'([^']+)'/g)) buckets.add(b[1] ?? "");
+  }
+  return {
+    name,
+    cmd: head?.[1] ?? "all",
+    roles: (head?.[2] ?? "public").split(",").map((r) => r.trim()),
+    buckets: Array.from(buckets),
+  };
+}
+
+/** 번호가 `before` 미만인 마이그레이션을 재생한 뒤 남는 storage.objects 정책. */
+function storagePoliciesBefore(before: number): Map<string, StoragePolicy> {
+  const files = readdirSync(MIGRATIONS_DIR)
+    .filter((f) => /^\d{4}_.*\.sql$/.test(f) && Number(f.slice(0, 4)) < before)
+    .sort();
+  const state = new Map<string, StoragePolicy>();
+  for (const f of files) {
+    const norm = stripSqlComments(readFileSync(path.join(MIGRATIONS_DIR, f), "utf8"))
+      .replace(/\s+/g, " ")
+      .toLowerCase();
+    const re =
+      /drop policy if exists "([^"]+)" on storage\.objects;|create policy "([^"]+)" on storage\.objects ([^;]*);/g;
+    for (const m of norm.matchAll(re)) {
+      if (m[1] !== undefined) state.delete(m[1]);
+      else if (m[2] !== undefined) state.set(m[2], parseStoragePolicy(m[2], m[3] ?? ""));
+    }
+  }
+  return state;
+}
+
+/** 소스 트리(app/lib/components)의 비테스트 TS 파일. */
+function sourceFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+      out.push(...sourceFiles(full));
+    } else if (/\.(ts|tsx)$/.test(entry.name) && !/\.(test|spec)\.(ts|tsx)$/.test(entry.name)) {
+      out.push(full);
+    }
+  }
+  return out;
 }
 
 describe("0032 lock_client_writes — 구조적 가드", () => {
@@ -167,6 +416,10 @@ describe("0032 lock_client_writes — 구조적 가드", () => {
       { policy: "photos_update_own", table: "public.photos" },
       { policy: "reviews_own_all", table: "public.reviews" },
       { policy: "reviews_storage_owner_all", table: "storage.objects" },
+      { policy: "photo_originals_user_insert", table: "storage.objects" },
+      { policy: "photo_originals_user_update", table: "storage.objects" },
+      { policy: "photo_originals_user_delete", table: "storage.objects" },
+      { policy: "photo_thumbs_user_delete", table: "storage.objects" },
     ];
     for (const { policy, table } of dropped) {
       it(`drop policy if exists "${policy}" on ${table}`, () => {
@@ -200,10 +453,12 @@ describe("0032 lock_client_writes — 구조적 가드", () => {
       }
     }
 
-    it("photos: DELETE 는 회수하지 않는다 (projects/[id] DELETE 가 사용자 세션으로 씀)", () => {
-      for (const role of REVOKE_ROLES) {
-        expect(hasRevoke("photos", "delete", role)).toBe(false);
-      }
+    it("photos: authenticated DELETE 는 회수하지 않는다 (projects/[id] DELETE 가 사용자 세션으로 씀)", () => {
+      expect(hasRevoke("photos", "delete", "authenticated")).toBe(false);
+    });
+
+    it("photos: anon DELETE 는 회수한다 (잔여 grant 제거)", () => {
+      expect(hasRevoke("photos", "delete", "anon")).toBe(true);
     });
 
     it("SELECT 를 회수하지 않는다 (revoke 문에 select 토큰이 없어야 함)", () => {
@@ -441,6 +696,122 @@ describe("0032 lock_client_writes — 구조적 가드", () => {
       expect(NORM).not.toMatch(/grant [^;]*\ball privileges\b[^;]*public\.reviews/);
     });
 
+    it("모든 grant 문은 객체 권한 grant 로 파싱된다 (역할 멤버십 grant·파싱 불가 문 금지)", () => {
+      for (const g of grantStatements()) {
+        expect(parseGrant(g), g).not.toBeNull();
+      }
+    });
+
+    it("컬럼 grant 대상 테이블에 테이블 수준 INSERT/UPDATE/ALL 을 섞지 않는다 (권한 목록 순서 무관)", () => {
+      const grants = parsedGrants();
+      // 컬럼 grant 가 하나라도 있는 테이블 + reviews(항상 컬럼 grant 로만 연다).
+      const columnGrantTables = new Set<string>(["reviews"]);
+      for (const g of grants) {
+        if (!g.privileges.some((p) => p.columns !== null)) continue;
+        for (const o of g.objects) columnGrantTables.add(o.replace(/^public\./, ""));
+      }
+      for (const g of grants) {
+        const widening = g.privileges.filter(
+          (p) => p.columns === null && TABLE_LEVEL_WIDENING_PRIVS.has(p.name),
+        );
+        if (widening.length === 0) continue;
+        for (const table of columnGrantTables) {
+          expect(
+            grantTargetsTable(g, table),
+            `테이블 수준 ${widening.map((p) => p.name).join("/")} grant 가 ${table} 컬럼 grant 를 무력화한다`,
+          ).toBe(false);
+        }
+      }
+    });
+
+    it("회수한 쓰기 권한을 다시 grant 하지 않는다 (profiles/gifts/attendances/review_likes 전부, photos 는 DELETE 외)", () => {
+      const reopening = new Set<string>([...WRITE_PRIVS, "all", "all privileges"]);
+      for (const g of parsedGrants()) {
+        for (const p of g.privileges) {
+          if (!reopening.has(p.name)) continue;
+          for (const table of LOCKED_TABLES) {
+            expect(grantTargetsTable(g, table), `${p.name} on ${table}`).toBe(false);
+          }
+          if (p.name !== "delete") {
+            expect(grantTargetsTable(g, "photos"), `${p.name} on photos`).toBe(false);
+          }
+        }
+      }
+    });
+
+    describe("정책 조건 결합 구조 — 필수 조건은 최상위 AND (OR 치환 시 실패)", () => {
+      const OWN_USER = "user_id = auth.uid()";
+      const IMAGE_KEY_DISJUNCTS = [
+        "k.image_key is null",
+        "split_part(k.image_key, '/', 1) <> auth.uid()::text",
+      ];
+
+      /** 이미지 키·개수·본문 한도 조건이 각각 독립된 최상위 AND 조각인지. */
+      function expectContentLimits(conjuncts: string[]): void {
+        expect(
+          conjuncts.filter((c) => /^cardinality\(reviews\.image_keys\) <= \d+$/.test(c)),
+        ).toHaveLength(1);
+
+        const imageKeys = conjuncts.filter((c) =>
+          c.startsWith("not exists ( select 1 from unnest(reviews.image_keys) as k(image_key) where "),
+        );
+        expect(imageKeys).toHaveLength(1);
+        const where = existsWhere(imageKeys[0] ?? "");
+        expect(where).not.toBeNull();
+        // not exists (… where 널 OR 타인 폴더) — 여기만은 OR 여야 "모든 원소가 본인 폴더" 가 된다.
+        expect(orDisjuncts(where ?? "")).toEqual(IMAGE_KEY_DISJUNCTS);
+
+        const body = conjuncts.filter((c) => c.startsWith("(reviews.body is null "));
+        expect(body).toHaveLength(1);
+        const bodyDisjuncts = orDisjuncts(body[0] ?? "");
+        expect(bodyDisjuncts).toHaveLength(2);
+        expect(bodyDisjuncts?.[0]).toBe("reviews.body is null");
+        expect(bodyDisjuncts?.[1]).toMatch(/^char_length\(reviews\.body\) <= \d+$/);
+      }
+
+      it("reviews_insert_own WITH CHECK: 작성자·주문 소유/상태·이미지 키·한도가 모두 AND", () => {
+        const expr = clauseExpr(policyStatement("reviews_insert_own", "public.reviews"), "with check");
+        expect(expr).not.toBeNull();
+        const conjuncts = andConjuncts(expr ?? "");
+        expect(conjuncts, "WITH CHECK 최상위에 OR 가 있다").not.toBeNull();
+        const c = conjuncts ?? [];
+        expect(c).toContain(OWN_USER);
+
+        const orders = c.filter((x) => x.startsWith("exists ( select 1 from public.orders o where "));
+        expect(orders).toHaveLength(1);
+        const ordersWhere = andConjuncts(existsWhere(orders[0] ?? "") ?? "or");
+        expect(ordersWhere, "orders 서브쿼리 where 최상위에 OR 가 있다").not.toBeNull();
+        expect(ordersWhere).toContain("o.id = reviews.order_id");
+        expect(ordersWhere).toContain("o.user_id = auth.uid()");
+        expect(
+          (ordersWhere ?? []).filter((x) => /^o\.status in \('[a-z_]+'(?:, '[a-z_]+')*\)$/.test(x)),
+        ).toHaveLength(1);
+
+        expectContentLimits(c);
+      });
+
+      it("reviews_update_own: USING 작성자 AND, WITH CHECK 작성자·이미지 키·한도 AND", () => {
+        const stmt = policyStatement("reviews_update_own", "public.reviews");
+        expect(andConjuncts(clauseExpr(stmt, "using") ?? "or")).toContain(OWN_USER);
+        const conjuncts = andConjuncts(clauseExpr(stmt, "with check") ?? "or");
+        expect(conjuncts, "WITH CHECK 최상위에 OR 가 있다").not.toBeNull();
+        expect(conjuncts).toContain(OWN_USER);
+        expectContentLimits(conjuncts ?? []);
+      });
+
+      it("reviews_select_own / reviews_delete_own / gifts_sender_select USING 은 소유자 조건 AND", () => {
+        for (const [name, table, owner] of [
+          ["reviews_select_own", "public.reviews", OWN_USER],
+          ["reviews_delete_own", "public.reviews", OWN_USER],
+          ["gifts_sender_select", "public.gifts", "sender_id = auth.uid()"],
+        ] as const) {
+          const conjuncts = andConjuncts(clauseExpr(policyStatement(name, table), "using") ?? "or");
+          expect(conjuncts, `${name} USING 최상위에 OR 가 있다`).not.toBeNull();
+          expect(conjuncts).toContain(owner);
+        }
+      });
+    });
+
     it("DELETE 는 authenticated 에만 다시 준다", () => {
       expect(NORM).toContain("grant delete on table public.reviews to authenticated;");
     });
@@ -513,20 +884,92 @@ describe("0032 lock_client_writes — 구조적 가드", () => {
     });
   });
 
-  describe("(8) storage.objects — reviews 버킷 사용자 세션 정책만 제거", () => {
-    it("reviews_storage_service_all(service_role)은 drop 하지 않는다", () => {
-      expect(NORM).not.toContain('drop policy if exists "reviews_storage_service_all"');
+  describe("(8) storage.objects — reviews·photo 버킷 사용자 세션 쓰기 정책만 제거", () => {
+    const EXPECTED_STORAGE_DROPS = [
+      "photo_originals_user_delete",
+      "photo_originals_user_insert",
+      "photo_originals_user_update",
+      "photo_thumbs_user_delete",
+      "reviews_storage_owner_all",
+    ];
+    const storageDrops = Array.from(
+      NORM.matchAll(/drop policy if exists "([^"]+)" on storage\.objects;/g),
+    )
+      .map((m) => m[1] ?? "")
+      .sort();
+
+    it("storage.objects drop 목록 = 사용자 세션 쓰기 정책 5개 (그 밖의 정책은 건드리지 않음)", () => {
+      expect(storageDrops).toEqual(EXPECTED_STORAGE_DROPS);
+    });
+
+    it("읽기 정책과 service_role 정책은 drop 하지 않는다", () => {
+      for (const policy of [
+        "photo_originals_user_select",
+        "photo_thumbs_user_select",
+        "photo_buckets_service_all",
+        "reviews_storage_service_all",
+        "pdfs_user_select",
+        "pdfs_service_all",
+        "resources_user_select",
+        "resources_service_all",
+        "site_assets_public_read",
+      ]) {
+        expect(NORM).not.toContain(`drop policy if exists "${policy}"`);
+      }
     });
 
     it("storage.objects 에 새 정책을 만들지 않는다 (제거만)", () => {
       expect(NORM).not.toMatch(/create policy "[^"]*" on storage\.objects/);
     });
 
-    it("다른 버킷(photo-originals 등)의 storage 정책은 건드리지 않는다", () => {
-      const storageDrops = NORM.match(/drop policy if exists "[^"]*" on storage\.objects;/g) ?? [];
-      expect(storageDrops).toEqual([
-        'drop policy if exists "reviews_storage_owner_all" on storage.objects;',
-      ]);
+    it("0032 이전에 열린 reviews/photo 버킷 사용자 세션 쓰기 정책 = 0032 drop 목록 (누락·이름 오타 차단)", () => {
+      const before = storagePoliciesBefore(32);
+      const userWrites = Array.from(before.values())
+        .filter(
+          (p) =>
+            p.cmd !== "select" &&
+            p.roles.some((r) => r === "authenticated" || r === "anon" || r === "public") &&
+            p.buckets.some((b) => (USER_WRITE_LOCKED_BUCKETS as readonly string[]).includes(b)),
+        )
+        .map((p) => p.name)
+        .sort();
+      expect(userWrites).toEqual(EXPECTED_STORAGE_DROPS);
+      // 유지하는 읽기·service_role 정책이 실제로 존재하는 이름인지(오타 방지)도 확인.
+      for (const kept of ["photo_originals_user_select", "photo_thumbs_user_select", "photo_buckets_service_all"]) {
+        expect(before.has(kept), kept).toBe(true);
+      }
+    });
+
+    describe("앱 소스와의 결합 — storage 쓰기는 service_role·서명 토큰뿐이어야 한다", () => {
+      it("app/lib/components 의 모든 `.storage` 접근은 admin(service_role) 클라이언트다", () => {
+        const offenders: string[] = [];
+        for (const dir of ["app", "lib", "components"]) {
+          for (const file of sourceFiles(path.resolve(ROOT, dir))) {
+            const src = readFileSync(file, "utf8");
+            for (const m of src.matchAll(/([\w$)\]]+)\s*\??\.storage\b/g)) {
+              if (m[1] !== "admin") {
+                const line = src.slice(0, m.index).split("\n").length;
+                offenders.push(`${path.relative(ROOT, file)}:${line} ${m[0]}`);
+              }
+            }
+          }
+        }
+        // 사용자 세션(서버·브라우저 anon 클라이언트)으로 storage 를 쓰게 되면 0032 (H) 가 앱을
+        // 깨뜨린다 — 정책을 되살리기 전에 라우트 경유(service_role)로 옮길 수 있는지 먼저 검토.
+        expect(offenders).toEqual([]);
+      });
+
+      it("사진 업로드 URL 은 service_role 이 upsert 없이 발급한다 (기존 객체 덮어쓰기 불가 토큰)", () => {
+        const src = readFileSync(SIGN_UPLOAD_ROUTE_PATH, "utf8");
+        expect(src).toMatch(/admin\.storage\s*\.from\(ORIGINALS_BUCKET\)\s*\.createSignedUploadUrl\(storageKey\)/);
+        expect(src).not.toMatch(/createSignedUploadUrl\([^)]*upsert/);
+      });
+
+      it("클라이언트는 서명 URL 로 PUT 만 하고 Supabase 클라이언트를 쓰지 않는다", () => {
+        const src = readFileSync(UPLOAD_QUEUE_PATH, "utf8");
+        expect(src).toContain('xhr.open("PUT", url, true)');
+        expect(src).not.toMatch(/@supabase\/|getBrowserSupabase|\.storage\b/);
+      });
     });
   });
 });

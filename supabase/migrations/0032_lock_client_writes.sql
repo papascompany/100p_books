@@ -45,10 +45,21 @@
 --     • storage.objects(reviews 버킷) — reviews_storage_owner_all 로 본인 폴더에 직접
 --                    업로드/삭제 가능(업로드 라우트의 MIME·크기·레이트리밋 우회). 앱의
 --                    후기 이미지 업로드·삭제·서명은 전부 service_role 이다 → 정책 제거.
+--     • storage.objects(photo-originals/photo-thumbs 버킷) — 0004 의 photo_originals_user_
+--                    insert/update/delete, photo_thumbs_user_delete 로 로그인 사용자가 anon 키 +
+--                    JWT 로 본인 폴더 객체를 직접 쓸 수 있었다. photos/complete 가 매직 바이트
+--                    (SEC-1)·sharp 로 검증하고 정규화 원본을 재업로드한 **뒤에** 같은 키로
+--                    upsert 하면 검증되지 않은 바이트(AVIF·GIF·초대형 파일 등)로 원본을 바꿔치기
+--                    할 수 있고, PDF 빌드(lib/pdf/photos.ts)와 서명 URL 발급은 원본을 재검증 없이
+--                    service_role 로 내려받는다. 결제 후 원본·썸네일 직접 삭제로 편집 잠금
+--                    (DEBT-2)과 인쇄 원본 보존도 우회된다. 앱의 사진 업로드는 서명 업로드 URL
+--                    (service_role 발급, storage-api 가 토큰 검증 후 RLS 없이 기록)이고, 다운로드·
+--                    재업로드·복사·삭제는 전부 service_role 이다 → 사용자 세션 쓰기 정책 제거.
 --
---   profiles/gifts/attendances/review_likes/photos(INSERT·UPDATE)/reviews 버킷 객체는 해당
---   쓰기를 **앱이 사용자 세션으로 하지 않으므로**(admin=service_role 또는 SECURITY DEFINER
---   RPC 경유), 사용자 세션 권한을 회수하고 쓰기 정책을 제거해도 앱 경로가 깨지지 않는다.
+--   profiles/gifts/attendances/review_likes/photos(INSERT·UPDATE)/reviews·photo 버킷 객체는
+--   해당 쓰기를 **앱이 사용자 세션으로 하지 않으므로**(admin=service_role, SECURITY DEFINER
+--   RPC 또는 서명 업로드 토큰 경유), 사용자 세션 권한을 회수하고 쓰기 정책을 제거해도 앱
+--   경로가 깨지지 않는다.
 --   SELECT 권한은 건드리지 않는다.
 --
 --   projects/pages/share_tokens 와 photos 의 DELETE 는 앱이 사용자 세션으로 실제 쓰므로
@@ -188,6 +199,9 @@ drop policy if exists "photos_update_own" on public.photos;
 
 revoke insert, update, truncate, references, trigger
   on table public.photos from anon, authenticated;
+-- anon 은 photos 를 지울 이유가 없다(photos_delete_own 이 소유자를 요구해 실제 삭제 가능 행은 0 이지만
+-- 잔여 grant 를 남기지 않는다 — PGlite 실행 검증에서 발견). authenticated DELETE 는 유지.
+revoke delete on table public.photos from anon;
 
 -- =====================================================================
 -- (F) reviews — 사용자 세션 쓰기를 라우트 검증과 같은 조건으로 축소
@@ -293,6 +307,37 @@ grant delete
 drop policy if exists "reviews_storage_owner_all" on storage.objects;
 
 -- =====================================================================
+-- (H) storage.objects — photo-originals/photo-thumbs 버킷 사용자 세션 쓰기 정책 제거
+-- =====================================================================
+-- 앱의 사진 storage 경로(전부 service_role 또는 서명 토큰 — 사용자 JWT 로 storage 를 쓰지 않는다):
+--   업로드   — photos/sign-upload 가 service_role 로 createSignedUploadUrl(키 `${user.id}/
+--              ${projectId}/${photoId}.${ext}`, upsert 미지정=false) 발급 → 브라우저가
+--              lib/image/upload-queue.ts 에서 서명 URL 로 XHR PUT(Authorization 헤더 없음).
+--              storage-api 는 PUT /object/upload/sign/* 를 JWT 없는 공개 라우트로 두고 토큰
+--              서명을 검증한 뒤 asSuperUser() 로 기록한다 — storage.objects RLS 를 거치지 않는다.
+--              (Supabase 문서: uploadToSignedUrl 의 필요 RLS 권한 objects=none,
+--               createSignedUploadUrl 은 objects insert — 발급 주체가 service_role 이라 무관.)
+--   검증·재업로드 — photos/complete: admin download → 매직 바이트(SEC-1)·sharp 검증 →
+--              admin upload(upsert) 원본 + 썸네일.
+--   복사     — photos/copy-to-project, gifts/[token] 수령: admin.storage.copy.
+--   삭제     — photos/abandon·purge, cron/orphan-photos, 계정 삭제(account-content-store): admin.
+--   조회     — 서명 URL 발급·PDF 원본 다운로드: admin.
+-- 브라우저 Supabase 클라이언트(lib/db/browser.ts)는 auth 에만 쓰이고 storage 를 호출하지 않는다.
+--
+-- 남겨 두면: complete 검증 뒤 사용자가 JWT 로 같은 키에 upsert(x-upsert: true, update+insert
+-- 정책 통과)해 원본을 검증되지 않은 바이트로 바꿔치기 → PDF 빌드가 재검증 없이 디코드한다.
+-- 또 본인 폴더 임의 업로드(크기·MIME·레이트리밋 우회)와 결제 후 원본·썸네일 직접 삭제가 가능하다.
+-- 서명 토큰은 upsert=false 로 발급되므로 이미 존재하는 객체를 덮어쓰지 못한다.
+--
+-- 제거: 사용자 세션 쓰기 4개. 유지: photo_originals_user_select / photo_thumbs_user_select
+-- (본인 폴더 읽기 전용 — 쓰기 표면 아님), photo_buckets_service_all(service_role).
+-- 0027·(G) 와 같은 방식의 정책 drop 이며 새 정책은 만들지 않는다.
+drop policy if exists "photo_originals_user_insert" on storage.objects;
+drop policy if exists "photo_originals_user_update" on storage.objects;
+drop policy if exists "photo_originals_user_delete" on storage.objects;
+drop policy if exists "photo_thumbs_user_delete" on storage.objects;
+
+-- =====================================================================
 -- 참고 — 여기서 **의도적으로 건드리지 않은** 것:
 --   • SELECT 권한 전부와 기존 SELECT 정책(profiles_select_self, attendances_*_select,
 --     review_likes_read_own, photos_select_own, reviews_public_read 등) — 앱 조회 경로 보존.
@@ -304,8 +349,9 @@ drop policy if exists "reviews_storage_owner_all" on storage.objects;
 --   • PostgreSQL 17 의 MAINTAIN 권한 — 버전 의존이라 여기서 회수하지 않는다. 데이터를
 --     바꾸지 않고 PostgREST 로 호출할 수도 없다.
 --   • is_admin(), lookup_referral_code() 의 EXECUTE 권한.
---   • reviews 버킷 외 storage.objects 정책(photo-originals 등) — 서명 업로드는 storage-api
---     가 서명 토큰으로 처리하며, 사용자 정책이 열어 둔 범위는 본인 폴더({uid}/...)로
---     한정된다. 이 마이그레이션 범위 밖이며 현행 유지.
+--   • storage.objects 의 SELECT 정책(photo_originals_user_select, photo_thumbs_user_select,
+--     pdfs_user_select, resources_user_select, site_assets_public_read)과 service_role 정책
+--     (photo_buckets_service_all, reviews_storage_service_all 등).
+--   • site-assets 버킷의 site_assets_admin_* 쓰기 정책 — is_admin() 으로 관리자만 통과한다.
 --   • service_role 의 모든 권한.
 -- =====================================================================

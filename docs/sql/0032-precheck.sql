@@ -6,11 +6,12 @@
 --      어떤 쓰기 정책이 열려 있는지 **public 스키마 전체**로 확인(0032 가 닫을 표면이
 --      실제로 열려 있는가, 0032 범위 밖에 열린 표면이 더 있는가).
 --   2) 이미 악용된 흔적이 있는지 조회(권한 상승·탈퇴 가드 우회·보너스/선물 편취·
---      사진 storage_key 바꿔치기·후기 이미지 키 바꿔치기).
+--      사진 storage_key 바꿔치기·후기 이미지 키 바꿔치기·사진 원본 객체 바꿔치기/직접 삭제).
 --
 --   ⚠️ 0032 는 **앞으로의** 직접 쓰기를 막을 뿐, 이미 만들어진 부정 행(남의 주문으로
---   발급된 gift, 부풀린 출석 행, 타인 경로를 가리키는 photos/reviews 행 등)은 지우거나
---   되돌리지 않는다. [3]~[10] 에서 1건이라도 나오면 적용과 별개로 개별 시정이 필요하다.
+--   발급된 gift, 부풀린 출석 행, 타인 경로를 가리키는 photos/reviews 행, 검증 뒤 덮어쓴
+--   사진 원본 객체 등)은 지우거나 되돌리지 않는다. [3]~[11] 에서 1건이라도 나오면 적용과
+--   별개로 개별 시정이 필요하다.
 --
 -- 사용법:
 --   Supabase 대시보드 → SQL Editor. 상단 프로젝트가 100p_books/PRODUCTION 인지 확인.
@@ -153,8 +154,15 @@ select c.relname as view_name,
    and c.relkind in ('v', 'm')
  order by c.relname;
 
--- [2-d] storage.objects 의 쓰기 정책(참고). 적용 전 기대: reviews_storage_owner_all 이
---       보인다(0032 가 제거). 나머지는 버킷별로 앱이 사용자 세션으로 쓰는지 대조한다.
+-- [2-d] storage.objects 의 쓰기 정책. 적용 전 기대(0032 가 제거):
+--         reviews_storage_owner_all(ALL), photo_originals_user_insert(INSERT),
+--         photo_originals_user_update(UPDATE), photo_originals_user_delete(DELETE),
+--         photo_thumbs_user_delete(DELETE) — 모두 roles={authenticated}.
+--       0032 후에도 남는 것: service_role 정책(photo_buckets_service_all, pdfs_service_all,
+--         resources_service_all, reviews_storage_service_all)과 is_admin() 으로 막힌
+--         site_assets_admin_write/update/delete.
+--       그 밖의 정책이 보이면 0032 범위 밖 표면이다 → 버킷별로 앱이 사용자 세션으로 쓰는지 대조한다
+--       (앱의 storage 호출은 전부 admin=service_role 이고, 사진 업로드는 서명 업로드 토큰이다).
 select policyname, permissive, cmd, roles, qual, with_check
   from pg_policies
  where schemaname = 'storage'
@@ -509,4 +517,122 @@ select o.id, o.name, o.created_at,
  where o.bucket_id = 'reviews'
    and coalesce(to_jsonb(o) ->> 'owner_id', to_jsonb(o) ->> 'owner') is not null
  order by o.created_at desc
+ limit 500;
+
+-- ---------------------------------------------------------------------
+-- [11] 악용 흔적 — photo-originals/photo-thumbs 사용자 세션 직접 쓰기
+--     0004 의 photo_originals_user_insert/update/delete, photo_thumbs_user_delete 로 로그인
+--     사용자가 anon 키 + JWT 로 본인 폴더 객체를 직접 올리거나, upsert 로 덮어쓰거나, 지울 수 있었다.
+--     정상 경로:
+--       업로드 — photos/sign-upload 가 service_role 로 서명 업로드 URL 발급(upsert=false 토큰) →
+--               브라우저 PUT → photos/complete 가 service_role 로 내려받아 매직 바이트(SEC-1)·sharp
+--               검증 후 같은 키에 정규화 원본 재업로드 + 썸네일 업로드 → photos INSERT.
+--       복사   — copy-to-project·선물 수령: service_role storage copy, 행 값(mime/size_bytes)은 원본 행 복사.
+--       삭제   — purge·abandon·orphan cron·계정 삭제: 전부 service_role.
+--     악용 패턴: complete 검증이 끝난 원본을 같은 키로 덮어써 검증되지 않은 바이트를 PDF 빌드
+--     (lib/pdf/photos.ts, 재검증 없음)에 넣거나, 결제 후 원본을 지워 편집 잠금·인쇄 원본 보존 우회.
+--     **필수 조치(c)(d) 결과가 1건 이상일 때**: 해당 photo 를 쓰는 주문(order_statuses)의 PDF 빌드·
+--     출고를 보류하고 원본을 확인한다(복구는 사용자 재업로드 또는 백업). 데이터 변경은 승인 후 별도.
+-- ---------------------------------------------------------------------
+-- (a) 판정 기준 보정 — 버킷별 uploader(owner) 채움 분포.
+--     서명 업로드(토큰 발급자 service_role)·service_role 업로드는 owner 가 비어 있는 것이 기대값이다.
+--     with_uploader 가 objects 에 가깝게 크면 이 storage 버전에서는 (b) 기준이 맞지 않는다
+--     → (c)(d) 만으로 판정한다.
+select o.bucket_id,
+       count(*) as objects,
+       count(*) filter (
+         where coalesce(to_jsonb(o) ->> 'owner_id', to_jsonb(o) ->> 'owner') is not null
+       ) as with_uploader
+  from storage.objects o
+ where o.bucket_id in ('photo-originals', 'photo-thumbs')
+ group by o.bucket_id
+ order by o.bucket_id;
+
+-- (b) 사용자 JWT 로 직접 쓴 객체 — uploader 가 채워진 원본·썸네일.
+--     referenced=false: photos 가 참조하지 않는 임의 업로드(크기·MIME·레이트리밋 우회). 24h 뒤
+--       orphan-photos cron 이 원본 버킷의 {user}/{project}/ 아래만 정리하므로 남아 있을 수 있다.
+--     referenced=true : 앱이 쓰는 객체를 사용자가 덮어쓴 것 → (c) 와 대조.
+select o.bucket_id, o.name, o.created_at, o.updated_at,
+       coalesce(to_jsonb(o) ->> 'owner_id', to_jsonb(o) ->> 'owner') as uploader,
+       o.metadata ->> 'mimetype'       as mimetype,
+       (o.metadata ->> 'size')::bigint as size_bytes,
+       exists (
+         select 1 from public.photos ph
+          where (o.bucket_id = 'photo-originals' and ph.storage_key = o.name)
+             or (o.bucket_id = 'photo-thumbs'    and ph.thumb_key   = o.name)
+       ) as referenced
+  from storage.objects o
+ where o.bucket_id in ('photo-originals', 'photo-thumbs')
+   and coalesce(to_jsonb(o) ->> 'owner_id', to_jsonb(o) ->> 'owner') is not null
+ order by referenced desc, o.updated_at desc
+ limit 500;
+
+-- (c) 검증 뒤 원본 바꿔치기 — photos 행 기록값과 원본 객체 불일치. **1차 판정.**
+--     complete 는 검증·정규화한 버퍼를 올린 뒤 그 버퍼 길이(size_bytes)와 판정 포맷(mime)을 행에
+--     기록하고 행을 나중에 INSERT 한다. 복사 경로는 원본 행 값을 옮긴다. 따라서 정상 행은
+--     객체 size = size_bytes, 객체 mimetype = mime, 객체 updated_at ≤ 행 created_at 이다.
+--       size_mismatch / mime_mismatch : 행 기록 뒤 다른 바이트로 덮어씀.
+--       overwritten_after_row         : 행 INSERT 보다 5분 넘게 뒤에 객체가 갱신됨(uploader 와 함께 본다).
+--     한계: SEC-1 이전 complete 가 size_bytes/mime 을 클라 값으로 기록한 오래된 행은 mismatch 만으로
+--     오탐일 수 있다(overwritten_after_row=false 인 오래된 행) → photo_created_at 으로 걸러 본다.
+--     선물 수령 복사 실패 폴백 행은 발신자 객체를 가리키므로 발신자 행과 같은 결과가 함께 나온다.
+select ph.id as photo_id, ph.project_id,
+       pr.user_id as project_owner_id, pr.status as project_status,
+       (select array_agg(distinct od.status order by od.status)
+          from public.orders od
+         where od.project_id = ph.project_id)  as order_statuses,
+       ph.storage_key, ph.mime, ph.size_bytes, ph.created_at as photo_created_at, ph.deleted_at,
+       o.metadata ->> 'mimetype'               as object_mimetype,
+       (o.metadata ->> 'size')::bigint         as object_size,
+       o.updated_at                            as object_updated_at,
+       coalesce(to_jsonb(o) ->> 'owner_id', to_jsonb(o) ->> 'owner') as uploader,
+       ((o.metadata ->> 'size')::bigint is distinct from ph.size_bytes) as size_mismatch,
+       ((o.metadata ->> 'mimetype') is distinct from ph.mime)          as mime_mismatch,
+       (o.updated_at > ph.created_at + interval '5 minutes')          as overwritten_after_row
+  from public.photos ph
+  join public.projects pr on pr.id = ph.project_id
+  join storage.objects o
+    on o.bucket_id = 'photo-originals'
+   and o.name = ph.storage_key
+ where (o.metadata ->> 'size')::bigint is distinct from ph.size_bytes
+    or (o.metadata ->> 'mimetype') is distinct from ph.mime
+    or o.updated_at > ph.created_at + interval '5 minutes'
+ order by overwritten_after_row desc,
+          (coalesce(to_jsonb(o) ->> 'owner_id', to_jsonb(o) ->> 'owner') is not null) desc,
+          ph.created_at desc
+ limit 500;
+
+-- (d) 직접 삭제 흔적 — 활성(deleted_at IS NULL) photos 행이 가리키는 원본·썸네일 객체가 없다.
+--     앱은 활성 행의 객체를 지우지 않는다(purge 는 휴지통 행만, 프로젝트 삭제는 행 cascade 뒤
+--     orphan cron 이 정리). order_statuses 에 paid/in_production 등이 있으면 인쇄 원본 유실이므로 우선.
+--     한계: 선물 수령 폴백 행은 발신자 객체를 가리키므로, 발신자가 그 사진을 영구 삭제하면 정상 흐름에서도
+--     original_missing=true 가 될 수 있다 → 키 첫 세그먼트가 project_owner_id 와 다른 행은 gifts 이력과 대조.
+select ph.id as photo_id, ph.project_id,
+       pr.user_id as project_owner_id,
+       (select array_agg(distinct od.status order by od.status)
+          from public.orders od
+         where od.project_id = ph.project_id) as order_statuses,
+       ph.storage_key, ph.thumb_key, ph.created_at,
+       not exists (
+         select 1 from storage.objects o
+          where o.bucket_id = 'photo-originals' and o.name = ph.storage_key
+       ) as original_missing,
+       (ph.thumb_key is not null and not exists (
+         select 1 from storage.objects o
+          where o.bucket_id = 'photo-thumbs' and o.name = ph.thumb_key
+       )) as thumb_missing
+  from public.photos ph
+  join public.projects pr on pr.id = ph.project_id
+ where ph.deleted_at is null
+   and (
+         not exists (
+           select 1 from storage.objects o
+            where o.bucket_id = 'photo-originals' and o.name = ph.storage_key
+         )
+      or (ph.thumb_key is not null and not exists (
+           select 1 from storage.objects o
+            where o.bucket_id = 'photo-thumbs' and o.name = ph.thumb_key
+         ))
+       )
+ order by original_missing desc, ph.created_at desc
  limit 500;

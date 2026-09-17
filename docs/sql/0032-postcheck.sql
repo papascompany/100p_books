@@ -311,3 +311,59 @@ select policyname, cmd, roles
    and policyname like 'reviews_storage%'
  order by policyname;
 
+-- ---------------------------------------------------------------------
+-- [8] storage.objects — photo-originals/photo-thumbs 사용자 세션 쓰기 정책 제거 확인.
+--     사진 업로드는 서명 업로드 URL(service_role 발급 → storage-api 가 토큰 검증 후 RLS 없이
+--     기록)이고, 검증·재업로드·복사·삭제·서명 URL 발급은 전부 service_role 이라 이 제거로
+--     깨지지 않는다.
+-- ---------------------------------------------------------------------
+-- photo 버킷 정책 구성. 기대: 정확히 3 rows —
+--   photo_buckets_service_all   (ALL,    {service_role})
+--   photo_originals_user_select (SELECT, {authenticated})
+--   photo_thumbs_user_select    (SELECT, {authenticated})
+-- photo_originals_user_insert / _update / _delete, photo_thumbs_user_delete 가 보이면 실패.
+select policyname, cmd, roles
+  from pg_policies
+ where schemaname = 'storage'
+   and tablename  = 'objects'
+   and policyname like 'photo\_%' escape '\'
+ order by policyname;
+
+-- storage.objects 전체의 비-SELECT 정책 중 service_role 전용이 아닌 것.
+-- 기대: 정확히 3 rows — site_assets_admin_delete / site_assets_admin_update / site_assets_admin_write
+--   (roles={authenticated}, qual/with_check 에 is_admin() 포함 → 관리자만 통과).
+-- 그 밖의 행이 보이면 사용자 세션 storage 쓰기 표면이 남아 있는 것이다
+-- (0032 범위 밖 새 정책이면 앱이 사용자 세션으로 그 버킷을 쓰는지 대조).
+select policyname, cmd, roles, qual, with_check,
+       (coalesce(qual, '') || coalesce(with_check, '')) ilike '%is_admin%' as admin_gated
+  from pg_policies
+ where schemaname = 'storage'
+   and tablename  = 'objects'
+   and cmd <> 'SELECT'
+   and roles <> array['service_role']::name[]
+ order by policyname;
+
+-- [8-스모크] 적용 직후 앱 경로 1회 확인(운영 계정 또는 스테이징):
+--   (1) 사진 업로드 — 업로드 화면에서 JPEG 1장 → 완료 표시(sign-upload 200 → 서명 URL PUT 200 →
+--       complete 200, inserted 1). PUT 이 403 이면 서명 업로드가 사용자 정책에 의존한 것 → 즉시 보고.
+--   (2) 휴지통 이동 → 영구 삭제(purge) — 성공한다(둘 다 service_role 경로).
+--   (3) docs/sql/0032-precheck.sql [11] (b)~(d) 를 다시 실행 — 적용 전 결과 외에 새 행이 없어야 한다.
+--
+-- [8-선택] 런타임 프로브 — 사용자 JWT 로 직접 storage 쓰기가 거부되는지(스테이징 권장, 셸에서 실행).
+--   <ref>/<anon>/<user_jwt>/<user_id> 는 프로젝트·테스트 계정 값. 경로는 실제 사진과 겹치지 않는 probe 폴더.
+--   기대: 4xx(본문 statusCode 403 / "new row violates row-level security policy" 또는 not found).
+--   200 이면 표면이 열려 있는 것이다 → 생성된 probe 객체를 대시보드(Storage)에서 지우고 0032 (H) 재확인.
+--
+--   # (1) 직접 업로드(INSERT)
+--   curl -s -o /dev/null -w '%{http_code}\n' \
+--     -X POST "https://<ref>.supabase.co/storage/v1/object/photo-originals/<user_id>/probe-0032/probe.jpg" \
+--     -H "apikey: <anon>" -H "Authorization: Bearer <user_jwt>" \
+--     -H "Content-Type: image/jpeg" --data-binary 'probe'
+--   # (2) upsert 덮어쓰기(UPDATE) — 같은 경로에 x-upsert
+--   curl -s -o /dev/null -w '%{http_code}\n' \
+--     -X POST "https://<ref>.supabase.co/storage/v1/object/photo-originals/<user_id>/probe-0032/probe.jpg" \
+--     -H "apikey: <anon>" -H "Authorization: Bearer <user_jwt>" \
+--     -H "Content-Type: image/jpeg" -H "x-upsert: true" --data-binary 'probe'
+--   # DELETE 는 프로브하지 않는다 — 없는 경로 삭제는 적용 전후 모두 빈 결과라 구분되지 않고,
+--   #   실제 사진 키로 시험하면 데이터가 지워진다. 위 정책 조회(3 rows)로 판정한다.
+
