@@ -21,6 +21,8 @@ import {
 } from "@/lib/orders/validation-gate";
 import type { StorigeValidationCache } from "@/lib/db/types";
 
+import { checkAdminPendingCancel } from "./pending-cancel";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -41,6 +43,10 @@ const BodySchema = z.object({
  *   - in_production → shipped 시 trackingNo + trackingCarrier 필수, shipped_at 타임스탬프.
  *   - shipped → delivered 시 delivered_at 타임스탬프.
  *   - paid → in_production 으로 갈 때 별도 메타 없음.
+ *   - pending → cancelled 는 토스 확인 뒤에만(./pending-cancel.ts) — 캡처됐거나 승인 진행 중인
+ *     결제가 있으면 409, 조회 실패면 503. 조건부 UPDATE 는 확인한 결제 키가 그대로일 때만 전이한다.
+ *   - cancelled·refunded 전이 클레임 승자는 restoreOrderCredits — pending 도 캡처 전에 크레딧을
+ *     선점하므로(0033) 결제 대기 주문 취소에서도 잡힌 포인트·할인을 돌려준다(잡힌 것만, 멱등).
  */
 export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
   const raw = (await req.json().catch(() => ({}))) as unknown;
@@ -59,7 +65,9 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
 
   const { data: row, error: getErr } = await admin
     .from("orders")
-    .select("id, status, user_id, points_used, discount_code_id, storige_validation")
+    .select(
+      "id, status, user_id, amount, points_used, discount_code_id, storige_validation, toss_payment_key, toss_order_id",
+    )
     .eq("id", ctx.params.id)
     .maybeSingle();
   if (getErr) return fail("ORDER_QUERY_FAILED", getErr.message, 500);
@@ -100,6 +108,28 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
     );
   }
 
+  // 결제 대기 주문 취소 — 토스에 캡처·진행 중인 결제가 없을 때만.
+  const cancellingPending = from === "pending" && target === "cancelled";
+  if (cancellingPending) {
+    const verdict = await checkAdminPendingCancel({
+      toss_payment_key: row.toss_payment_key,
+      toss_order_id: row.toss_order_id,
+      amount: row.amount,
+    });
+    if (verdict.kind === "block") {
+      if (verdict.status === 409) {
+        console.error("[admin/transition] 결제 기록이 있는 pending 주문 취소 거부", {
+          orderId: row.id,
+          code: verdict.code,
+          tossStatus: verdict.tossStatus ?? null,
+        });
+      }
+      return fail(verdict.code, verdict.message, verdict.status, {
+        ...(verdict.tossStatus ? { tossStatus: verdict.tossStatus } : {}),
+      });
+    }
+  }
+
   // shipped 전이 시 tracking 정보 필수
   const update: Record<string, unknown> = { status: target };
   const now = new Date().toISOString();
@@ -121,11 +151,14 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
 
   // 조건부 클레임 — status=from 일 때만 전이. 동시 중복(더블클릭 등) 시 한 번만 승자가
   // 되어 환불 복원 등 side-effect 가 1회만 실행되게 한다.
-  const { data: updated, error: updErr } = await admin
-    .from("orders")
-    .update(update)
-    .eq("id", ctx.params.id)
-    .eq("status", from)
+  // 결제 대기 취소는 확인한 결제 키가 그대로일 때만 — 확인 뒤 다른 결제가 바인딩되면 빗나가 409.
+  const claim = admin.from("orders").update(update).eq("id", ctx.params.id).eq("status", from);
+  const guardedClaim = !cancellingPending
+    ? claim
+    : row.toss_payment_key === null
+      ? claim.is("toss_payment_key", null)
+      : claim.eq("toss_payment_key", row.toss_payment_key);
+  const { data: updated, error: updErr } = await guardedClaim
     .select(
       "id, status, tracking_no, tracking_carrier, shipped_at, delivered_at",
     )
@@ -137,15 +170,17 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
     return fail("ORDER_NOT_IN_EXPECTED_STATE", "주문 상태가 이미 변경되었습니다.", 409);
   }
 
-  // 환불 전이 시 사용 포인트 + 할인 복원 (클레임 승자만 1회). refunded 는 종착 상태라
-  // 재진입 불가 + 위 조건부 UPDATE 로 이중 복원 방지.
-  if (target === "refunded") {
-    await restoreOrderCredits(admin, {
+  // 환불·취소 전이 시 사용 포인트 + 할인 복원 (클레임 승자만 1회). refunded·cancelled 는 종착 상태라
+  // 재진입 불가 + 위 조건부 UPDATE 로 이중 복원 방지. 전이 **뒤** 호출해야 복원된다(refund 모드).
+  let creditRestore: { ok: boolean; code?: string } | null = null;
+  if (target === "refunded" || target === "cancelled") {
+    const restored = await restoreOrderCredits(admin, {
       id: row.id,
       user_id: row.user_id,
       points_used: row.points_used,
       discount_code_id: row.discount_code_id,
     });
+    creditRestore = restored.ok ? { ok: true } : { ok: false, code: restored.code };
   }
 
   // 감사 로그 — 상태 전이 + tracking 메타
@@ -164,6 +199,7 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
       ...(validationBlocks.length > 0
         ? { validationOverride: true, validationBlocks }
         : {}),
+      ...(creditRestore ? { creditRestore } : {}),
     },
     request: req,
   });

@@ -15,6 +15,8 @@ import {
 } from "@/app/api/payments/_test/harness";
 import type { MemoryDb, Row } from "@/app/api/payments/_test/memory-supabase";
 import type * as TossModule from "@/lib/payments/toss";
+import { TossError } from "@/lib/payments/toss";
+import type * as TossCancelModule from "@/lib/payments/toss-cancel";
 
 /**
  * POST /api/payments/webhook — SEC-8(주문 대조) + paid 전이 시 finalize + 환불·취소 복원.
@@ -33,6 +35,14 @@ vi.mock("@/lib/payments/toss", async (importOriginal) => {
     ...actual,
     fetchTossPayment: async (paymentKey: string) =>
       (await import("@/app/api/payments/_test/harness")).harness.toss.fetch(paymentKey),
+  };
+});
+vi.mock("@/lib/payments/toss-cancel", async (importOriginal) => {
+  const actual = await importOriginal<typeof TossCancelModule>();
+  return {
+    ...actual,
+    cancelTossPaymentFully: async (args: Parameters<typeof actual.cancelTossPaymentFully>[0]) =>
+      (await import("@/app/api/payments/_test/harness")).harness.toss.cancelFully(args),
   };
 });
 vi.mock("@vercel/functions", async () => {
@@ -255,14 +265,154 @@ describe("환불·취소 전이 — 실제로 잡힌 크레딧만 복원", () =>
     expect(balanceOf(db)).toBe(5000);
   });
 
-  it("EXPIRED(pending, 선점 후 승인 못 함) → cancelled + 선점 해제", async () => {
-    const { db, order } = setup({ points: 2000 });
-    reserveCredits(db, order, 2000, null);
+  it("CANCELED(paid) 클레임 승자만 환불 메일 1회 — 재전송은 메일 없음", async () => {
+    const { db, order } = setup({ status: "paid" });
+    tossHas("pk-1", String(order.toss_order_id), Number(order.amount), "CANCELED");
+
+    await webhook("pk-1", String(order.toss_order_id), "CANCELED");
+    await webhook("pk-1", String(order.toss_order_id), "CANCELED");
+    const refundedMails = db
+      .table("email_jobs")
+      .filter((j) => j.related_id === order.id && j.template === "order.refunded");
+    expect(order.status).toBe("refunded");
+    expect(refundedMails).toHaveLength(1);
+  });
+
+  it("CAS: 조회와 클레임 사이 주문의 결제 키가 바뀌면 refunded 전이·복원하지 않음", async () => {
+    const { db, order, code } = setup({ status: "paid", points: 3000, discount: true });
+    reserveCredits(db, order, 3000, code);
+    tossHas("pk-1", String(order.toss_order_id), Number(order.amount), "CANCELED");
+    harness.toss.onFetch = () => {
+      order.toss_payment_key = "pk-2";
+    };
+
+    const res = await webhook("pk-1", String(order.toss_order_id), "CANCELED");
+    expect(res.status).toBe(200);
+    expect((await readJson(res)).data).toMatchObject({ transitioned: false });
+    expect(order.status).toBe("paid");
+    expect(balanceOf(db)).toBe(2000);
+    expect(code!.used_count).toBe(1);
+  });
+});
+
+describe("대기 주문 정책 — 결제 실패·만료는 주문을 취소하지 않는다 (주문서 재사용·만료 cron 이 정리)", () => {
+  it("EXPIRED(pending, 선점 후 승인 못 함) → pending 유지 + 선점·키 해제 · 재전송 멱등", async () => {
+    const { db, order, code } = setup({ points: 2000, discount: true });
+    reserveCredits(db, order, 2000, code);
     tossHas("pk-1", String(order.toss_order_id), Number(order.amount), "EXPIRED");
 
     const res = await webhook("pk-1", String(order.toss_order_id), "EXPIRED");
     expect(res.status).toBe(200);
+    expect((await readJson(res)).data).toMatchObject({ transitioned: false, creditsReleased: true });
+    expect(order.status).toBe("pending");
+    expect(order.toss_payment_key).toBeNull();
+    expect(balanceOf(db)).toBe(5000);
+    expect(code!.used_count).toBe(0);
+
+    const again = await webhook("pk-1", String(order.toss_order_id), "EXPIRED");
+    expect(again.status).toBe(200);
+    expect((await readJson(again)).data).toMatchObject({ reason: "pending order kept for reuse" });
+    expect(order.status).toBe("pending");
+    expect(balanceOf(db)).toBe(5000);
+  });
+
+  it("ABORTED 인데 결제 키가 없는 pending(confirm 이 이미 해제) → 아무것도 바꾸지 않음", async () => {
+    const { db, order } = setup({ paymentKey: null });
+    tossHas("pk-1", String(order.toss_order_id), Number(order.amount), "ABORTED");
+    const res = await webhook("pk-1", String(order.toss_order_id), "ABORTED");
+    expect(res.status).toBe(200);
+    expect(order.status).toBe("pending");
+    expect(db.calls.filter((c) => c === "update:orders" || c === "rpc:release_order_credits")).toEqual([]);
+  });
+
+  it("해제 RPC DB 오류 → 500 으로 재전송 유도, 주문 상태 유지", async () => {
+    const { db, order } = setup({ points: 2000 });
+    reserveCredits(db, order, 2000, null);
+    tossHas("pk-1", String(order.toss_order_id), Number(order.amount), "ABORTED");
+    db.failOnce.set("rpc:release_order_credits", { message: "connection reset" });
+
+    const res = await webhook("pk-1", String(order.toss_order_id), "ABORTED");
+    expect(res.status).toBe(500);
+    expect((await readJson(res)).error?.code).toBe("CREDITS_RELEASE_FAILED");
+    expect(order.status).toBe("pending");
+    expect(balanceOf(db)).toBe(3000);
+  });
+});
+
+describe("취소된 주문의 캡처 결제 — 돈은 빠졌는데 주문은 취소 상태를 남기지 않는다", () => {
+  it("cancelled + 이 결제로 바인딩 + 토스 DONE → 전액 취소 + 크레딧 복원 · 재전송 멱등", async () => {
+    const { db, order, code } = setup({ status: "cancelled", points: 2000, discount: true });
+    reserveCredits(db, order, 2000, code);
+    tossHas("pk-1", String(order.toss_order_id), Number(order.amount), "DONE");
+
+    const res = await webhook("pk-1", String(order.toss_order_id), "DONE");
+    expect(res.status).toBe(200);
+    expect((await readJson(res)).data).toMatchObject({ transitioned: false, paymentCanceled: true });
+    expect(harness.toss.payments.get("pk-1")?.status).toBe("CANCELED");
     expect(order.status).toBe("cancelled");
     expect(balanceOf(db)).toBe(5000);
+    expect(code!.used_count).toBe(0);
+    expect(db.table("pdf_build_jobs")).toHaveLength(0);
+
+    // 이어서 오는 CANCELED 이벤트 — 복원 멱등
+    const again = await webhook("pk-1", String(order.toss_order_id), "CANCELED");
+    expect(again.status).toBe(200);
+    expect(balanceOf(db)).toBe(5000);
+    expect(harness.toss.cancelCalls).toHaveLength(1);
+  });
+
+  it("토스 취소 실패 → 503 으로 재전송 유도 · 재전송 때 취소", async () => {
+    const { db, order } = setup({ status: "cancelled", points: 2000 });
+    reserveCredits(db, order, 2000, null);
+    tossHas("pk-1", String(order.toss_order_id), Number(order.amount), "DONE");
+    harness.toss.nextCancelError = new TossError({ code: "PROVIDER_ERROR", message: "일시 오류", status: 502 });
+
+    const first = await webhook("pk-1", String(order.toss_order_id), "DONE");
+    expect(first.status).toBe(503);
+    expect((await readJson(first)).error?.code).toBe("PAYMENT_CANCEL_PENDING");
+    expect(balanceOf(db)).toBe(3000);
+
+    const retry = await webhook("pk-1", String(order.toss_order_id), "DONE");
+    expect(retry.status).toBe(200);
+    expect(harness.toss.payments.get("pk-1")?.status).toBe("CANCELED");
+    expect(balanceOf(db)).toBe(5000);
+  });
+
+  it("조회 뒤 클레임 전에 주문이 취소됨(pending 으로 읽음) → paid 로 만들지 않고 전액 취소", async () => {
+    const { db, order } = setup({ points: 1000 });
+    reserveCredits(db, order, 1000, null);
+    tossHas("pk-1", String(order.toss_order_id), Number(order.amount), "DONE");
+    harness.toss.onFetch = () => {
+      order.status = "cancelled";
+    };
+
+    const res = await webhook("pk-1", String(order.toss_order_id), "DONE");
+    expect(res.status).toBe(200);
+    expect(order.status).toBe("cancelled");
+    expect(harness.toss.payments.get("pk-1")?.status).toBe("CANCELED");
+    expect(balanceOf(db)).toBe(5000);
+    expect(db.table("pdf_build_jobs")).toHaveLength(0);
+  });
+
+  it("자동 취소 뒤 크레딧 복원만 실패했던 취소 주문 + 토스 CANCELED 이벤트 → 복원으로 수렴", async () => {
+    const { db, order, code } = setup({ status: "cancelled", points: 2000, discount: true });
+    reserveCredits(db, order, 2000, code);
+    tossHas("pk-1", String(order.toss_order_id), Number(order.amount), "CANCELED");
+
+    const res = await webhook("pk-1", String(order.toss_order_id), "CANCELED");
+    expect(res.status).toBe(200);
+    expect(order.status).toBe("cancelled");
+    expect(balanceOf(db)).toBe(5000);
+    expect(code!.used_count).toBe(0);
+    expect(harness.toss.cancelCalls).toHaveLength(0);
+  });
+
+  it("결제 키가 묶이지 않은 취소 주문에 DONE → 자동 취소하지 않고 관리자 확인 로그", async () => {
+    const { order } = setup({ status: "cancelled", paymentKey: null });
+    tossHas("pk-1", String(order.toss_order_id), Number(order.amount), "DONE");
+    const res = await webhook("pk-1", String(order.toss_order_id), "DONE");
+    expect(res.status).toBe(200);
+    expect(harness.toss.cancelCalls).toHaveLength(0);
+    expect(console.error).toHaveBeenCalled();
   });
 });

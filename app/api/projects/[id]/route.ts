@@ -4,6 +4,7 @@ import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { requireActiveUser, requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
+import { assertProjectsEditable } from "@/lib/orders/edit-lock";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -150,6 +151,7 @@ function hasOrdersResponse(orderCount: number | null) {
 /**
  * PATCH /api/projects/[id]
  *   body: { title?, bookSizeId? }
+ *   결제 이후(paid·in_production·shipped·delivered) 주문이 달린 포토북은 409 PROJECT_LOCKED.
  */
 export async function PATCH(req: Request, { params }: RouteCtx) {
   try {
@@ -176,6 +178,14 @@ export async function PATCH(req: Request, { params }: RouteCtx) {
     if (existing.user_id !== user.id) {
       return fail("FORBIDDEN", "해당 프로젝트에 대한 권한이 없습니다.", 403);
     }
+
+    // 결제 후 편집 잠금 (DEBT-2) — 소유권 확인 **뒤에만**(남의 결제 여부 비노출). PATCH 전체를 잠근다:
+    //   - bookSizeId 는 결제 금액·표지 규격·인쇄 판형을 바꾼다(가장 직접적인 인쇄물 변조).
+    //   - title 도 인쇄 산출물에 들어간다 — PDF 재생성(rebuild-pdf) 시 문서 메타데이터 Title·다운로드
+    //     파일명이 되고, 관리자·Storige 가 보는 주문의 포토북 이름이 결제 후에 바뀐다.
+    //   필드별로 가르면 새 필드가 추가될 때 잠금이 빠지기 쉬워 fail-closed 로 전체를 막는다.
+    //   잠기면 409 PROJECT_LOCKED(failFromError), 주문 조회 실패는 503 PROJECT_LOCK_CHECK_FAILED.
+    await assertProjectsEditable(createAdminSupabase(), params.id);
 
     const patch: Record<string, unknown> = {};
     if (parsed.data.title !== undefined) patch.title = parsed.data.title;

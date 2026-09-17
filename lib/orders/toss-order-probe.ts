@@ -4,13 +4,14 @@ import "server-only";
  * 대기(pending) 주문 취소 전 토스 원장 확인 (DEBT-6) — fail-closed.
  *
  * 왜 필요한가:
- *   이 코드베이스에서 orders.toss_payment_key 는 paid 전이와 **같은 UPDATE** 에서만 기록된다
- *   (payments/confirm 조건부 클레임, payments/webhook mapped==='paid'). 그래서 "토스에서 돈은
- *   캡처됐는데 우리 쪽 클레임 UPDATE 가 실패/함수 종료로 반영되지 않은 주문" 은
- *   status='pending' · toss_payment_key IS NULL 로 남는다 — DB 만 보면 결제하지 않은 주문과
- *   구별되지 않는다. 이 주문을 cancelled 로 바꾸면 이후 웹훅 DONE 은 canTransition(cancelled→paid)
- *   이 막아 영구히 복구되지 않는다(돈은 청구됐는데 주문은 취소). 그래서 취소 직전에 토스에
- *   "이 orderId 로 승인된 결제가 있는가" 를 물어, **없다는 것이 확인될 때만** 취소한다.
+ *   payments/confirm 은 토스 승인(캡처) **전에** orders.toss_payment_key 를 바인딩한다
+ *   (0033 reserve_order_credits). 그래서 캡처된 결제는 원칙적으로 키가 묶인 pending 이나 paid 로만
+ *   남고, 취소·만료 경로는 키가 묶인 pending 을 건드리지 않는다(lib/orders/state.ts hasPaymentKey).
+ *   그래도 키 없는 pending 에는 바인딩 도입 이전(캡처 후 클레임 실패로 키 없이 남은) 주문이나
+ *   해제 경합 같은 예외가 섞일 수 있다. 그런 주문을 cancelled 로 바꾸면 이후 웹훅 DONE 은
+ *   canTransition(cancelled→paid) 에 막혀 확정되지 않는다(돈은 청구됐는데 주문은 취소). 그래서 취소
+ *   직전에 토스에 "이 orderId 로 승인된 결제가 있는가" 를 물어, **없다는 것이 확인될 때만** 취소한다
+ *   — 키 바인딩 위에 얹는 추가 방어선이다.
  *
  * 조회 API: GET https://api.tosspayments.com/v1/payments/orders/{orderId}
  *   (토스 API 레퍼런스, 2026-09-17 확인 — "승인된 결제를 orderId 로 조회", Basic 인증)
@@ -29,8 +30,7 @@ import "server-only";
  * toss_order_id 로만 주문을 찾는다 — 우리 코드로는 이 주문에 돈이 캡처·연결될 경로가 없다.
  * (orders/create 는 최초 구현부터 toss_order_id 를 항상 채운다.)
  *
- * 인증 헤더 구성은 lib/payments/toss.ts 와 같다(그 파일은 결제 쪽 소관이라 여기서 복제).
- * 결제 쪽이 orderId 조회 헬퍼를 export 하면 이 모듈의 fetch 부분만 그쪽으로 위임하면 된다.
+ * 인증 헤더 구성은 lib/payments/toss.ts 와 같다(여기서 복제 — 공용 헬퍼로 합치는 것은 별도 정리 대상).
  */
 
 const TOSS_API_BASE = "https://api.tosspayments.com";

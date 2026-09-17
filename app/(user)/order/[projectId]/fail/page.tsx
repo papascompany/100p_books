@@ -1,7 +1,7 @@
 import { XCircle } from "lucide-react";
 import Link from "next/link";
 
-import FailOrderCleanup from "./FailOrderCleanup";
+import FailPendingOrderNotice from "./FailPendingOrderNotice";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ interface PageProps {
 /**
  * /order/[projectId]/fail
  *   토스 failUrl 콜백. query 에 code/message (+ OrderForm 이 붙인 ourOrderId).
- *   결제되지 않은 대기 주문은 FailOrderCleanup 이 자동 취소한다 (DEBT-6).
+ *   대기 주문은 자동 취소하지 않는다 — 재시도 시 주문서 재사용, 명시적 취소 버튼, 24h 만료 cron (DEBT-6).
  */
 export default function OrderFailPage({ params, searchParams }: PageProps) {
   return (
@@ -38,7 +38,7 @@ export default function OrderFailPage({ params, searchParams }: PageProps) {
             오류 코드: {searchParams.code}
           </p>
         ) : null}
-        <FailOrderCleanup orderId={searchParams.ourOrderId} />
+        <FailPendingOrderNotice orderId={searchParams.ourOrderId} />
         <div className="mt-5 flex justify-center gap-2">
           <Button asChild variant="outline">
             <Link href={`/order/${params.projectId}`}>다시 시도</Link>

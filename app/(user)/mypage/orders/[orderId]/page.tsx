@@ -94,7 +94,8 @@ export default async function OrderDetailPage({ params }: PageProps) {
     order.status === "shipped" || order.status === "delivered";
   const hasReview = (order.reviews?.length ?? 0) > 0;
   // 결제 대기 주문 안내 (DEBT-6) — 결제 키가 없으면 취소 후보(서버가 토스 원장 확인 후 취소).
-  // awaitingApproval(pending + 결제 키)은 현재 결제 흐름에서 생기지 않는 데이터 이상에 대비한 방어 분기다.
+  // awaitingApproval(pending + 결제 키): 결제 confirm 이 캡처 전에 키를 바인딩한 뒤 승인 결과가 아직
+  // 확정되지 않은 주문 — 캡처됐을 수 있어 사용자 취소를 막고 새로고침·고객센터를 안내한다.
   const canCancel = isUserCancellable(order.status, order.toss_payment_key);
   const awaitingApproval =
     order.status === "pending" && hasPaymentKey(order.toss_payment_key);

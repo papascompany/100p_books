@@ -18,6 +18,8 @@ type OrderRow = {
   status: string;
   toss_payment_key: string | null;
   toss_order_id: string | null;
+  points_used: number;
+  discount_code_id: string | null;
 };
 
 const ORDER_ID = "0c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
@@ -30,6 +32,18 @@ const state = vi.hoisted(() => ({
   activeUserError: null as null | (Error & { status?: number; code?: string }),
   probe: { kind: "no_payment", reason: "not_found" } as TossOrderProbe,
   probeCalls: [] as Array<string | null>,
+  /** restoreOrderCredits 호출 시점의 주문 상태 — 전이 뒤에 불렸는지 확인. */
+  restoreCalls: [] as Array<{ id: string; statusAtCall: string | undefined }>,
+  restoreOk: true,
+}));
+
+vi.mock("@/lib/orders/refund", () => ({
+  restoreOrderCredits: vi.fn(async (_admin: unknown, order: { id: string }) => {
+    state.restoreCalls.push({ id: order.id, statusAtCall: state.order?.status });
+    return state.restoreOk
+      ? { ok: true, mode: "atomic", pointsRestored: 0, discountUsesRestored: 0 }
+      : { ok: false, mode: "atomic", code: "RELEASE_FAILED", message: "timeout" };
+  }),
 }));
 
 vi.mock("@/lib/orders/toss-order-probe", async (importOriginal) => {
@@ -140,12 +154,16 @@ beforeEach(() => {
     status: "pending",
     toss_payment_key: null,
     toss_order_id: "100p-toss-order-1",
+    points_used: 1000,
+    discount_code_id: null,
   };
   state.beforeUpdate = null;
   state.updates = [];
   state.activeUserError = null;
   state.probe = { kind: "no_payment", reason: "not_found" };
   state.probeCalls = [];
+  state.restoreCalls = [];
+  state.restoreOk = true;
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
@@ -155,7 +173,7 @@ afterEach(() => {
 });
 
 describe("POST /api/orders/[id]/cancel", () => {
-  it("결제 키 없는 본인 pending 주문을 토스 확인(결제 없음) 후 조건부 UPDATE 로 cancelled 전이", async () => {
+  it("결제 키 없는 본인 pending 주문을 토스 확인(결제 없음) 후 조건부 UPDATE 로 cancelled 전이 + 크레딧 복원", async () => {
     const { status, body } = await call();
     expect(status).toBe(200);
     expect(state.probeCalls).toEqual(["100p-toss-order-1"]);
@@ -168,7 +186,37 @@ describe("POST /api/orders/[id]/cancel", () => {
       "eq(user_id,user-1)",
       "eq(status,pending)",
       "is(toss_payment_key,null)",
+      // CAS: 토스에 확인한 주문번호의 행만 전이
+      "eq(toss_order_id,100p-toss-order-1)",
     ]);
+    // 전이 **뒤** 1회 — refund 모드 복원은 cancelled 상태에서만 동작한다.
+    expect(state.restoreCalls).toEqual([{ id: ORDER_ID, statusAtCall: "cancelled" }]);
+  });
+
+  it("토스 주문번호가 없는 주문은 toss_order_id IS NULL 로 대조한다", async () => {
+    state.order = { ...state.order!, toss_order_id: null };
+    const { status } = await call();
+    expect(status).toBe(200);
+    expect(state.updates[0]?.filters).toContain("is(toss_order_id,null)");
+  });
+
+  it("CAS: 확인 뒤 주문서 재사용으로 토스 주문번호가 바뀌면 UPDATE 가 빗나가 409 ORDER_STATE_CHANGED, 복원 없음", async () => {
+    state.beforeUpdate = (o) => {
+      o.toss_order_id = "100p-toss-order-2";
+    };
+    const { status, body } = await call();
+    expect(status).toBe(409);
+    expect(body.error?.code).toBe("ORDER_STATE_CHANGED");
+    expect(state.order?.status).toBe("pending");
+    expect(state.restoreCalls).toHaveLength(0);
+  });
+
+  it("크레딧 복원이 실패해도 취소 응답은 성공 + 운영 로그", async () => {
+    state.restoreOk = false;
+    const { status } = await call();
+    expect(status).toBe(200);
+    expect(state.order?.status).toBe("cancelled");
+    expect(console.error).toHaveBeenCalledOnce();
   });
 
   it("이미 cancelled 면 토스 조회·UPDATE 없이 성공 (멱등)", async () => {
@@ -178,6 +226,7 @@ describe("POST /api/orders/[id]/cancel", () => {
     expect(body.data?.alreadyCancelled).toBe(true);
     expect(state.updates).toHaveLength(0);
     expect(state.probeCalls).toHaveLength(0);
+    expect(state.restoreCalls).toHaveLength(0);
   });
 
   it.each(["DONE", "IN_PROGRESS", "WAITING_FOR_DEPOSIT", "CANCELED"])(
@@ -191,6 +240,7 @@ describe("POST /api/orders/[id]/cancel", () => {
       expect(state.updates).toHaveLength(0);
       expect(state.order?.status).toBe("pending");
       expect(console.error).toHaveBeenCalledOnce();
+      expect(state.restoreCalls).toHaveLength(0);
     },
   );
 
@@ -214,8 +264,8 @@ describe("POST /api/orders/[id]/cancel", () => {
     expect(state.order?.status).toBe("cancelled");
   });
 
-  it("(방어 분기) 결제 키가 있는 pending 은 토스 조회 없이 409 PAYMENT_IN_PROGRESS, 상태 유지", async () => {
-    // 현재 결제 키는 paid 전이와 같은 UPDATE 에서만 기록돼 이 조합은 생기지 않는다 — 데이터 이상 대비.
+  it("결제 키가 묶인 pending(승인 진행 중·캡처 후 복구 대기)은 토스 조회 없이 409 PAYMENT_IN_PROGRESS, 상태 유지", async () => {
+    // confirm 은 캡처 전에 키를 바인딩한다(0033) — 키가 있으면 돈이 캡처됐을 수 있어 사용자가 취소하지 않는다.
     state.order = { ...state.order!, toss_payment_key: "tgen_key" };
     const { status, body } = await call();
     expect(status).toBe(409);
@@ -257,7 +307,7 @@ describe("POST /api/orders/[id]/cancel", () => {
     expect(state.order?.status).toBe("paid");
   });
 
-  it("(방어) 경합: 판정 후 결제 키만 붙어도(pending 유지) UPDATE 가 빗나가 409 PAYMENT_IN_PROGRESS", async () => {
+  it("경합: 판정 후 confirm 이 선점(키 바인딩, pending 유지)하면 UPDATE 가 빗나가 409 PAYMENT_IN_PROGRESS", async () => {
     state.beforeUpdate = (o) => {
       o.toss_payment_key = "tgen_key";
     };

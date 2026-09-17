@@ -9,6 +9,7 @@ import { logAdminAction } from "@/lib/admin/audit";
 import { createAdminSupabase } from "@/lib/db/admin";
 import type { Database, OrderStatus } from "@/lib/db/types";
 import { enqueueEmail } from "@/lib/email/queue";
+import { enqueueOrderRefundedEmail } from "@/lib/orders/order-emails";
 import { restoreOrderCredits } from "@/lib/orders/refund";
 import { TossError } from "@/lib/payments/toss";
 import {
@@ -154,8 +155,10 @@ export const GET = withAdmin<{ id: string }>(async (_req, ctx) => {
  *      이미 CANCELED(콘솔 취소·동시 요청) → 취소 호출 없이 4로.
  *      **토스 단계가 실패하면 주문은 그대로 둔다.**
  *   4. 조건부 클레임 UPDATE(status IN refundable) → 승자만 restoreOrderCredits + 고객 메일.
- *      패자(동시 요청·웹훅 선반영)는 재조회해 refunded 면 성공으로 수렴(복원은 승자 1회).
- *   5. 감사 로그 order.refund (실패 시 order.refund_failed).
+ *      패자(동시 요청·웹훅 선반영)는 재조회해 refunded 면 성공으로 수렴(복원·메일은 승자 1회 —
+ *      웹훅이 이기면 웹훅이 환불 메일을 보낸다, lib/orders/order-emails.ts).
+ *   5. 감사 로그 order.refund (실패 시 order.refund_failed — 토스 사전 조회 실패·결제 불일치 차단 포함).
+ *      복원량은 restoreOrderCredits 반환값(실제로 되돌린 포인트·할인 사용 수)으로 남긴다.
  */
 export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
   const raw = (await req.json().catch(() => ({}))) as unknown;
@@ -217,12 +220,18 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
       request: req,
     });
 
-  // 2) 토스 사전 조회 — 실패하면 아무것도 바꾸지 않는다.
+  // 2) 토스 사전 조회 — 실패하면 아무것도 바꾸지 않는다. 조회 실패·결제 불일치 차단도 감사에 남긴다
+  //    (식별자·금액 불일치는 보안·정산 신호).
   let prefetched: TossPayment;
   try {
     prefetched = await getTossPayment(paymentKey);
   } catch (e) {
     const te = toTossError(e);
+    await audit("order.refund_failed", {
+      stage: "toss_precheck",
+      code: te.code,
+      message: te.message,
+    });
     return fail(te.code, `토스 결제 조회 실패: ${te.message}`, te.status);
   }
   const tossGate = evaluateTossPaymentForRefund(
@@ -230,6 +239,12 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
     prefetched,
   );
   if (tossGate.kind === "blocked") {
+    await audit("order.refund_failed", {
+      stage: "toss_precheck",
+      code: tossGate.code,
+      tossStatus: prefetched.status,
+      tossTotalAmount: prefetched.totalAmount,
+    });
     return fail(tossGate.code, tossGate.message, tossGate.httpStatus, {
       tossStatus: prefetched.status,
     });
@@ -296,17 +311,28 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
 
   let alreadyRefunded = false;
   let creditRestoreError: string | null = null;
+  let creditsRestored: { pointsRestored: number; discountUsesRestored: number } | null = null;
   if (claimed) {
-    // 클레임 승자만 1회 — 사용 포인트·할인 복원 (시그니처는 transition/webhook 과 동일).
-    // 이 시점엔 결제 취소·refunded 전이가 이미 끝났다. 복원이 throw 해도 500 으로 뒤집지 않고
-    // 경고로 돌려준다(재요청은 ALREADY_REFUNDED 라 복원이 재시도되지 않음 → 수동 보정 필요).
+    // 클레임 승자만 1회 — 사용 포인트·할인 복원 (refunded 전이 **뒤** 호출 — P1 계약).
+    // restoreOrderCredits 는 실패를 throw 하지 않고 ok=false 로 돌려준다. 이 시점엔 결제 취소·refunded
+    // 전이가 이미 끝났으므로 500 으로 뒤집지 않고 경고·감사로 남긴다(재요청은 ALREADY_REFUNDED →
+    // 수동 보정 필요). 방어적으로 throw 도 같은 경고로 처리한다.
     try {
-      await restoreOrderCredits(admin, {
+      const restored = await restoreOrderCredits(admin, {
         id: order.id,
         user_id: order.user_id,
         points_used: order.points_used,
         discount_code_id: order.discount_code_id,
       });
+      if (restored.ok) {
+        creditsRestored = {
+          pointsRestored: restored.pointsRestored,
+          discountUsesRestored: restored.discountUsesRestored,
+        };
+      } else {
+        creditRestoreError = `${restored.code}${restored.message ? `: ${restored.message}` : ""}`;
+        console.warn("[admin/refund] restoreOrderCredits not ok:", order.id, creditRestoreError);
+      }
     } catch (e) {
       creditRestoreError = e instanceof Error ? e.message : String(e);
       console.warn("[admin/refund] restoreOrderCredits failed:", creditRestoreError);
@@ -345,14 +371,14 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
       ? creditRestoreError
         ? { creditRestoreFailed: true, creditRestoreError }
         : {
-            pointsRestored: order.points_used ?? 0,
-            discountRestored: !!order.discount_code_id,
+            pointsRestored: creditsRestored?.pointsRestored ?? 0,
+            discountRestored: (creditsRestored?.discountUsesRestored ?? 0) > 0,
           }
       : {}),
   });
 
   if (claimed) {
-    await enqueueRefundEmail(admin, order);
+    await enqueueOrderRefundedEmail(admin, order, enqueueEmail);
   }
 
   return ok({
@@ -374,66 +400,3 @@ function toTossError(e: unknown): TossError {
   });
 }
 
-/** 환불 완료 고객 알림 — transition 라우트와 같은 컨텍스트. 실패해도 환불 응답은 성공. */
-async function enqueueRefundEmail(
-  admin: AdminClient,
-  order: RefundOrderRow,
-): Promise<void> {
-  try {
-    const [{ data: profile }, { data: project }, { count: pageCount }] =
-      await Promise.all([
-        admin
-          .from("profiles")
-          .select("email, display_name")
-          .eq("id", order.user_id)
-          .maybeSingle(),
-        admin
-          .from("projects")
-          .select("title, book_size_id")
-          .eq("id", order.project_id)
-          .maybeSingle(),
-        admin
-          .from("pages")
-          .select("id", { count: "exact", head: true })
-          .eq("project_id", order.project_id),
-      ]);
-    const recipientEmail = profile?.email ?? "";
-    if (!recipientEmail) return;
-
-    const { data: bookSize } = project?.book_size_id
-      ? await admin
-          .from("book_sizes")
-          .select("name")
-          .eq("id", project.book_size_id)
-          .maybeSingle()
-      : { data: null };
-
-    const customerName =
-      order.address?.name ??
-      profile?.display_name ??
-      (recipientEmail.split("@")[0] || "고객");
-
-    await enqueueEmail({
-      template: "order.refunded",
-      to: { email: recipientEmail, name: customerName },
-      // 관리자 사유는 내부 메모일 수 있어 고객 메일에 싣지 않는다.
-      context: {
-        kind: "order",
-        orderId: order.id,
-        tossOrderId: order.toss_order_id ?? undefined,
-        customerName,
-        bookSizeName: bookSize?.name ?? "포토북",
-        pageCount: pageCount ?? 0,
-        qty: order.qty,
-        amount: order.amount,
-      },
-      relatedType: "order",
-      relatedId: order.id,
-    });
-  } catch (e) {
-    console.warn(
-      "[admin/refund] enqueue email failed:",
-      e instanceof Error ? e.message : String(e),
-    );
-  }
-}

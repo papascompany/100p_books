@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
+
 import { TossError, type TossConfirmResponse } from "@/lib/payments/toss";
 
 /**
@@ -97,6 +99,21 @@ export interface TossFullCancelArgs {
 /** 주문 id 기반 전액 환불 멱등 키 — 같은 주문의 전액 취소는 몇 번 눌러도 한 건. */
 export function refundIdempotencyKey(orderId: string): string {
   return `100p-refund-full-${orderId}`.slice(0, IDEMPOTENCY_KEY_MAX);
+}
+
+/**
+ * 취소된 주문에 캡처된 결제의 자동 전액 취소 멱등 키 — (주문 id, paymentKey) 결정적 해시.
+ *
+ * 관리자 환불 키(refundIdempotencyKey)와 분리한다: 토스는 같은 키의 첫 응답을 재생하므로
+ * 서로 다른 경로(결제 확정 경합 정리 vs 관리자 환불)가 한 키를 공유하면 한쪽의 실패가 다른 쪽에 재생된다.
+ * paymentKey 를 묶어 한 주문에 결제 키가 바뀌어도 다른 결제의 응답이 재생되지 않게 한다.
+ */
+export function cancelledOrderCancelIdempotencyKey(
+  orderId: string,
+  paymentKey: string,
+): string {
+  const digest = createHash("sha256").update(`${orderId}:${paymentKey}`).digest("hex");
+  return `100p-cancel-order-${digest}`.slice(0, IDEMPOTENCY_KEY_MAX);
 }
 
 /** 토스 에러 HTTP → 우리 응답 HTTP. 5xx 는 업스트림 장애, 409 는 동시 처리 중. */

@@ -17,6 +17,8 @@ import {
 import type { MemoryDb, Row } from "@/app/api/payments/_test/memory-supabase";
 import type * as TossModule from "@/lib/payments/toss";
 import { buildConfirmIdempotencyKey, TossError } from "@/lib/payments/toss";
+import type * as TossCancelModule from "@/lib/payments/toss-cancel";
+import { cancelledOrderCancelIdempotencyKey } from "@/lib/payments/toss-cancel";
 
 /**
  * POST /api/payments/confirm — 결제 무결성 (DEBT-1, DEBT-2, DEBT-7, SEC-7).
@@ -44,6 +46,14 @@ vi.mock("@/lib/payments/toss", async (importOriginal) => {
       (await import("@/app/api/payments/_test/harness")).harness.toss.confirm(args),
     fetchTossPayment: async (paymentKey: string) =>
       (await import("@/app/api/payments/_test/harness")).harness.toss.fetch(paymentKey),
+  };
+});
+vi.mock("@/lib/payments/toss-cancel", async (importOriginal) => {
+  const actual = await importOriginal<typeof TossCancelModule>();
+  return {
+    ...actual,
+    cancelTossPaymentFully: async (args: Parameters<typeof actual.cancelTossPaymentFully>[0]) =>
+      (await import("@/app/api/payments/_test/harness")).harness.toss.cancelFully(args),
   };
 });
 vi.mock("@vercel/functions", async () => {
@@ -361,6 +371,151 @@ describe("바인딩된 재시도 — 캡처됐을 수 있는 결제의 선점·�
     expect(harness.toss.confirmCalls).toHaveLength(1);
     expect(balanceOf(s.db)).toBe(4000);
     expect(o.toss_payment_key).toBe("pk-1");
+  });
+});
+
+describe("캡처 ↔ 주문 취소 경합 — 돈은 빠졌는데 주문은 취소 상태를 남기지 않는다", () => {
+  it("토스 승인 호출 사이 주문이 cancelled → 확정하지 않고 전액 취소 + 크레딧 복원, 409 ORDER_CANCELLED", async () => {
+    const s = scenario();
+    const code = seedDiscountCode(s.db, { max_uses: 10 });
+    const o = order(s, { points: 3000, discount: code });
+    // 선점·바인딩 뒤, 캡처 직전에 관리자가 주문을 취소한 상황
+    harness.toss.onConfirm = () => {
+      o.status = "cancelled";
+    };
+
+    const res = await authorizeAndConfirm(o, "pk-1");
+    const json = await readJson(res);
+    expect(res.status).toBe(409);
+    expect(json.error?.code).toBe("ORDER_CANCELLED");
+    expect(o.status).toBe("cancelled");
+    expect(harness.toss.payments.get("pk-1")?.status).toBe("CANCELED");
+    expect(harness.toss.cancelCalls).toEqual([
+      expect.objectContaining({
+        paymentKey: "pk-1",
+        idempotencyKey: cancelledOrderCancelIdempotencyKey(String(o.id), "pk-1"),
+      }),
+    ]);
+    expect(balanceOf(s.db)).toBe(5000);
+    expect(code.used_count).toBe(0);
+    expect(jobsFor(s.db, o)).toMatchObject({ pdf: 0, email: 0, funnel: 0 });
+  });
+
+  it("자동 취소가 토스 오류로 실패 → 502 PAYMENT_CANCEL_PENDING(선점 유지) · 새로고침이 다시 취소해 수렴", async () => {
+    const s = scenario();
+    const o = order(s, { points: 3000 });
+    harness.toss.onConfirm = () => {
+      o.status = "cancelled";
+    };
+    harness.toss.nextCancelError = new TossError({ code: "TOSS_TIMEOUT", message: "시간 초과", status: 504 });
+
+    const first = await authorizeAndConfirm(o, "pk-1");
+    expect(first.status).toBe(502);
+    expect((await readJson(first)).error?.code).toBe("PAYMENT_CANCEL_PENDING");
+    expect(harness.toss.payments.get("pk-1")?.status).toBe("DONE");
+    expect(balanceOf(s.db)).toBe(2000);
+
+    const retry = await confirm(o, "pk-1");
+    expect(retry.status).toBe(409);
+    expect((await readJson(retry)).error?.code).toBe("ORDER_CANCELLED");
+    expect(harness.toss.payments.get("pk-1")?.status).toBe("CANCELED");
+    expect(harness.toss.confirmCalls).toHaveLength(1); // 재승인 없음
+    expect(balanceOf(s.db)).toBe(5000);
+
+    // 다시 불러도 이미 취소 — 크레딧 이중 복원 없음
+    const again = await confirm(o, "pk-1");
+    expect((await readJson(again)).error?.code).toBe("ORDER_CANCELLED");
+    expect(balanceOf(s.db)).toBe(5000);
+  });
+
+  it("바인딩된 채 취소된 주문 + 결제가 승인된 적 없음(조회 404) → 409 ORDER_NOT_PENDING, 토스 취소·승인 없음", async () => {
+    const s = scenario();
+    const o = order(s);
+    harness.toss.authorize("pk-1", String(o.toss_order_id), Number(o.amount));
+    harness.toss.unconfirmedLookup = "not_found";
+    o.status = "cancelled";
+    o.toss_payment_key = "pk-1";
+
+    const res = await confirm(o, "pk-1");
+    expect(res.status).toBe(409);
+    expect((await readJson(res)).error?.code).toBe("ORDER_NOT_PENDING");
+    expect(harness.toss.cancelCalls).toHaveLength(0);
+    expect(harness.toss.confirmCalls).toHaveLength(0);
+  });
+
+  it("취소된 주문 재호출 때 토스 조회 실패 → 502 PAYMENT_STATUS_UNKNOWN, 아무것도 바꾸지 않음", async () => {
+    const s = scenario();
+    const o = order(s, { points: 3000 });
+    harness.toss.onConfirm = () => {
+      o.status = "cancelled";
+    };
+    harness.toss.nextCancelError = new TossError({ code: "PROVIDER_ERROR", message: "일시 오류", status: 502 });
+    expect((await authorizeAndConfirm(o, "pk-1")).status).toBe(502);
+
+    harness.toss.nextFetchError = new TossError({ code: "TOSS_TIMEOUT", message: "조회 시간 초과", status: 504 });
+    const retry = await confirm(o, "pk-1");
+    expect(retry.status).toBe(502);
+    expect((await readJson(retry)).error?.code).toBe("PAYMENT_STATUS_UNKNOWN");
+    expect(harness.toss.cancelCalls).toHaveLength(1);
+    expect(balanceOf(s.db)).toBe(2000);
+  });
+
+  it("클레임이 빗나간 뒤 주문 재조회가 DB 오류 → 500 ORDER_UPDATE_FAILED(재시도 가능), 결제 취소하지 않음", async () => {
+    const s = scenario();
+    const o = order(s);
+    harness.toss.onConfirm = () => {
+      o.status = "in_production";
+      s.db.failOnce.set("select:orders", { message: "connection reset" });
+    };
+    const res = await authorizeAndConfirm(o, "pk-1");
+    expect(res.status).toBe(500);
+    expect((await readJson(res)).error?.code).toBe("ORDER_UPDATE_FAILED");
+    expect(harness.toss.cancelCalls).toHaveLength(0);
+  });
+});
+
+describe("선점 해제 실패 — 재시도 가능한 코드로 응답", () => {
+  it("토스 거절 뒤 해제 RPC 오류 → 503 CREDITS_RELEASE_FAILED(키·선점 유지) · 새로고침하면 해제로 수렴", async () => {
+    const s = scenario();
+    const o = order(s, { points: 3000 });
+    harness.toss.nextConfirmError = {
+      error: new TossError({ code: "REJECT_CARD_PAYMENT", message: "한도 초과", status: 400 }),
+      captureBeforeThrow: false,
+    };
+    s.db.failOnce.set("rpc:release_order_credits", { message: "connection reset" });
+
+    const first = await authorizeAndConfirm(o, "pk-1");
+    const json = await readJson(first);
+    expect(first.status).toBe(503);
+    expect(json.error?.code).toBe("CREDITS_RELEASE_FAILED");
+    expect(json.error?.details).toMatchObject({ reason: "PAYMENT_VERIFY_FAILED" });
+    expect(o.toss_payment_key).toBe("pk-1");
+    expect(balanceOf(s.db)).toBe(2000);
+
+    // 토스는 거절된 결제를 ABORTED 로 남긴다 → 바인딩된 재시도가 조회로 해제
+    harness.toss.payments.get("pk-1")!.status = "ABORTED";
+    const retry = await confirm(o, "pk-1");
+    expect(retry.status).toBe(400);
+    expect((await readJson(retry)).error?.code).toBe("PAYMENT_NOT_DONE");
+    expect(o.toss_payment_key).toBeNull();
+    expect(o.status).toBe("pending");
+    expect(balanceOf(s.db)).toBe(5000);
+  });
+
+  it("금액 불일치 뒤 해제 RPC 오류 → 503 CREDITS_RELEASE_FAILED", async () => {
+    const s = scenario();
+    const o = order(s, { points: 3000 });
+    harness.toss.authorize("pk-1", String(o.toss_order_id), Number(o.amount));
+    harness.toss.overrideTotalAmount = Number(o.amount) + 1000;
+    s.db.failOnce.set("rpc:release_order_credits", { message: "connection reset" });
+
+    const res = await confirm(o, "pk-1");
+    expect(res.status).toBe(503);
+    expect((await readJson(res)).error).toMatchObject({
+      code: "CREDITS_RELEASE_FAILED",
+      details: { reason: "AMOUNT_MISMATCH" },
+    });
+    expect(balanceOf(s.db)).toBe(2000);
   });
 });
 

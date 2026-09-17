@@ -13,12 +13,14 @@ import { reasonMessage } from "@/lib/discounts/validate";
 import { enqueueEmail } from "@/lib/email/queue";
 import { calcCoverDimensions } from "@/lib/layout/cover";
 import { isPageDoc } from "@/lib/layout/types";
+import { refundCapturedPaymentOfCancelledOrder } from "@/lib/orders/cancelled-order-refund";
 import { finalizePaidOrder, isPaidLikeStatus } from "@/lib/orders/finalize-paid";
 import { detectOrderPricingDrift } from "@/lib/orders/pricing";
 import {
   releaseOrderCredits,
   reserveOrderCredits,
   type ReserveOrderCreditsResult,
+  restoreOrderCredits,
 } from "@/lib/orders/refund";
 import { assertTransition } from "@/lib/orders/state";
 import {
@@ -89,6 +91,11 @@ interface ExpectedPayment {
  * 멱등성·복구:
  *   - 이미 paid 인 주문 + 같은 paymentKey 재호출은 성공 응답 + finalize 복구 트리거.
  *   - 클레임 DB 오류로 pending 에 남아도 이 페이지를 새로고침하거나 웹훅이 오면 2번 경로로 확정된다.
+ *   - 캡처 뒤 주문이 이미 cancelled(승인 호출 사이 관리자 취소 등)면 확정하지 않고 토스 결제를
+ *     전액 취소 + 크레딧 복원 → 409 ORDER_CANCELLED. 토스 취소가 실패하면 재시도 가능한
+ *     PAYMENT_CANCEL_PENDING 을 돌려주고, 새로고침(취소된 주문 + 같은 paymentKey)이 다시 정리한다.
+ *   - 선점 해제가 DB 오류로 실패하면(RELEASE_FAILED) 재시도 가능한 CREDITS_RELEASE_FAILED —
+ *     같은 paymentKey 로 다시 부르면 바인딩된 재시도로 수렴해 해제를 다시 시도한다.
  */
 export async function POST(req: Request) {
   try {
@@ -132,6 +139,15 @@ export async function POST(req: Request) {
         isPaidLikeStatus(order.status)
       ) {
         return idempotentPaid(admin, order.id, order.status);
+      }
+      // 이 결제로 바인딩된 채 취소된 주문 — 이전 시도의 캡처 후 자동 취소가 끝나지 않았을 수 있다.
+      if (
+        order.status === "cancelled" &&
+        order.toss_payment_key === paymentKey &&
+        order.amount === amount &&
+        order.toss_order_id === tossOrderId
+      ) {
+        return reconcileCancelledOrder(admin, order, { paymentKey, orderId: tossOrderId, amount });
       }
       return fail(
         "ORDER_NOT_PENDING",
@@ -261,14 +277,15 @@ export async function POST(req: Request) {
         });
         return paymentStatusUnknown(e.code, e.status >= 500 ? e.status : 502);
       } else {
-        await releaseOrderCredits(admin, {
-          orderId: order.id,
-          paymentKey,
-          clearPaymentKey: true,
-        });
-        return fail("PAYMENT_VERIFY_FAILED", e.message, e.status, {
-          tossCode: e.code,
-        });
+        return releaseCreditsThen(
+          admin,
+          { orderId: order.id, paymentKey, clearPaymentKey: true },
+          "PAYMENT_VERIFY_FAILED",
+          () =>
+            fail("PAYMENT_VERIFY_FAILED", e.message, e.status, {
+              tossCode: e.code,
+            }),
+        );
       }
     }
 
@@ -291,6 +308,122 @@ function paymentStatusUnknown(tossCode: string, status = 502): NextResponse<ApiF
     status,
     { tossCode },
   );
+}
+
+/**
+ * 선점 해제 후 응답. 해제가 DB 오류(RELEASE_FAILED)면 키·크레딧이 잡힌 채 남으므로 재시도 불가 코드
+ * 대신 CREDITS_RELEASE_FAILED(503) — 같은 paymentKey 로 다시 부르면 바인딩된 재시도가 토스 상태를
+ * 다시 확인하고 해제를 재시도한다. NOT_PENDING·PAYMENT_KEY_MISMATCH 는 다른 요청이 이미 정리한 것.
+ */
+async function releaseCreditsThen(
+  admin: Admin,
+  args: { orderId: string; paymentKey: string; clearPaymentKey: boolean },
+  reason: string,
+  respond: () => NextResponse<ApiFail>,
+): Promise<NextResponse<ApiFail>> {
+  const released = await releaseOrderCredits(admin, args);
+  if (!released.ok && released.code === "RELEASE_FAILED") {
+    console.error("[payments/confirm] 선점 해제 실패 — 재시도 가능 응답", {
+      orderId: args.orderId,
+      reason,
+      message: released.message ?? null,
+    });
+    return creditsReleaseFailed(reason);
+  }
+  return respond();
+}
+
+function creditsReleaseFailed(reason: string): NextResponse<ApiFail> {
+  return fail(
+    "CREDITS_RELEASE_FAILED",
+    "주문의 포인트·할인 정리를 마치지 못했습니다. 잠시 후 이 페이지를 새로고침해주세요.",
+    503,
+    { reason },
+  );
+}
+
+/** 취소된 주문 — 결제를 확정하지 않았고, 승인된 결제가 있었다면 전액 취소됐다. */
+function orderCancelled(): NextResponse<ApiFail> {
+  return fail(
+    "ORDER_CANCELLED",
+    "취소된 주문이라 결제를 확정하지 않았고, 승인된 결제는 전액 취소했습니다. 필요하면 주문서를 다시 작성해주세요.",
+    409,
+  );
+}
+
+/**
+ * 캡처된 결제(DONE 확인됨) + 주문은 cancelled → 토스 전액 취소 + 크레딧 복원.
+ * 토스 단계 실패는 재시도 가능한 PAYMENT_CANCEL_PENDING — 새로고침하면 reconcileCancelledOrder 가 다시 정리한다.
+ */
+async function refundCancelledOrderCapture(
+  admin: Admin,
+  order: ConfirmOrderRow,
+  paymentKey: string,
+): Promise<NextResponse<ApiFail>> {
+  const r = await refundCapturedPaymentOfCancelledOrder(admin, order, paymentKey, {
+    trigger: "confirm",
+  });
+  if (!r.ok) {
+    return fail(
+      "PAYMENT_CANCEL_PENDING",
+      "취소된 주문이라 승인된 결제를 자동으로 취소하고 있지만 아직 끝나지 않았습니다. 잠시 후 이 페이지를 새로고침해주세요. 계속되면 고객센터로 문의해주세요.",
+      r.inProgress ? 409 : 502,
+      { tossCode: r.code },
+    );
+  }
+  if (!r.credits.ok && r.credits.code === "RELEASE_FAILED") {
+    return creditsReleaseFailed("ORDER_CANCELLED");
+  }
+  return orderCancelled();
+}
+
+/**
+ * 이 paymentKey 로 바인딩된 채 cancelled 인 주문의 재호출(새로고침) — 토스 조회로 수렴.
+ *   - DONE      → 전액 취소 + 크레딧 복원 (이전 시도의 자동 취소가 실패했던 경우)
+ *   - CANCELED  → 크레딧 복원만(멱등) → ORDER_CANCELLED
+ *   - 404·ABORTED·EXPIRED 등 → 캡처된 적 없음 → ORDER_NOT_PENDING
+ *   - 조회 실패  → PAYMENT_STATUS_UNKNOWN (아무것도 하지 않음)
+ */
+async function reconcileCancelledOrder(
+  admin: Admin,
+  order: ConfirmOrderRow,
+  expected: ExpectedPayment,
+): Promise<NextResponse<ApiFail>> {
+  const notPending = () =>
+    fail("ORDER_NOT_PENDING", `이미 처리된 주문입니다 (현재 상태: ${order.status}).`, 409);
+
+  let payment: TossConfirmResponse;
+  try {
+    payment = await fetchTossPayment(expected.paymentKey);
+  } catch (e) {
+    if (isTossLookupNotFound(e)) return notPending();
+    return paymentStatusUnknown(e instanceof TossError ? e.code : "TOSS_LOOKUP_FAILED");
+  }
+  const mismatch = findTossPaymentMismatch(payment, expected);
+  if (mismatch.length > 0) {
+    console.error("[payments/confirm] 취소된 주문의 바인딩 결제가 주문과 다름 — 관리자 확인 필요", {
+      orderId: order.id,
+      fields: mismatch,
+      tossStatus: payment.status,
+    });
+    return notPending();
+  }
+  switch (classifyTossPaymentStatus(payment.status)) {
+    case "captured":
+      console.error("[payments/confirm] 취소된 주문에 승인된 결제가 남아 있음 — 전액 취소", {
+        orderId: order.id,
+      });
+      return refundCancelledOrderCapture(admin, order, expected.paymentKey);
+    case "canceled": {
+      const credits = await restoreOrderCredits(admin, order);
+      if (!credits.ok && credits.code === "RELEASE_FAILED") {
+        return creditsReleaseFailed("ORDER_CANCELLED");
+      }
+      return orderCancelled();
+    }
+    default:
+      return notPending();
+  }
 }
 
 /** 주문이 이 paymentKey 로 이미 확정(paid 계열)됐으면 그 상태, 아니면 null. */
@@ -357,16 +490,14 @@ async function resolveTossPayment(
       fields: mismatch,
       tossStatus: tossRes.status,
     });
-    await releaseOrderCredits(admin, {
-      orderId: order.id,
-      paymentKey: expected.paymentKey,
-      clearPaymentKey: true,
-    });
-    return fail(
+    return releaseCreditsThen(
+      admin,
+      { orderId: order.id, paymentKey: expected.paymentKey, clearPaymentKey: true },
       "TOSS_PAYMENT_MISMATCH",
-      "토스 결제 정보가 주문과 일치하지 않습니다.",
-      400,
-      { fields: mismatch },
+      () =>
+        fail("TOSS_PAYMENT_MISMATCH", "토스 결제 정보가 주문과 일치하지 않습니다.", 400, {
+          fields: mismatch,
+        }),
     );
   }
 
@@ -374,16 +505,14 @@ async function resolveTossPayment(
     case "awaiting_confirm":
       return "awaiting_confirm";
     case "not_captured":
-      await releaseOrderCredits(admin, {
-        orderId: order.id,
-        paymentKey: expected.paymentKey,
-        clearPaymentKey: true,
-      });
-      return fail(
+      return releaseCreditsThen(
+        admin,
+        { orderId: order.id, paymentKey: expected.paymentKey, clearPaymentKey: true },
         "PAYMENT_NOT_DONE",
-        `토스 결제 상태가 정상이 아닙니다: ${tossRes.status}`,
-        400,
-        { tossStatus: tossRes.status },
+        () =>
+          fail("PAYMENT_NOT_DONE", `토스 결제 상태가 정상이 아닙니다: ${tossRes.status}`, 400, {
+            tossStatus: tossRes.status,
+          }),
       );
     case "canceled":
       // 캡처 후 토스에서 취소된 결제(예: 클레임 실패로 pending 에 남은 주문을 운영자가 취소).
@@ -392,16 +521,17 @@ async function resolveTossPayment(
       console.error("[payments/confirm] 토스에서 취소된 결제 — 확정하지 않음, 관리자 확인 필요", {
         orderId: order.id,
       });
-      await releaseOrderCredits(admin, {
-        orderId: order.id,
-        paymentKey: expected.paymentKey,
-        clearPaymentKey: false,
-      });
-      return fail(
+      return releaseCreditsThen(
+        admin,
+        { orderId: order.id, paymentKey: expected.paymentKey, clearPaymentKey: false },
         "PAYMENT_NOT_DONE",
-        "토스에서 취소된 결제라 주문을 확정하지 않았습니다. 주문 내역을 확인하거나 고객센터에 문의해주세요.",
-        400,
-        { tossStatus: tossRes.status },
+        () =>
+          fail(
+            "PAYMENT_NOT_DONE",
+            "토스에서 취소된 결제라 주문을 확정하지 않았습니다. 주문 내역을 확인하거나 고객센터에 문의해주세요.",
+            400,
+            { tossStatus: tossRes.status },
+          ),
       );
     case "needs_review":
       console.error("[payments/confirm] 자동 처리할 수 없는 토스 결제 상태 — 관리자 확인 필요", {
@@ -425,16 +555,15 @@ async function resolveTossPayment(
       tossAmount: tossRes.totalAmount,
     });
     // 선점은 되돌리되 paymentKey 는 남긴다(캡처된 결제 추적 + 이 주문으로 재결제 방지).
-    await releaseOrderCredits(admin, {
-      orderId: order.id,
-      paymentKey: expected.paymentKey,
-      clearPaymentKey: false,
-    });
-    return fail(
+    return releaseCreditsThen(
+      admin,
+      { orderId: order.id, paymentKey: expected.paymentKey, clearPaymentKey: false },
       "AMOUNT_MISMATCH",
-      "토스 응답의 결제 금액이 일치하지 않습니다.",
-      400,
-      { expected: expected.amount, toss: tossRes.totalAmount },
+      () =>
+        fail("AMOUNT_MISMATCH", "토스 응답의 결제 금액이 일치하지 않습니다.", 400, {
+          expected: expected.amount,
+          toss: tossRes.totalAmount,
+        }),
     );
   }
 
@@ -468,18 +597,41 @@ async function resolveTossPayment(
     );
   }
   if (!claimed) {
-    // 다른 요청(동시 confirm·웹훅)이 먼저 확정했는지 확인.
-    const { data: current } = await admin
+    // 다른 요청(동시 confirm·웹훅)이 먼저 확정했는지, 캡처 사이에 주문이 취소됐는지 확인.
+    const { data: current, error: curErr } = await admin
       .from("orders")
       .select("status, toss_payment_key")
       .eq("id", order.id)
       .maybeSingle();
+    if (curErr) {
+      // 결제는 캡처됨 — 상태를 모르므로 아무것도 되돌리지 않고 새로고침으로 수렴시킨다.
+      console.error("[payments/confirm] 캡처 후 주문 재조회 실패", {
+        orderId: order.id,
+        message: curErr.message,
+      });
+      return fail(
+        "ORDER_UPDATE_FAILED",
+        "결제는 승인됐지만 주문 반영이 지연되고 있습니다. 잠시 후 이 페이지를 새로고침하면 자동으로 복구됩니다.",
+        500,
+      );
+    }
     if (
       current &&
       isPaidLikeStatus(current.status) &&
       current.toss_payment_key === expected.paymentKey
     ) {
       return idempotentPaid(admin, order.id, current.status);
+    }
+    // 토스 승인 호출 사이에 주문이 취소됐다(관리자 취소 등) — 돈만 빠진 채 남기지 않는다.
+    // 키가 비어 있어도(해제 경합) 방금 받은 DONE 응답은 이 주문번호·금액의 결제로 대조를 통과했다.
+    if (
+      current?.status === "cancelled" &&
+      (current.toss_payment_key === expected.paymentKey || current.toss_payment_key === null)
+    ) {
+      console.error("[payments/confirm] 캡처 직후 주문이 이미 취소됨 — 결제 전액 취소", {
+        orderId: order.id,
+      });
+      return refundCancelledOrderCapture(admin, order, expected.paymentKey);
     }
     return fail(
       "ORDER_NOT_PENDING",

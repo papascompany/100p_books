@@ -39,6 +39,8 @@ const state = vi.hoisted(() => ({
   failOrderUpdate: false,
   restoreCalls: [] as unknown[],
   restoreThrows: false,
+  /** restoreOrderCredits 반환값 덮어쓰기 — null 이면 주문 값대로 복원 성공. */
+  restoreResult: null as null | Record<string, unknown>,
   audits: [] as Array<{ action: string; details?: Record<string, unknown> }>,
   emails: [] as Array<{ template: string; to: { email: string } }>,
   adminError: null as null | Error,
@@ -149,10 +151,24 @@ vi.mock("@/lib/db/admin", () => ({
 }));
 
 vi.mock("@/lib/orders/refund", () => ({
-  restoreOrderCredits: vi.fn(async (_admin: unknown, order: unknown) => {
-    state.restoreCalls.push(order);
-    if (state.restoreThrows) throw new Error("points rpc failed");
-  }),
+  // 실제 계약: throw 하지 않고 ReleaseCreditsResult 를 돌려준다(실제로 되돌린 양).
+  restoreOrderCredits: vi.fn(
+    async (
+      _admin: unknown,
+      order: { points_used: number; discount_code_id: string | null },
+    ) => {
+      state.restoreCalls.push(order);
+      if (state.restoreThrows) throw new Error("points rpc failed");
+      return (
+        state.restoreResult ?? {
+          ok: true,
+          mode: "atomic",
+          pointsRestored: order.points_used,
+          discountUsesRestored: order.discount_code_id ? 1 : 0,
+        }
+      );
+    },
+  ),
 }));
 
 vi.mock("@/lib/admin/audit", () => ({
@@ -230,6 +246,7 @@ beforeEach(() => {
   state.failOrderUpdate = false;
   state.restoreCalls = [];
   state.restoreThrows = false;
+  state.restoreResult = null;
   state.audits = [];
   state.emails = [];
   state.adminError = null;
@@ -336,12 +353,18 @@ describe("POST /api/admin/orders/:id/refund", () => {
     expect(order().status).toBe("paid");
   });
 
-  it("토스 사전 조회 실패 → 취소 호출 없음, 상태 불변", async () => {
+  it("토스 사전 조회 실패 → 취소 호출 없음, 상태 불변 + 실패 감사 로그(toss_precheck)", async () => {
     state.getError = { code: "TOSS_TIMEOUT", message: "시간 초과", status: 504 };
     const res = await post();
     expect(res.status).toBe(504);
     expect(state.cancelCalls).toHaveLength(0);
     expect(order().status).toBe("paid");
+    expect(state.audits).toEqual([
+      {
+        action: "order.refund_failed",
+        details: expect.objectContaining({ stage: "toss_precheck", code: "TOSS_TIMEOUT", from: "paid" }),
+      },
+    ]);
   });
 
   it("in_production 은 force 없이 409 REFUND_REQUIRES_FORCE, 토스 무접촉", async () => {
@@ -407,12 +430,46 @@ describe("POST /api/admin/orders/:id/refund", () => {
     expect(order().status).toBe("paid");
   });
 
-  it("토스 금액 불일치 → 409 AMOUNT_MISMATCH, 취소 호출 없음", async () => {
+  it("토스 금액 불일치 → 409 AMOUNT_MISMATCH, 취소 호출 없음 + 실패 감사 로그(금액 기록)", async () => {
     state.toss.totalAmount = 1000;
     const res = await post();
     expect(res.status).toBe(409);
     expect((await body(res)).error?.code).toBe("AMOUNT_MISMATCH");
     expect(state.cancelCalls).toHaveLength(0);
+    expect(state.audits).toEqual([
+      {
+        action: "order.refund_failed",
+        details: expect.objectContaining({
+          stage: "toss_precheck",
+          code: "AMOUNT_MISMATCH",
+          tossStatus: "DONE",
+          tossTotalAmount: 1000,
+          amount: 30000,
+        }),
+      },
+    ]);
+  });
+
+  it("복원이 ok=false(RELEASE_FAILED)를 돌려주면 성공 응답 + creditRestoreError·감사 기록 (조용히 성공 처리하지 않음)", async () => {
+    state.restoreResult = { ok: false, mode: "atomic", code: "RELEASE_FAILED", message: "rpc timeout" };
+    const res = await post();
+    expect(res.status).toBe(200);
+    expect((await body(res)).data).toMatchObject({
+      claimed: true,
+      creditRestoreError: "RELEASE_FAILED: rpc timeout",
+    });
+    expect(order().status).toBe("refunded");
+    expect(state.audits[0]).toMatchObject({
+      action: "order.refund",
+      details: { creditRestoreFailed: true, creditRestoreError: "RELEASE_FAILED: rpc timeout" },
+    });
+  });
+
+  it("감사 로그 복원량은 실제로 되돌린 값 — 차감 기록이 없던 주문은 0", async () => {
+    state.restoreResult = { ok: true, mode: "atomic", pointsRestored: 0, discountUsesRestored: 0 };
+    const res = await post();
+    expect(res.status).toBe(200);
+    expect(state.audits[0]?.details).toMatchObject({ pointsRestored: 0, discountRestored: false });
   });
 
   it("콘솔에서 이미 취소(CANCELED) → 취소 호출 없이 refunded + 복원 1회", async () => {
@@ -446,7 +503,8 @@ describe("POST /api/admin/orders/:id/refund", () => {
     );
   });
 
-  it("토스 웹훅이 먼저 refunded 로 전이 → 클레임 패배, 복원 중복 없이 성공 수렴", async () => {
+  // 환불 메일은 refunded 클레임 승자가 보낸다 — 웹훅이 이기면 웹훅이 보낸다(payments/webhook route.test).
+  it("토스 웹훅이 먼저 refunded 로 전이 → 클레임 패배, 복원·메일 중복 없이 성공 수렴", async () => {
     state.afterCancel = () => {
       order().status = "refunded"; // 웹훅 클레임 승자가 복원까지 수행했다고 가정
     };

@@ -1,12 +1,15 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { createAdminSupabase } from "@/lib/db/admin";
-import type { OrderStatus } from "@/lib/db/types";
+import type { Database, OrderStatus } from "@/lib/db/types";
 import { enqueueEmail } from "@/lib/email/queue";
+import { refundCapturedPaymentOfCancelledOrder } from "@/lib/orders/cancelled-order-refund";
 import { finalizePaidOrder, isPaidLikeStatus } from "@/lib/orders/finalize-paid";
+import { enqueueOrderRefundedEmail } from "@/lib/orders/order-emails";
 import { releaseOrderCredits, restoreOrderCredits } from "@/lib/orders/refund";
 import { canTransition } from "@/lib/orders/state";
 import {
@@ -57,6 +60,7 @@ function mapTossStatus(s: string | undefined | null): OrderStatus | null {
     // 기록되고, restoreOrderCredits 가 사용 포인트·할인코드를 **전액** 복원한다.
     // 예: 30,000원 중 5,000원만 취소했는데 쓴 포인트 전부가 되돌아온다 — 금전 손실.
     // 부분 취소는 운영자가 관리자 콘솔에서 실제 금액을 보고 처리하도록 남긴다.
+    // ABORTED/EXPIRED 는 응답 표기용 매핑이다 — pending 주문은 취소하지 않는다(POST 의 대기 주문 정책).
     case "ABORTED":
     case "EXPIRED":
       return "cancelled";
@@ -73,7 +77,15 @@ function mapTossStatus(s: string | undefined | null): OrderStatus | null {
  *   - 상태 전이 가능하면 orders 업데이트.
  *     · pending → paid 클레임 승자, 또는 이미 paid 인 같은 결제 → finalizePaidOrder
  *       (포인트 차감 확정·할인 기록·PDF 잡·퍼널·메일을 confirm 과 같은 함수로 멱등 실행).
- *     · → refunded / cancelled 클레임 승자 → 실제로 잡힌 크레딧만 복원.
+ *     · paid 계열 → refunded(CANCELED) 클레임 승자 → 실제로 잡힌 크레딧만 복원 + 환불 메일 1회.
+ *       클레임은 읽은 시점의 status **와 toss_payment_key** 가 그대로일 때만 — 그 사이 다른 결제로
+ *       바인딩된 행을 이 결제의 상태로 덮지 않는다.
+ *     · pending + ABORTED/EXPIRED(캡처 안 됨) → **취소하지 않는다**. 이 결제로 선점된 크레딧·키만
+ *       해제한다(confirm 의 토스 거절 처리와 같음). 결제 이탈·실패 pending 은 주문서 재사용
+ *       (orders/create)으로 이어지고, 끝내 결제하지 않으면 만료 cron(24h, 토스 확인)이 정리한다 —
+ *       실패마다 cancelled 가 쌓여 포토북 삭제가 막히는(HAS_ORDERS) 것을 피한다.
+ *     · cancelled 주문 + 이 결제가 DONE(캡처 직전 취소 경합) → 전액 취소 + 크레딧 복원.
+ *       CANCELED 면 크레딧 복원만(멱등). 토스 취소 실패는 503 으로 재전송 유도.
  *
  * ⚠️ 이 라우트는 **의도적으로 무인증**이다. 되돌리기 전에 아래를 읽을 것.
  *
@@ -127,18 +139,9 @@ export async function POST(req: Request) {
     const admin = createAdminSupabase();
 
     // toss_payment_key 우선 조회, 없으면 toss_order_id
-    type Row = {
-      id: string;
-      status: OrderStatus;
-      amount: number;
-      toss_payment_key: string | null;
-      toss_order_id: string | null;
-      user_id: string;
-      points_used: number;
-      discount_code_id: string | null;
-    };
+    type Row = WebhookOrderRow;
     const columns =
-      "id, status, amount, toss_payment_key, toss_order_id, user_id, points_used, discount_code_id";
+      "id, status, amount, toss_payment_key, toss_order_id, user_id, project_id, qty, address, points_used, discount_code_id";
     let order: Row | null = null;
     if (paymentKey) {
       const { data, error: qErr } = await admin
@@ -211,6 +214,12 @@ export async function POST(req: Request) {
     }
 
     const mapped = mapTossStatus(tossRes.status);
+    const tossKind = classifyTossPaymentStatus(tossRes.status);
+
+    // 취소된 주문 — 캡처된 결제가 남아 있으면 되돌린다(cancelled 는 종착 상태라 paid 로 갈 수 없다).
+    if (order.status === "cancelled") {
+      return settleCancelledOrder(admin, order, paymentKey, tossKind, mapped);
+    }
 
     if (mapped === "paid") {
       let claimedNow = false;
@@ -241,6 +250,16 @@ export async function POST(req: Request) {
           .eq("id", order.id)
           .maybeSingle();
         if (curErr) return fail("ORDER_QUERY_FAILED", curErr.message, 500);
+        if (current?.status === "cancelled") {
+          // 읽은 뒤 클레임 전에 취소됨(관리자 취소 등) — 캡처된 결제를 되돌린다.
+          return settleCancelledOrder(
+            admin,
+            { ...order, status: "cancelled", toss_payment_key: current.toss_payment_key },
+            paymentKey,
+            tossKind,
+            mapped,
+          );
+        }
         if (
           !current ||
           !isPaidLikeStatus(current.status) ||
@@ -289,12 +308,42 @@ export async function POST(req: Request) {
       });
     }
 
+    // 결제 승인이 실패·만료(캡처 안 됨)된 pending — 주문은 취소하지 않고 이 결제의 선점·키만 푼다.
+    // 키가 없는(선점 전·이미 해제된) 주문은 할 일이 없다. 해제 RPC 가 status=pending · 같은 키를 잠금 아래
+    // 다시 확인하므로, 그 사이 다른 결제로 바인딩된 주문의 선점은 건드리지 않는다.
+    if (order.status === "pending" && tossKind === "not_captured") {
+      if (order.toss_payment_key !== paymentKey) {
+        return ok({
+          received: true,
+          orderId: order.id,
+          mapped,
+          transitioned: false,
+          reason: "pending order kept for reuse",
+        });
+      }
+      const released = await releaseOrderCredits(admin, {
+        orderId: order.id,
+        paymentKey,
+        clearPaymentKey: true,
+      });
+      if (!released.ok && released.code === "RELEASE_FAILED") {
+        return fail("CREDITS_RELEASE_FAILED", "크레딧 해제 실패 — 재전송 시 다시 시도합니다.", 500);
+      }
+      return ok({
+        received: true,
+        orderId: order.id,
+        mapped,
+        transitioned: false,
+        creditsReleased: released.ok,
+      });
+    }
+
     // 캡처 후 토스에서 전액 취소됐는데 우리 주문은 아직 pending(클레임 실패 등으로 확정 전) —
     // pending→refunded 전이는 없으므로 상태는 두고, 선점된 크레딧만 되돌린다(키는 추적용으로 유지).
     if (
       order.status === "pending" &&
       order.toss_payment_key === paymentKey &&
-      classifyTossPaymentStatus(tossRes.status) === "canceled"
+      tossKind === "canceled"
     ) {
       const released = await releaseOrderCredits(admin, {
         orderId: order.id,
@@ -318,17 +367,22 @@ export async function POST(req: Request) {
     }
 
     if (mapped && canTransition(order.status, mapped)) {
-      // 조건부 클레임 — status=현재값 일 때만 전이. 동시 중복 웹훅이 같은 전이를
-      // 두 번 적용해 환불 복원이 이중 실행되는 것을 막는다.
-      const { data: claimed } = await admin
+      // 조건부 클레임 — 읽은 시점의 status **와 결제 키**가 그대로일 때만 전이. 동시 중복 웹훅이
+      // 같은 전이를 두 번 적용해 환불 복원이 이중 실행되는 것과, 그 사이 다른 결제로 바인딩된 행을
+      // 이 결제의 상태로 덮는 것을 막는다.
+      const base = admin
         .from("orders")
         .update({ status: mapped })
         .eq("id", order.id)
-        .eq("status", order.status)
+        .eq("status", order.status);
+      const { data: claimed, error: claimErr } = await (order.toss_payment_key === null
+        ? base.is("toss_payment_key", null)
+        : base.eq("toss_payment_key", order.toss_payment_key)
+      )
         .select("id")
         .maybeSingle();
-      // 환불·취소 전이 클레임 승자만 크레딧 복원 — 실제로 잡혀 있던 것만 되돌린다
-      // (pending 에서 선점 후 결제가 만료·중단된 주문 포함).
+      if (claimErr) return fail("ORDER_UPDATE_FAILED", claimErr.message, 500);
+      // 환불·취소 전이 클레임 승자만 크레딧 복원(실제로 잡혀 있던 것만) + 환불 메일 1회.
       if (claimed && (mapped === "refunded" || mapped === "cancelled")) {
         await restoreOrderCredits(admin, {
           id: order.id,
@@ -336,6 +390,9 @@ export async function POST(req: Request) {
           points_used: order.points_used,
           discount_code_id: order.discount_code_id,
         });
+        if (mapped === "refunded") {
+          await enqueueOrderRefundedEmail(admin, order, enqueueEmail);
+        }
       }
       return ok({ received: true, orderId: order.id, mapped, transitioned: Boolean(claimed) });
     }
@@ -343,4 +400,72 @@ export async function POST(req: Request) {
   } catch (err) {
     return failFromError(err);
   }
+}
+
+interface WebhookOrderRow {
+  id: string;
+  status: OrderStatus;
+  amount: number;
+  toss_payment_key: string | null;
+  toss_order_id: string | null;
+  user_id: string;
+  project_id: string;
+  qty: number;
+  address: { name?: string } | null;
+  points_used: number;
+  discount_code_id: string | null;
+}
+
+/**
+ * 취소된 주문의 결제 이벤트 (토스 재조회로 이 주문의 결제임을 확인한 뒤).
+ *   - 이 결제로 바인딩된 주문만 자동 처리한다. 키가 없거나 다르면 로그만(관리자 확인).
+ *   - DONE     → 전액 취소 + 크레딧 복원. 토스 취소 실패는 503(재전송 때 다시 시도).
+ *   - CANCELED → 크레딧 복원(멱등) — 자동 취소 뒤 복원만 실패했던 경우의 수렴.
+ */
+async function settleCancelledOrder(
+  admin: SupabaseClient<Database>,
+  order: WebhookOrderRow,
+  paymentKey: string,
+  tossKind: ReturnType<typeof classifyTossPaymentStatus>,
+  mapped: OrderStatus | null,
+) {
+  if (order.toss_payment_key !== paymentKey) {
+    if (tossKind === "captured") {
+      console.error("[payments/webhook] 결제 키가 묶이지 않은 취소 주문에 승인된 결제 — 관리자 확인 필요", {
+        orderId: order.id,
+      });
+    }
+    return ok({ received: true, orderId: order.id, mapped, transitioned: false });
+  }
+  if (tossKind === "captured") {
+    const r = await refundCapturedPaymentOfCancelledOrder(admin, order, paymentKey, {
+      trigger: "webhook",
+    });
+    if (!r.ok) {
+      return fail(
+        "PAYMENT_CANCEL_PENDING",
+        "취소된 주문의 결제 자동 취소 실패 — 재전송 시 다시 시도합니다.",
+        503,
+        { tossCode: r.code },
+      );
+    }
+    if (!r.credits.ok && r.credits.code === "RELEASE_FAILED") {
+      return fail("CREDITS_RELEASE_FAILED", "크레딧 복원 실패 — 재전송 시 다시 시도합니다.", 500);
+    }
+    return ok({
+      received: true,
+      orderId: order.id,
+      mapped,
+      transitioned: false,
+      paymentCanceled: true,
+    });
+  }
+  if (tossKind === "canceled") {
+    const credits = await restoreOrderCredits(admin, order);
+    if (!credits.ok && credits.code === "RELEASE_FAILED") {
+      return fail("CREDITS_RELEASE_FAILED", "크레딧 복원 실패 — 재전송 시 다시 시도합니다.", 500);
+    }
+    return ok({ received: true, orderId: order.id, mapped, transitioned: false });
+  }
+  return ok({ received: true, orderId: order.id, mapped, transitioned: false });
 }

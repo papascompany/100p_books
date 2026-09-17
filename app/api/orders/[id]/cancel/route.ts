@@ -7,6 +7,7 @@ import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { OrderStatus } from "@/lib/db/types";
+import { restoreOrderCredits } from "@/lib/orders/refund";
 import { assertTransition, decideUserCancel } from "@/lib/orders/state";
 import { probeCancelVerdict, probeTossOrder } from "@/lib/orders/toss-order-probe";
 
@@ -28,22 +29,23 @@ const ParamsSchema = z.object({ id: z.string().uuid() });
  * 규칙:
  *   1) 상태 판정 (lib/orders/state.ts decideUserCancel)
  *      - 본인 주문 + status='pending' + toss_payment_key IS NULL 만 다음 단계로.
- *      - 이미 cancelled 면 성공으로 응답(멱등 — 더블클릭·결제 실패 페이지 자동 정리와 겹쳐도 안전).
+ *      - 이미 cancelled 면 성공으로 응답(멱등 — 더블클릭·결제 실패 화면의 취소 버튼과 겹쳐도 안전).
  *      - 그 밖의 상태(paid 이후)는 409 ORDER_NOT_CANCELLABLE — 환불은 고객센터/관리자 경로.
- *      - toss_payment_key 가 있는 pending 은 409 PAYMENT_IN_PROGRESS. 현재 결제 키는 paid 전이와
- *        같은 UPDATE 에서만 기록돼 이 조합은 생기지 않는다 — 데이터 이상에 대비한 방어 분기다.
- *   2) 토스 원장 확인 (lib/orders/toss-order-probe.ts) — **실질적인 결제 안전장치**.
- *      캡처는 됐는데 confirm 클레임 UPDATE 가 실패한 주문도 DB 상으로는 "pending + 키 없음" 이다.
- *      토스에 toss_order_id 로 승인된 결제가 없다고 확인될 때만 취소한다.
+ *      - toss_payment_key 가 있는 pending 은 409 PAYMENT_IN_PROGRESS. 결제 confirm 은 캡처 **전에**
+ *        키를 바인딩하므로(0033 reserve_order_credits) 키가 있으면 승인 진행 중이거나, 캡처됐는데
+ *        확정 반영이 실패해 복구를 기다리는 주문일 수 있다 — 사용자가 취소하지 않는다.
+ *   2) 토스 원장 확인 (lib/orders/toss-order-probe.ts) — 추가 방어선.
+ *      캡처는 키 바인딩 뒤에만 일어나므로 키 없는 pending 은 원칙적으로 미결제다. 그래도 바인딩 도입
+ *      이전의 주문·해제 경합에 대비해, 토스에 toss_order_id 로 승인된 결제가 없다고 확인될 때만 취소한다.
  *      - 결제 기록 있음(DONE 등) → 409 PAYMENT_IN_PROGRESS + console.error (운영 복구 대상).
  *      - 조회 실패(timeout·5xx·키 미설정 등) → 503 PAYMENT_STATUS_UNAVAILABLE (fail-closed).
+ *   3) 전이 클레임 승자는 restoreOrderCredits — 잡힌 것만 되돌리는 멱등 함수라 호출 계약을 맞춘다
+ *      (0033 원자 모드에서는 선점 해제가 키 해제와 함께 일어나 키 없는 pending 에는 보통 되돌릴 것이 없다).
  *
- * 포인트·할인은 결제 confirm 이 성공해야 차감·기록되므로 pending 취소에는 복원할 것이 없다.
- *
- * 동시성: 조건부 UPDATE(status='pending' AND toss_payment_key IS NULL)로 전이한다.
- *   결제 confirm 이 먼저 paid 로 클레임하면 이 UPDATE 는 빗나가고, 최신 행으로 다시 판정해 응답한다.
- *   남는 창: confirm 이 토스 승인 호출(수 초) 중일 때 probe 가 404 를 보고 취소가 먼저 커밋되면,
- *   confirm 의 클레임이 빗나간다 — 그 분기의 토스 결제 취소는 결제 쪽(payments/confirm) 소관이다.
+ * 동시성: 조건부 UPDATE(status='pending' AND toss_payment_key IS NULL AND toss_order_id = 확인한 값)로
+ *   전이한다. confirm 이 먼저 선점(키 바인딩)하거나 paid 로 클레임하면, 또는 주문서 재사용(orders/create)이
+ *   토스 주문번호를 새로 발급하면 이 UPDATE 는 빗나가고, 최신 행으로 다시 판정해 응답한다.
+ *   반대로 취소가 먼저 커밋되면 confirm 의 선점이 NOT_PENDING 으로 끝나 캡처가 일어나지 않는다.
  */
 export async function POST(_req: Request, { params }: RouteCtx) {
   try {
@@ -59,7 +61,7 @@ export async function POST(_req: Request, { params }: RouteCtx) {
     const supabase = createServerSupabase();
     const { data: order, error: orderErr } = await supabase
       .from("orders")
-      .select("id, user_id, status, toss_payment_key, toss_order_id")
+      .select("id, user_id, status, toss_payment_key, toss_order_id, points_used, discount_code_id")
       .eq("id", orderId)
       .maybeSingle();
     if (orderErr) return fail("ORDER_QUERY_FAILED", orderErr.message, 500);
@@ -103,23 +105,43 @@ export async function POST(_req: Request, { params }: RouteCtx) {
     }
 
     // 4) 조건부 전이 (orders 쓰기는 service_role 만 — RLS 에 사용자 UPDATE 정책 없음)
+    //    토스에 확인한 주문번호와 전이 대상이 같은 행일 때만 — 그 사이 주문서 재사용으로 새 결제창이
+    //    열린 주문을 취소하지 않는다.
     assertTransition("pending", "cancelled");
     const admin = createAdminSupabase();
-    const { data: claimed, error: updErr } = await admin
+    const claim = admin
       .from("orders")
       .update({ status: "cancelled" })
       .eq("id", orderId)
       .eq("user_id", user.id)
       .eq("status", "pending")
-      .is("toss_payment_key", null)
+      .is("toss_payment_key", null);
+    const { data: claimed, error: updErr } = await (order.toss_order_id === null
+      ? claim.is("toss_order_id", null)
+      : claim.eq("toss_order_id", order.toss_order_id)
+    )
       .select("id")
       .maybeSingle();
     if (updErr) return fail("ORDER_UPDATE_FAILED", updErr.message, 500);
     if (claimed) {
+      // 클레임 승자만 — 잡힌 크레딧이 있으면 되돌린다(없으면 no-op). 실패해도 취소 응답은 유지.
+      const restored = await restoreOrderCredits(admin, {
+        id: order.id,
+        user_id: order.user_id,
+        points_used: order.points_used,
+        discount_code_id: order.discount_code_id,
+      });
+      if (!restored.ok) {
+        console.error("[orders/cancel] 취소 후 크레딧 복원 실패 — 관리자 확인 필요", {
+          orderId,
+          code: restored.code,
+        });
+      }
       return ok({ orderId, status: "cancelled" as const, alreadyCancelled: false });
     }
 
-    // 5) 빗나감 — 판정과 UPDATE 사이에 결제 confirm·다른 취소 요청이 끼어들었다. 최신 행으로 재판정.
+    // 5) 빗나감 — 판정과 UPDATE 사이에 결제 confirm(선점)·다른 취소 요청·주문서 재사용이 끼어들었다.
+    //    최신 행으로 재판정.
     const { data: latest, error: latestErr } = await admin
       .from("orders")
       .select("id, status, toss_payment_key")

@@ -5,15 +5,25 @@
  * 인증에 실패하면 그 행이 영구히 남아 탈퇴(BLOCKING_STATUSES)·주문 내역을 어지럽힌다.
  * 결제 승인 전에 이탈한 주문은 토스 웹훅으로도 정리되지 않는다.
  *
+ * 대기 주문 정책(결제·주문 샤드 공통):
+ *   결제창 이탈·결제 실패 pending 은 즉시 취소하지 않는다. 같은 포토북에서 다시 결제하면 orders/create 가
+ *   그 행을 재사용하고(토스 주문번호·created_at 갱신), 사용자가 원하면 마이페이지·결제 실패 화면에서 직접
+ *   취소한다. 끝내 결제하지 않은 주문만 이 cron 이 24시간 뒤 정리한다 — 실패마다 cancelled 가 쌓여
+ *   포토북 삭제가 막히는(HAS_ORDERS) 것을 피한다.
+ *
  * 만료 후보 = status='pending' AND toss_payment_key IS NULL AND created_at < now - 24h.
- * 후보라도 **토스 원장에 승인된 결제가 없다는 것이 확인된 주문만** 취소한다
- * (lib/orders/toss-order-probe.ts). DB 의 "pending + 키 없음" 에는 결제하지 않은 주문뿐 아니라
- * "토스 캡처는 됐는데 confirm 클레임 UPDATE 가 실패해 반영되지 않은 주문" 도 섞여 있기 때문이다
- * (결제 키는 paid 전이와 같은 UPDATE 에서만 기록된다). 그런 주문을 취소하면 이후 웹훅 DONE 이
- * canTransition(cancelled→paid) 에 막혀 영구히 복구되지 않는다.
+ * 결제 confirm 은 캡처 **전에** 키를 바인딩하므로(0033) 키 없는 pending 은 원칙적으로 미결제다. 그래도
+ * 바인딩 도입 이전의 주문·해제 경합에 대비해 **토스 원장에 승인된 결제가 없다는 것이 확인된 주문만**
+ * 취소한다(lib/orders/toss-order-probe.ts). 캡처된 주문을 취소하면 이후 웹훅 DONE 이
+ * canTransition(cancelled→paid) 에 막혀 확정되지 않는다.
  *   - 토스에 결제 기록 있음 → 취소하지 않고 paymentFound 로 보고(운영 복구 대상, 라우트가 console.error).
  *   - 토스 조회 실패       → 취소하지 않고 probeFailed 로 집계, 다음 실행에서 재시도(fail-closed).
  *   - 시간 예산 초과        → 조회하지 않은 후보는 probeDeferred 로 남기고 truncated=true.
+ *   - 취소한 주문은 restoreOrderCredits 로 잡힌 크레딧을 되돌린다(잡힌 것만, 멱등).
+ *
+ * head-of-line 방지: 후보를 오래된 순 keyset 페이지((created_at, id) 커서)로 읽고, 시간 예산 안에서
+ * 다음 페이지로 넘어간다. 결제 기록이 있거나(paymentFound) 조회가 계속 실패하는 주문은 취소되지 않아
+ * 매 실행 앞자리에 남지만, 커서가 그 뒤로 진행하므로 뒤의 만료 대상이 영원히 밀리지 않는다.
  *
  * 임계 24시간의 근거 (토스 API 레퍼런스, 2026-09-17 확인):
  *   - 결제 인증 후 10분 안에 승인 API 를 호출하지 않으면 그 결제는 만료되고, 결제 유효시간 30분이
@@ -22,8 +32,10 @@
  *     사용자가 직접 취소(POST /api/orders/[id]/cancel)하면 즉시 정리되므로 길어도 손해가 없다.
  *   - 운영 중 바꾸려면 코드 리뷰를 거치게 env 로 열지 않는다(마이페이지 안내 문구와 일치 유지).
  *
- * toss_payment_key 가 있는 오래된 pending(staleWithPaymentKey)은 현재 결제 흐름에서는 생기지 않는
- * 데이터 이상이다. 손대지 않고 건수만 보고해 운영자가 보게 한다.
+ * toss_payment_key 가 있는 오래된 pending(staleWithPaymentKey)은 "결제 승인 결과가 확정되지 않은"
+ * 주문이다 — 캡처 결과 불명 뒤 새로고침·웹훅이 오지 않았거나, 캡처됐는데 확정 반영이 실패했을 수 있다.
+ * 돈이 캡처됐을 수 있으므로 **자동 만료하지 않는다**. 건수만 보고해 운영자가 토스 조회로 정리하게 한다
+ * (관리자 주문 취소는 토스 확인 뒤에만 허용 — api/admin/orders/[id]/transition).
  */
 
 import type { OrderStatus } from "@/lib/db/types";
@@ -35,17 +47,20 @@ import type { TossOrderProbe } from "./toss-order-probe";
 export const PENDING_ORDER_EXPIRY_HOURS = 24;
 
 /**
- * 한 번 실행에서 볼 최대 후보 수 기본값. 후보마다 토스 조회가 1회 붙으므로 작게 둔다
+ * 한 페이지에서 읽을 후보 수 기본값. 후보마다 토스 조회가 1회 붙으므로 작게 둔다
  * (동시 PENDING_ORDER_PROBE_CONCURRENCY 건, 건당 timeout 5초, 예산 PENDING_ORDER_PROBE_BUDGET_MS).
  */
 export const PENDING_ORDER_EXPIRY_BATCH_DEFAULT = 50;
+
+/** 한 번 실행에서 읽을 최대 페이지 수 — 시간 예산과 별개로 DB 조회 횟수를 묶는다. */
+export const PENDING_ORDER_EXPIRY_MAX_PAGES = 20;
 
 /** 토스 조회 동시 실행 수 — 토스 API 에 순간 부하를 주지 않도록 보수적으로. */
 export const PENDING_ORDER_PROBE_CONCURRENCY = 4;
 
 /**
- * 토스 조회에 쓸 시간 예산(ms). 라우트 maxDuration 60초에서 DB 조회·UPDATE 와 진행 중인 조회의
- * timeout(5초)을 빼고 남는 값. 예산이 지나면 새 조회를 시작하지 않는다.
+ * 토스 조회에 쓸 시간 예산(ms, 실행 전체에 하나). 라우트 maxDuration 60초에서 DB 조회·UPDATE·크레딧 복원과
+ * 진행 중인 조회의 timeout(5초)을 빼고 남는 값. 예산이 지나면 새 조회도, 다음 페이지 조회도 시작하지 않는다.
  */
 export const PENDING_ORDER_PROBE_BUDGET_MS = 35_000;
 
@@ -63,12 +78,47 @@ export interface PendingOrderCandidate {
   toss_payment_key: string | null;
   toss_order_id: string | null;
   created_at: string;
+  user_id: string;
+  points_used: number;
+  discount_code_id: string | null;
+}
+
+/** keyset 커서 — (created_at, id) 사전순으로 이 행 **다음**부터 읽는다. */
+export interface PendingExpiryCursor {
+  createdAt: string;
+  id: string;
+}
+
+const CURSOR_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * PostgREST `or` 필터 — (created_at > c) OR (created_at = c AND id > i).
+ * 값은 DB 에서 읽은 것이지만 필터 문법에 섞이므로 형식을 검증하고 큰따옴표로 감싼다
+ * (타임스탬프의 `:`·`+` 등 예약 문자). 형식이 이상하면 throw — 커서 없이 전체를 다시 읽지 않게.
+ */
+export function keysetAfterFilter(cursor: PendingExpiryCursor): string {
+  if (!CURSOR_ID_RE.test(cursor.id)) {
+    throw new Error(`pending-expiry 커서 id 형식 오류: ${cursor.id}`);
+  }
+  if (!Number.isFinite(Date.parse(cursor.createdAt)) || /["\\,()]/.test(cursor.createdAt)) {
+    throw new Error(`pending-expiry 커서 created_at 형식 오류: ${cursor.createdAt}`);
+  }
+  const c = `"${cursor.createdAt}"`;
+  return `created_at.gt.${c},and(created_at.eq.${c},id.gt.${cursor.id})`;
+}
+
+/**
+ * 취소한 주문에 되돌릴 크레딧이 있을 수 있는가. 선점(reserve_order_credits)은 points_used 만큼의
+ * 포인트와 discount_code_id 의 사용 기록만 잡으므로, 둘 다 없으면 복원 RPC 를 부르지 않는다.
+ */
+export function mayHoldCredits(c: Pick<PendingOrderCandidate, "points_used" | "discount_code_id">): boolean {
+  return c.points_used > 0 || c.discount_code_id !== null;
 }
 
 export interface PendingExpiryPlan {
   /** 토스 확인을 거쳐 취소할 후보 id (조회 순서 유지). */
   expireIds: string[];
-  /** 결제 키가 있어 건너뛴 건수 — 데이터 이상. */
+  /** 결제 키가 있어 건너뛴 건수 — 승인 결과 미확정이라 자동 만료하지 않음(조회 필터가 이미 거르는 이중 방어). */
   skippedWithPaymentKey: number;
   /** 아직 임계 전이거나 created_at 을 해석할 수 없어 건너뛴 건수. */
   skippedNotExpired: number;
@@ -178,10 +228,14 @@ export async function probeCandidates(
 
 export interface PendingExpiryPort {
   /**
-   * status='pending' AND toss_payment_key IS NULL AND created_at < before,
-   * 오래된 순 limit 건.
+   * status='pending' AND toss_payment_key IS NULL AND created_at < before
+   * AND (after 가 있으면 (created_at, id) > after), (created_at, id) 오름차순 limit 건.
    */
-  listExpirable(args: { before: string; limit: number }): Promise<PendingOrderCandidate[]>;
+  listExpirable(args: {
+    before: string;
+    limit: number;
+    after: PendingExpiryCursor | null;
+  }): Promise<PendingOrderCandidate[]>;
   /** status='pending' AND toss_payment_key IS NOT NULL AND created_at < before 건수. */
   countStaleWithPaymentKey(args: { before: string }): Promise<number>;
   /** 토스 원장 조회 (lib/orders/toss-order-probe.ts probeTossOrder). */
@@ -192,6 +246,10 @@ export interface PendingExpiryPort {
    * 반영된 주문을 덮지 않게. 실제로 바뀐 id 를 돌려준다.
    */
   cancelExpired(args: { ids: string[]; before: string }): Promise<string[]>;
+  /**
+   * 취소된 주문의 크레딧 복원(restoreOrderCredits). throw 하지 않는다 — 복원하지 못한 id 를 돌려준다.
+   */
+  restoreCredits(candidates: PendingOrderCandidate[]): Promise<{ failedIds: string[] }>;
 }
 
 export interface PendingExpiryResult {
@@ -207,9 +265,13 @@ export interface PendingExpiryResult {
   probeFailed: Array<{ orderId: string; code: string }>;
   /** 시간 예산 초과로 조회하지 않은 후보 수. */
   probeDeferred: number;
-  /** 결제 키가 있는 오래된 pending 건수 — 현재 흐름에서는 생기지 않는 데이터 이상. */
+  /** 결제 키가 있는 오래된 pending 건수 — 승인 결과 미확정, 자동 만료하지 않음(운영 확인). */
   staleWithPaymentKey: number;
-  /** 조회가 limit 에 걸렸거나 예산 초과로 남은 후보가 있다 — 다음 실행에서 이어서 처리된다. */
+  /** 취소했지만 크레딧 복원에 실패한 주문 id — 운영 확인 대상. */
+  creditRestoreFailed: string[];
+  /** 읽은 페이지 수. */
+  pages: number;
+  /** 예산·페이지 상한으로 끝까지 보지 못했다 — 다음 실행에서 처음부터 다시 훑는다. */
   truncated: boolean;
 }
 
@@ -218,7 +280,9 @@ export async function expirePendingOrders(
   opts: {
     now: Date;
     dryRun: boolean;
+    /** 페이지 크기. */
     limit?: number;
+    maxPages?: number;
     concurrency?: number;
     probeBudgetMs?: number;
     /** 시간 예산 계산용 시계(테스트 주입). 기본 Date.now. */
@@ -226,42 +290,77 @@ export async function expirePendingOrders(
   },
 ): Promise<PendingExpiryResult> {
   const limit = opts.limit ?? PENDING_ORDER_EXPIRY_BATCH_DEFAULT;
+  const maxPages = opts.maxPages ?? PENDING_ORDER_EXPIRY_MAX_PAGES;
   const clock = opts.clock ?? Date.now;
   const cutoff = pendingExpiryCutoff(opts.now).toISOString();
+  // 예산은 실행 전체에 하나 — 페이지를 넘겨도 늘어나지 않는다.
+  const deadlineMs = clock() + (opts.probeBudgetMs ?? PENDING_ORDER_PROBE_BUDGET_MS);
 
-  const rows = await port.listExpirable({ before: cutoff, limit });
   const staleWithPaymentKey = await port.countStaleWithPaymentKey({ before: cutoff });
-  const plan = planPendingExpiry(rows, opts.now);
 
-  const byId = new Map(rows.map((r) => [r.id, r] as const));
-  const candidates = plan.expireIds
-    .map((id) => byId.get(id))
-    .filter((r): r is PendingOrderCandidate => r !== undefined);
-
-  const probed = await probeCandidates(candidates, (c) => port.probePayment(c), {
-    concurrency: opts.concurrency ?? PENDING_ORDER_PROBE_CONCURRENCY,
-    deadlineMs: clock() + (opts.probeBudgetMs ?? PENDING_ORDER_PROBE_BUDGET_MS),
-    clock,
-  });
-
-  const base = {
+  const result: PendingExpiryResult = {
+    dryRun: opts.dryRun,
     expiryHours: PENDING_ORDER_EXPIRY_HOURS,
     cutoff,
-    scanned: rows.length,
-    paymentFound: probed.paymentFound,
-    probeFailed: probed.probeFailed,
-    probeDeferred: probed.deferred,
+    scanned: 0,
+    orderIds: [],
+    paymentFound: [],
+    probeFailed: [],
+    probeDeferred: 0,
     staleWithPaymentKey,
-    truncated: rows.length >= limit || probed.deferred > 0,
+    creditRestoreFailed: [],
+    pages: 0,
+    truncated: false,
   };
 
-  if (opts.dryRun) {
-    return { ...base, dryRun: true, orderIds: probed.noPaymentIds };
-  }
-  if (probed.noPaymentIds.length === 0) {
-    return { ...base, dryRun: false, orderIds: [] };
+  let after: PendingExpiryCursor | null = null;
+  for (;;) {
+    const rows = await port.listExpirable({ before: cutoff, limit, after });
+    result.pages += 1;
+    result.scanned += rows.length;
+
+    const plan = planPendingExpiry(rows, opts.now);
+    const byId = new Map(rows.map((r) => [r.id, r] as const));
+    const candidates = plan.expireIds
+      .map((id) => byId.get(id))
+      .filter((r): r is PendingOrderCandidate => r !== undefined);
+
+    const probed = await probeCandidates(candidates, (c) => port.probePayment(c), {
+      concurrency: opts.concurrency ?? PENDING_ORDER_PROBE_CONCURRENCY,
+      deadlineMs,
+      clock,
+    });
+    result.paymentFound.push(...probed.paymentFound);
+    result.probeFailed.push(...probed.probeFailed);
+    result.probeDeferred += probed.deferred;
+
+    if (opts.dryRun) {
+      result.orderIds.push(...probed.noPaymentIds);
+    } else if (probed.noPaymentIds.length > 0) {
+      const changed = await port.cancelExpired({ ids: probed.noPaymentIds, before: cutoff });
+      result.orderIds.push(...changed);
+      const toRestore = changed
+        .map((id) => byId.get(id))
+        .filter((r): r is PendingOrderCandidate => r !== undefined && mayHoldCredits(r));
+      if (toRestore.length > 0) {
+        const { failedIds } = await port.restoreCredits(toRestore);
+        result.creditRestoreFailed.push(...failedIds);
+      }
+    }
+
+    // 예산이 지나 조회하지 못한 후보가 있으면 여기서 멈춘다(다음 실행에서 다시 본다).
+    if (probed.deferred > 0) {
+      result.truncated = true;
+      break;
+    }
+    const last = rows[rows.length - 1];
+    if (rows.length < limit || !last) break; // 끝까지 봤다
+    if (clock() >= deadlineMs || result.pages >= maxPages) {
+      result.truncated = true;
+      break;
+    }
+    after = { createdAt: last.created_at, id: last.id };
   }
 
-  const changed = await port.cancelExpired({ ids: probed.noPaymentIds, before: cutoff });
-  return { ...base, dryRun: false, orderIds: changed };
+  return result;
 }

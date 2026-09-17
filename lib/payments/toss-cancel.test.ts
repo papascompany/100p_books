@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TossError } from "./toss";
 import {
+  cancelledOrderCancelIdempotencyKey,
   cancelTossPaymentFully,
   getTossPayment,
   refundIdempotencyKey,
@@ -84,6 +85,17 @@ describe("refundIdempotencyKey", () => {
     expect(refundIdempotencyKey(ORDER_UUID)).toBe(`100p-refund-full-${ORDER_UUID}`);
     expect(refundIdempotencyKey(ORDER_UUID)).toBe(refundIdempotencyKey(ORDER_UUID));
     expect(refundIdempotencyKey("x".repeat(400)).length).toBe(300);
+  });
+});
+
+describe("cancelledOrderCancelIdempotencyKey", () => {
+  it("(주문, paymentKey) 결정적 — 관리자 환불 키와 다르고, 결제 키가 다르면 다른 키", () => {
+    const key = cancelledOrderCancelIdempotencyKey(ORDER_UUID, PAYMENT_KEY);
+    expect(key).toMatch(/^100p-cancel-order-[0-9a-f]{64}$/);
+    expect(cancelledOrderCancelIdempotencyKey(ORDER_UUID, PAYMENT_KEY)).toBe(key);
+    expect(cancelledOrderCancelIdempotencyKey(ORDER_UUID, "other_key")).not.toBe(key);
+    expect(key).not.toBe(refundIdempotencyKey(ORDER_UUID));
+    expect(cancelledOrderCancelIdempotencyKey(ORDER_UUID, "k".repeat(400)).length).toBeLessThanOrEqual(300);
   });
 });
 

@@ -19,6 +19,8 @@ export interface CancelOrderButtonProps {
   orderTitle?: string | null;
   /** 주변 버튼과 높이를 맞춘다 — 목록은 sm, 상세는 default. */
   size?: "sm" | "default";
+  /** 취소 성공(이미 취소 포함) 후 호출 — 결제 실패 화면처럼 새로고침으로 버튼이 사라지지 않는 곳에서 사용. */
+  onCancelled?: () => void;
 }
 
 interface CancelResponse {
@@ -37,6 +39,7 @@ export default function CancelOrderButton({
   orderId,
   orderTitle,
   size = "sm",
+  onCancelled,
 }: CancelOrderButtonProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -58,6 +61,7 @@ export default function CancelOrderButton({
         description: "결제 내역이 없는 것을 확인하고 취소했어요.",
       });
       setOpen(false);
+      onCancelled?.();
     } catch (e) {
       toast({
         variant: "destructive",

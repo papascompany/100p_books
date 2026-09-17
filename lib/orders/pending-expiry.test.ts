@@ -2,11 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   expirePendingOrders,
+  keysetAfterFilter,
+  mayHoldCredits,
   PENDING_ORDER_EXPIRY_BATCH_DEFAULT,
   PENDING_ORDER_EXPIRY_HOURS,
   pendingExpiryCutoff,
   planPendingExpiry,
   probeCandidates,
+  type PendingExpiryCursor,
   type PendingExpiryPort,
   type PendingOrderCandidate,
 } from "./pending-expiry";
@@ -25,6 +28,9 @@ function row(over: Partial<PendingOrderCandidate> & { id: string }): PendingOrde
     toss_payment_key: null,
     toss_order_id: `toss-${over.id}`,
     created_at: iso(25 * HOUR),
+    user_id: "user-1",
+    points_used: 0,
+    discount_code_id: null,
     ...over,
   };
 }
@@ -73,12 +79,32 @@ describe("planPendingExpiry — 조회 결과 이중 검증", () => {
 
 const NO_PAYMENT: TossOrderProbe = { kind: "no_payment", reason: "not_found" };
 
+/** (created_at, id) 사전순 비교 — DB 의 ORDER BY created_at, id 와 같은 규칙. */
+function afterCursor(r: PendingOrderCandidate, c: PendingExpiryCursor): boolean {
+  const dt = Date.parse(r.created_at) - Date.parse(c.createdAt);
+  return dt > 0 || (dt === 0 && r.id > c.id);
+}
+
 function fakePort(
   rows: PendingOrderCandidate[],
-  opts: { staleWithKey?: number; probes?: Record<string, TossOrderProbe | Error> } = {},
+  opts: {
+    staleWithKey?: number;
+    probes?: Record<string, TossOrderProbe | Error>;
+    restoreFails?: string[];
+  } = {},
 ) {
   const cancelExpired = vi.fn(async ({ ids }: { ids: string[]; before: string }) => ids);
-  const listExpirable = vi.fn(async () => rows);
+  // keyset 페이지: 커서 뒤 행을 (created_at, id) 순으로 limit 건.
+  const listExpirable = vi.fn(
+    async ({ limit, after }: { before: string; limit: number; after: PendingExpiryCursor | null }) =>
+      [...rows]
+        .sort((x, y) => Date.parse(x.created_at) - Date.parse(y.created_at) || (x.id < y.id ? -1 : 1))
+        .filter((r) => after === null || afterCursor(r, after))
+        .slice(0, limit),
+  );
+  const restoreCredits = vi.fn(async (cs: PendingOrderCandidate[]) => ({
+    failedIds: cs.map((c) => c.id).filter((id) => opts.restoreFails?.includes(id)),
+  }));
   const countStaleWithPaymentKey = vi.fn(async () => opts.staleWithKey ?? 0);
   const probePayment = vi.fn(async (c: PendingOrderCandidate) => {
     const p = opts.probes?.[c.id] ?? NO_PAYMENT;
@@ -90,8 +116,9 @@ function fakePort(
     countStaleWithPaymentKey,
     probePayment,
     cancelExpired,
+    restoreCredits,
   };
-  return { port, cancelExpired, listExpirable, countStaleWithPaymentKey, probePayment };
+  return { port, cancelExpired, listExpirable, countStaleWithPaymentKey, probePayment, restoreCredits };
 }
 
 describe("expirePendingOrders — 오케스트레이션", () => {
@@ -104,7 +131,7 @@ describe("expirePendingOrders — 오케스트레이션", () => {
     const result = await expirePendingOrders(port, { now: NOW, dryRun: false, limit: 50 });
 
     const cutoff = "2026-09-16T12:00:00.000Z";
-    expect(listExpirable).toHaveBeenCalledWith({ before: cutoff, limit: 50 });
+    expect(listExpirable).toHaveBeenCalledWith({ before: cutoff, limit: 50, after: null });
     // 규칙에서 걸러진 주문은 토스 조회도 하지 않는다.
     expect(probePayment).toHaveBeenCalledTimes(1);
     expect(probePayment.mock.calls[0]?.[0]).toMatchObject({ id: "a", toss_order_id: "toss-a" });
@@ -133,9 +160,10 @@ describe("expirePendingOrders — 오케스트레이션", () => {
     expect(cancelExpired).toHaveBeenCalledWith({ ids: ["clean"], before: expect.any(String) });
     expect(result.orderIds).toEqual(["clean"]);
     expect(result.paymentFound).toEqual([{ orderId: "paid-in-toss", tossStatus: "DONE" }]);
+    // 조회 순서 = (created_at, id) — 생성 시각이 같으면 id 순.
     expect(result.probeFailed).toEqual([
-      { orderId: "toss-down", code: "TOSS_HTTP_503" },
       { orderId: "threw", code: "PROBE_THREW" },
+      { orderId: "toss-down", code: "TOSS_HTTP_503" },
     ]);
   });
 
@@ -170,14 +198,119 @@ describe("expirePendingOrders — 오케스트레이션", () => {
     expect(result.orderIds).toEqual(["b"]);
   });
 
-  it("대상이 없으면 UPDATE 를 부르지 않고, limit 에 걸리면 truncated", async () => {
+  it("대상이 없으면 UPDATE 를 부르지 않고, 페이지 상한에 걸리면 truncated", async () => {
     const empty = fakePort([]);
     await expirePendingOrders(empty.port, { now: NOW, dryRun: false });
     expect(empty.cancelExpired).not.toHaveBeenCalled();
 
+    // 페이지가 꽉 차면 다음 페이지를 확인한다 — 비어 있으면 끝까지 본 것(truncated 아님).
     const full = fakePort([row({ id: "a" }), row({ id: "b" })]);
-    const result = await expirePendingOrders(full.port, { now: NOW, dryRun: false, limit: 2 });
-    expect(result.truncated).toBe(true);
+    const done = await expirePendingOrders(full.port, { now: NOW, dryRun: false, limit: 2 });
+    expect(done).toMatchObject({ pages: 2, truncated: false, orderIds: ["a", "b"] });
+
+    const capped = fakePort([row({ id: "a" }), row({ id: "b" }), row({ id: "c" })]);
+    const partial = await expirePendingOrders(capped.port, {
+      now: NOW,
+      dryRun: false,
+      limit: 2,
+      maxPages: 1,
+    });
+    expect(partial).toMatchObject({ pages: 1, truncated: true, orderIds: ["a", "b"] });
+  });
+
+  it("head-of-line: 앞 페이지가 전부 취소 불가(결제 기록·조회 실패)여도 커서가 뒤로 진행해 만료 대상을 처리", async () => {
+    const stuck = ["s1", "s2", "s3", "s4"].map((id, i) => row({ id, created_at: iso(90 * HOUR - i) }));
+    const tail = ["t1", "t2"].map((id, i) => row({ id, created_at: iso(30 * HOUR - i) }));
+    const { port, listExpirable, cancelExpired } = fakePort([...tail, ...stuck], {
+      probes: {
+        s1: { kind: "payment_found", tossStatus: "DONE" },
+        s2: { kind: "payment_found", tossStatus: "DONE" },
+        s3: { kind: "unavailable", code: "TOSS_ORDER_ID_MISMATCH", message: "x" },
+        s4: { kind: "payment_found", tossStatus: "WAITING_FOR_DEPOSIT" },
+      },
+    });
+
+    const result = await expirePendingOrders(port, { now: NOW, dryRun: false, limit: 2 });
+
+    expect(result.orderIds).toEqual(["t1", "t2"]);
+    expect(cancelExpired).toHaveBeenCalledTimes(1);
+    expect(result.paymentFound.map((p) => p.orderId)).toEqual(["s1", "s2", "s4"]);
+    expect(result.probeFailed).toEqual([{ orderId: "s3", code: "TOSS_ORDER_ID_MISMATCH" }]);
+    // 커서는 직전 페이지의 마지막 (created_at, id)
+    const cursors = listExpirable.mock.calls.map((c) => c[0].after);
+    expect(cursors).toEqual([
+      null,
+      { createdAt: stuck[1]!.created_at, id: "s2" },
+      { createdAt: stuck[3]!.created_at, id: "s4" },
+      { createdAt: tail[1]!.created_at, id: "t2" },
+    ]);
+    expect(result).toMatchObject({ pages: 4, scanned: 6, truncated: false });
+  });
+
+  it("시간 예산이 지나면 다음 페이지로 넘어가지 않고 truncated", async () => {
+    let now = 0;
+    const rows = ["a", "b", "c", "d"].map((id, i) => row({ id, created_at: iso(40 * HOUR - i) }));
+    const { port, listExpirable } = fakePort(rows);
+    port.probePayment = async () => {
+      now += 30;
+      return NO_PAYMENT;
+    };
+    const result = await expirePendingOrders(port, {
+      now: NOW,
+      dryRun: false,
+      limit: 2,
+      concurrency: 1,
+      probeBudgetMs: 60,
+      clock: () => now,
+    });
+    expect(listExpirable).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ orderIds: ["a", "b"], pages: 1, truncated: true, probeDeferred: 0 });
+  });
+
+  it("취소한 주문 중 크레딧이 있을 수 있는 것만 복원하고, 실패 id 를 보고한다 (dryRun 은 복원 안 함)", async () => {
+    const rows = [
+      row({ id: "plain" }),
+      row({ id: "points", points_used: 1000 }),
+      row({ id: "coupon", discount_code_id: "dc-1" }),
+      row({ id: "lost-race", points_used: 500 }),
+    ];
+    const { port, cancelExpired, restoreCredits } = fakePort(rows, { restoreFails: ["coupon"] });
+    // lost-race 는 조건부 UPDATE 가 빗나간 주문(그 사이 결제 진행) — 복원 대상 아님
+    cancelExpired.mockImplementationOnce(async ({ ids }) => ids.filter((id) => id !== "lost-race"));
+
+    const result = await expirePendingOrders(port, { now: NOW, dryRun: false });
+    expect(restoreCredits).toHaveBeenCalledTimes(1);
+    expect(restoreCredits.mock.calls[0]?.[0].map((c) => c.id)).toEqual(["coupon", "points"]);
+    expect(result.creditRestoreFailed).toEqual(["coupon"]);
+
+    const dry = fakePort(rows);
+    await expirePendingOrders(dry.port, { now: NOW, dryRun: true });
+    expect(dry.restoreCredits).not.toHaveBeenCalled();
+  });
+});
+
+describe("keysetAfterFilter — PostgREST (created_at, id) 커서", () => {
+  const id = "0c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
+
+  it("(created_at > c) OR (created_at = c AND id > i), 타임스탬프는 큰따옴표로 감싼다", () => {
+    expect(keysetAfterFilter({ createdAt: "2026-09-16T11:59:59.123456+00:00", id })).toBe(
+      `created_at.gt."2026-09-16T11:59:59.123456+00:00",and(created_at.eq."2026-09-16T11:59:59.123456+00:00",id.gt.${id})`,
+    );
+  });
+
+  it("필터 문법을 깨는 값은 throw — 커서 없이 처음부터 다시 읽지 않는다", () => {
+    expect(() => keysetAfterFilter({ createdAt: "2026-09-16T11:59:59Z", id: "a,b" })).toThrow();
+    expect(() => keysetAfterFilter({ createdAt: 'x"),id.gt.(', id })).toThrow();
+    expect(() => keysetAfterFilter({ createdAt: "2026-09-16T11:59:59Z,or(id.eq.1)", id })).toThrow();
+    expect(() => keysetAfterFilter({ createdAt: "not-a-date", id })).toThrow();
+  });
+});
+
+describe("mayHoldCredits", () => {
+  it("사용 포인트나 할인 코드가 있을 때만 복원 대상", () => {
+    expect(mayHoldCredits({ points_used: 0, discount_code_id: null })).toBe(false);
+    expect(mayHoldCredits({ points_used: 100, discount_code_id: null })).toBe(true);
+    expect(mayHoldCredits({ points_used: 0, discount_code_id: "dc-1" })).toBe(true);
   });
 });
 

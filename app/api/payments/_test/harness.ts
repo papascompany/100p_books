@@ -106,8 +106,48 @@ export class TossSim {
     return { ...res };
   };
 
+  /** lib/payments/toss-cancel cancelTossPaymentFully 흉내 — 호출 기록 + DONE→CANCELED. */
+  cancelCalls: Array<{ paymentKey: string; cancelReason: string; idempotencyKey: string }> = [];
+  /** 다음 전액 취소 1회에 던질 오류. */
+  nextCancelError: TossError | null = null;
+  /** 취소 직후(응답 전) 훅 — 경합 흉내. */
+  onCancel: ((paymentKey: string) => void) | null = null;
+
+  cancelFully = async (args: {
+    paymentKey: string;
+    cancelReason: string;
+    idempotencyKey: string;
+  }): Promise<{ outcome: "canceled" | "already_canceled"; payment: TossConfirmResponse }> => {
+    this.cancelCalls.push(args);
+    await Promise.resolve();
+    if (this.nextCancelError) {
+      const error = this.nextCancelError;
+      this.nextCancelError = null;
+      throw error;
+    }
+    const p = this.payments.get(args.paymentKey);
+    if (!p) {
+      throw new TossError({ code: "NOT_FOUND_PAYMENT", message: "결제 없음", status: 400 });
+    }
+    let outcome: "canceled" | "already_canceled";
+    if (p.status === "DONE") {
+      p.status = "CANCELED";
+      outcome = "canceled";
+    } else if (p.status === "CANCELED") {
+      outcome = "already_canceled";
+    } else {
+      throw new TossError({ code: "NOT_CANCELABLE_PAYMENT", message: "취소 불가 결제", status: 400 });
+    }
+    this.onCancel?.(args.paymentKey);
+    return { outcome, payment: { ...p } };
+  };
+
+  /** 결제 조회 시점 훅 — 조회와 클레임 사이 경합 흉내. */
+  onFetch: ((paymentKey: string) => void) | null = null;
+
   fetch = async (paymentKey: string): Promise<TossConfirmResponse> => {
     this.fetchCalls.push(paymentKey);
+    this.onFetch?.(paymentKey);
     await Promise.resolve();
     if (this.nextFetchError) {
       const error = this.nextFetchError;

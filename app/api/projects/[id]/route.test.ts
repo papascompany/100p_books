@@ -19,6 +19,8 @@ const state = vi.hoisted(() => ({
   mutations: [] as Array<{ table: string; action: string; filters: Array<[string, string, unknown]> }>,
   orderQueries: [] as Array<Array<[string, string, unknown]>>,
   projectDeleteError: null as null | { code: string; message: string },
+  /** 편집 잠금 주문 조회(select project_id,status + in) 실패 주입. */
+  lockQueryError: null as null | { message: string },
   activeUserError: null as null | (Error & { status?: number; code?: string }),
   calls: [] as string[],
 }));
@@ -110,19 +112,32 @@ vi.mock("@/lib/db/admin", () => ({
           filters.push(["neq", column, value]);
           return b;
         },
+        in(column: string, value: unknown[]) {
+          filters.push(["in", column, value]);
+          return b;
+        },
         then<T>(
-          resolve: (v: { count: number; error: null }) => T,
+          resolve: (v: {
+            count: number;
+            data: Array<{ project_id: string; status: string }> | null;
+            error: { message: string } | null;
+          }) => T,
           reject?: (e: unknown) => T,
         ) {
           const run = () => {
             state.orderQueries.push(filters);
-            const count = state.orders.filter((o) =>
+            const isLockQuery = filters.some(([op]) => op === "in");
+            if (isLockQuery && state.lockQueryError) {
+              return { count: 0, data: null, error: state.lockQueryError };
+            }
+            const rows = state.orders.filter((o) =>
               filters.every(([op, col, v]) => {
                 const cell = (o as Record<string, unknown>)[col];
+                if (op === "in") return (v as unknown[]).includes(cell);
                 return op === "eq" ? cell === v : cell !== v;
               }),
-            ).length;
-            return { count, error: null };
+            );
+            return { count: rows.length, data: rows, error: null };
           };
           return Promise.resolve().then(run).then(resolve, reject);
         },
@@ -149,6 +164,7 @@ beforeEach(() => {
   state.mutations = [];
   state.orderQueries = [];
   state.projectDeleteError = null;
+  state.lockQueryError = null;
   state.activeUserError = null;
   state.calls = [];
 });
@@ -253,5 +269,52 @@ describe("PATCH /api/projects/[id]", () => {
     const res = await patch({ title: "새 제목" });
     expect(res.status).toBe(410);
     expect(state.mutations).toEqual([]);
+  });
+
+  describe("결제 후 편집 잠금 (DEBT-2) — PATCH 전체", () => {
+    it.each([
+      ["bookSizeId", { bookSizeId: "0d9c3b1a-2e4f-4a6b-8c7d-9e0f1a2b3c4d" }],
+      ["title", { title: "새 제목" }],
+    ])("paid 주문이 달린 포토북의 %s 변경은 409 PROJECT_LOCKED — 수정 없음", async (_field, body) => {
+      state.orders = [{ project_id: PROJECT_ID, status: "paid" }];
+      const res = await patch(body);
+      expect(res.status).toBe(409);
+      expect(((await res.json()) as Body).error?.code).toBe("PROJECT_LOCKED");
+      expect(state.mutations).toEqual([]);
+      expect(state.orderQueries).toEqual([[["in", "project_id", [PROJECT_ID]]]]);
+    });
+
+    it.each(["in_production", "shipped", "delivered"])("%s 주문도 잠근다", async (s) => {
+      state.orders = [{ project_id: PROJECT_ID, status: s }];
+      expect((await patch({ bookSizeId: "0d9c3b1a-2e4f-4a6b-8c7d-9e0f1a2b3c4d" })).status).toBe(409);
+      expect(state.mutations).toEqual([]);
+    });
+
+    it("pending·cancelled·refunded 주문만 있으면 수정 허용", async () => {
+      state.orders = [
+        { project_id: PROJECT_ID, status: "pending" },
+        { project_id: PROJECT_ID, status: "cancelled" },
+        { project_id: PROJECT_ID, status: "refunded" },
+      ];
+      const res = await patch({ bookSizeId: "0d9c3b1a-2e4f-4a6b-8c7d-9e0f1a2b3c4d" });
+      expect(res.status).toBe(200);
+      expect(state.mutations.map((m) => `${m.table}.${m.action}`)).toEqual(["projects.update"]);
+    });
+
+    it("주문 조회 실패면 503 PROJECT_LOCK_CHECK_FAILED — 수정 없음 (fail-closed)", async () => {
+      state.lockQueryError = { message: "connection reset" };
+      const res = await patch({ title: "새 제목" });
+      expect(res.status).toBe(503);
+      expect(((await res.json()) as Body).error?.code).toBe("PROJECT_LOCK_CHECK_FAILED");
+      expect(state.mutations).toEqual([]);
+    });
+
+    it("남의 포토북은 잠금 판정 전에 403 — 결제 여부를 드러내지 않는다", async () => {
+      state.project = { id: PROJECT_ID, user_id: "someone-else" };
+      state.orders = [{ project_id: PROJECT_ID, status: "paid" }];
+      const res = await patch({ title: "새 제목" });
+      expect(res.status).toBe(403);
+      expect(state.orderQueries).toEqual([]);
+    });
   });
 });

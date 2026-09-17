@@ -7,10 +7,12 @@ import { createAdminSupabase } from "@/lib/db/admin";
 import type { Database } from "@/lib/db/types";
 import {
   expirePendingOrders,
+  keysetAfterFilter,
   PENDING_ORDER_EXPIRY_BATCH_DEFAULT,
   type PendingExpiryPort,
   type PendingOrderCandidate,
 } from "@/lib/orders/pending-expiry";
+import { restoreOrderCredits } from "@/lib/orders/refund";
 import { probeTossOrder } from "@/lib/orders/toss-order-probe";
 import { verifyCronRequest } from "@/lib/security/cron-auth";
 
@@ -36,9 +38,12 @@ const ID_CHUNK = 100;
  *   - 토스에 결제 기록이 있는 pending(`paymentFound`)은 취소하지 않고 console.error 로 남긴다 —
  *     돈은 캡처됐는데 confirm/웹훅 반영이 실패한 주문이라 운영자가 paid 로 복구하거나 환불해야 한다.
  *   - 토스 조회 실패(`probeFailed`)·시간 예산 초과(`probeDeferred`)는 취소하지 않고 다음 실행에서 재시도.
- *   - 결제 키가 있는 오래된 pending(`staleWithPaymentKey`)은 현재 흐름에서 생기지 않는 데이터 이상 —
- *     건드리지 않고 건수만 console.warn.
- *   - 포인트·할인은 confirm 성공 시에만 차감·기록되므로 복원할 것이 없다. 메일도 보내지 않는다.
+ *   - 후보는 (created_at, id) keyset 페이지로 읽어, 앞자리에 취소되지 않는 주문이 쌓여도 예산 안에서
+ *     뒤로 진행한다(`pages`, 끝까지 못 보면 `truncated`).
+ *   - 결제 키가 있는 오래된 pending(`staleWithPaymentKey`)은 confirm 이 캡처 전에 키를 바인딩한 뒤
+ *     결과가 확정되지 않은 주문 — 캡처됐을 수 있어 자동 만료하지 않고 console.error 로 운영 확인을 요청한다.
+ *   - 취소한 주문은 restoreOrderCredits 로 잡힌 크레딧을 되돌린다(`creditRestoreFailed` 는 운영 확인).
+ *     메일은 보내지 않는다.
  *
  * 인증: `Authorization: Bearer <CRON_SECRET>` 만 인정 (lib/security/cron-auth.ts).
  *
@@ -78,8 +83,14 @@ export async function GET(req: Request) {
       );
     }
     if (result.staleWithPaymentKey > 0) {
-      console.warn(
-        `[cron/expire-pending-orders] 결제 키가 있는 ${result.expiryHours}시간 초과 pending 주문 ${result.staleWithPaymentKey}건 — 현재 결제 흐름에서 생기지 않는 데이터 이상, 확인이 필요합니다.`,
+      console.error(
+        `[cron/expire-pending-orders] 결제 승인 결과가 확정되지 않은(결제 키 바인딩) ${result.expiryHours}시간 초과 pending 주문 ${result.staleWithPaymentKey}건 — 캡처됐을 수 있어 자동 만료하지 않음. 토스 결제 조회 후 확정·환불·취소로 정리 필요.`,
+      );
+    }
+    if (result.creditRestoreFailed.length > 0) {
+      console.error(
+        `[cron/expire-pending-orders] 취소한 주문의 크레딧 복원 실패 ${result.creditRestoreFailed.length}건 — 확인 필요:`,
+        result.creditRestoreFailed.join(", "),
       );
     }
     if (!dryRun && result.orderIds.length > 0) {
@@ -101,6 +112,8 @@ export async function GET(req: Request) {
       probeFailed: result.probeFailed.length,
       probeDeferred: result.probeDeferred,
       staleWithPaymentKey: result.staleWithPaymentKey,
+      creditRestoreFailed: result.creditRestoreFailed.length,
+      pages: result.pages,
       truncated: result.truncated,
       durationMs: Date.now() - start,
     });
@@ -115,14 +128,18 @@ function dbError(code: string, message: string): Error {
 
 function supabasePort(admin: SupabaseClient<Database>): PendingExpiryPort {
   return {
-    async listExpirable({ before, limit }) {
-      const { data, error } = await admin
+    async listExpirable({ before, limit, after }) {
+      const base = admin
         .from("orders")
-        .select("id, status, toss_payment_key, toss_order_id, created_at")
+        .select(
+          "id, status, toss_payment_key, toss_order_id, created_at, user_id, points_used, discount_code_id",
+        )
         .eq("status", "pending")
         .is("toss_payment_key", null)
-        .lt("created_at", before)
+        .lt("created_at", before);
+      const { data, error } = await (after ? base.or(keysetAfterFilter(after)) : base)
         .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
         .limit(limit);
       if (error) throw dbError("ORDERS_QUERY_FAILED", error.message);
       return (data ?? []) as PendingOrderCandidate[];
@@ -166,6 +183,15 @@ function supabasePort(admin: SupabaseClient<Database>): PendingExpiryPort {
         for (const row of data ?? []) changed.push(row.id);
       }
       return changed;
+    },
+
+    async restoreCredits(candidates) {
+      const failedIds: string[] = [];
+      for (const c of candidates) {
+        const r = await restoreOrderCredits(admin, c);
+        if (!r.ok) failedIds.push(c.id);
+      }
+      return { failedIds };
     },
   };
 }

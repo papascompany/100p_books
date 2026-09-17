@@ -20,11 +20,18 @@ type Phase = "confirming" | "success" | "failed";
 /**
  * 결제는 승인됐을 수 있지만 결과 확정이 아직인 응답 — 같은 요청을 다시 보내면
  * confirm 이 토스 조회·멱등키로 확정 또는 해제로 수렴한다(DEBT-1). 새로고침을 안내한다.
+ *   - CREDITS_RESERVE_FAILED : 선점 RPC 오류 — 커밋 뒤 응답만 유실됐을 수 있어 같은 paymentKey 재시도로 수렴.
+ *   - CREDITS_RELEASE_FAILED : 캡처 안 됨/불일치 뒤 선점 해제 DB 오류 — 재시도가 해제를 다시 한다.
+ *   - PAYMENT_CANCEL_PENDING : 취소된 주문의 캡처 결제 자동 취소가 아직 안 끝남 — 재시도가 다시 취소한다.
+ * 이 코드들에서 '다시 시도'(새 주문서)로 보내면 이전 주문에 크레딧·결제가 묶인 채 남는다.
  */
 const RETRYABLE_CONFIRM_CODES = new Set([
   "PAYMENT_STATUS_UNKNOWN",
   "PAYMENT_CONFIRM_IN_PROGRESS",
   "ORDER_UPDATE_FAILED",
+  "CREDITS_RESERVE_FAILED",
+  "CREDITS_RELEASE_FAILED",
+  "PAYMENT_CANCEL_PENDING",
 ]);
 
 interface ConfirmResponse {

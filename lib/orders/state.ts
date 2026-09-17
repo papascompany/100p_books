@@ -46,13 +46,19 @@ export function assertTransition(from: OrderStatus, to: OrderStatus): void {
 }
 
 /**
- * 결제 키(toss_payment_key)가 기록된 적이 있는가.
+ * 결제 키(toss_payment_key)가 바인딩돼 있는가.
  * 빈 문자열도 "있음" 으로 본다 — 모르는 값이면 취소하지 않는 쪽(보수적)으로 판정한다.
  * DB 조건부 UPDATE 의 `toss_payment_key is null` 과 정확히 같은 기준이다.
  *
- * 주의: 현재 결제 키는 payments/confirm·webhook 이 paid 전이와 **같은 UPDATE** 에서만 기록한다.
- * 그래서 "키 없음" 이 "결제되지 않음" 을 뜻하지 않는다(캡처 후 클레임 UPDATE 가 실패한 주문도
- * 키가 없다). 결제 여부의 최종 판단은 서버의 토스 원장 조회(lib/orders/toss-order-probe.ts)가 한다.
+ * 의미: payments/confirm 은 토스 승인(캡처) **전에** 크레딧 선점과 함께 키를 바인딩한다
+ * (0033 reserve_order_credits, 폴백 경로도 같다). 그래서 pending 인데 키가 있으면
+ *   - 결제 승인이 진행 중이거나,
+ *   - 캡처 결과를 모르는 채 새로고침·웹훅을 기다리거나,
+ *   - 캡처됐는데 확정(paid) 반영이 실패해 복구를 기다리는 주문일 수 있다.
+ * 돈이 캡처됐을 수 있으므로 사용자 취소·자동 만료 대상이 아니다. 캡처되지 않음이 확정되면
+ * (토스 거절·ABORTED·EXPIRED) confirm·웹훅이 선점과 함께 키를 해제한다.
+ * 반대로 키 없는 pending 은 원칙적으로 미결제지만, 바인딩 도입 이전 주문·해제 경합에 대비해
+ * 취소 직전 토스 원장 조회(lib/orders/toss-order-probe.ts)를 한 번 더 거친다.
  */
 export function hasPaymentKey(tossPaymentKey: string | null | undefined): boolean {
   return tossPaymentKey !== null && tossPaymentKey !== undefined;
@@ -61,9 +67,9 @@ export function hasPaymentKey(tossPaymentKey: string | null | undefined): boolea
 /**
  * 사용자 취소 **후보** 인가 (DEBT-6) — UI 버튼 노출 판정용.
  *
- * pending 이면서 결제 키가 없는 주문만 후보다. 결제 키가 있는 pending 은 현재 흐름에서 생기지
- * 않는 데이터 이상이라 방어적으로 제외한다. true 여도 실제 취소는 서버가 토스 원장에 승인된 결제가
- * 없음을 확인한 뒤에만 한다(POST /api/orders/[id]/cancel).
+ * pending 이면서 결제 키가 없는 주문만 후보다. 결제 키가 바인딩된 pending 은 결제 승인 진행 중이거나
+ * 캡처 뒤 복구를 기다리는 주문일 수 있어(hasPaymentKey 참고) 제외한다. true 여도 실제 취소는 서버가
+ * 토스 원장에 승인된 결제가 없음을 확인한 뒤에만 한다(POST /api/orders/[id]/cancel).
  */
 export function isUserCancellable(
   status: OrderStatus,
