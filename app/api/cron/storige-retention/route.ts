@@ -3,6 +3,7 @@ import "server-only";
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { STORIGE_RETENTION_DAYS_DEFAULT } from "@/lib/pdf/constants";
+import { verifyCronRequest } from "@/lib/security/cron-auth";
 import { deleteFile, STORIGE_ENABLED } from "@/lib/storige/client";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export const maxDuration = 60;
  *       장기 보관 대상이 아니다. 활성 주문분만 Storige 에 남긴다.
  *       (재인쇄/CS 는 PageDoc 에서 온디맨드 재생성 → rebuild-pdf.)
  *
- * 인증: x-vercel-cron 헤더 또는 Authorization: Bearer CRON_SECRET.
+ * 인증: `Authorization: Bearer <CRON_SECRET>` 만 인정 (lib/security/cron-auth.ts).
  * Storige 미설정 시 fail-open (skipped) — 삭제하지 않는다.
  *
  * 안전장치:
@@ -31,20 +32,11 @@ export const maxDuration = 60;
  */
 export async function GET(req: Request) {
   try {
-    // 파괴적(삭제) 엔드포인트 — x-vercel-cron 헤더 단독 신뢰를 피하고
-    // CRON_SECRET 이 설정되면 항상 Bearer 검증을 강제한다.
-    //   - Vercel Cron 은 CRON_SECRET 설정 시 Authorization: Bearer 를 자동 부여하므로
-    //     실제 cron 호출은 그대로 통과.
-    //   - CRON_SECRET 미설정 시에만 x-vercel-cron 헤더로 fallback (수동 호출 차단).
-    const auth = req.headers.get("authorization") ?? "";
-    const secret = process.env.CRON_SECRET;
-    const isVercelCron = req.headers.get("x-vercel-cron") === "1";
-    if (secret) {
-      if (auth !== `Bearer ${secret}`) {
-        return fail("UNAUTHORIZED", "인증 헤더가 올바르지 않습니다.", 401);
-      }
-    } else if (!isVercelCron) {
-      return fail("CRON_NOT_CONFIGURED", "CRON_SECRET 이 설정되지 않았습니다.", 500);
+    // 파괴적(삭제) 엔드포인트 — 배포 환경에서는 Bearer CRON_SECRET 만 인정한다.
+    // 인증 규칙은 lib/security/cron-auth.ts 한 곳에서 관리한다 (SEC-14).
+    const cronAuth = verifyCronRequest(req);
+    if (!cronAuth.ok) {
+      return fail(cronAuth.code, cronAuth.message, cronAuth.status);
     }
 
     if (!STORIGE_ENABLED) {

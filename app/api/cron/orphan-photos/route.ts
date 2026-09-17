@@ -3,6 +3,7 @@ import "server-only";
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { ORIGINALS_BUCKET, THUMBS_BUCKET } from "@/lib/image/constants";
+import { verifyCronRequest } from "@/lib/security/cron-auth";
 
 export const dynamic = "force-dynamic";
 /**
@@ -32,22 +33,17 @@ export const maxDuration = 60;
  *   - 삭제 직전 photos 를 storage_key 로 다시 조회해 행이 없을 때만 지운다.
  *   - list 호출 수와 삭제 수에 상한을 두고, 상한에 걸리면 응답에 명시한다(조용한 절단 금지).
  *
- * 인증: CRON_SECRET 이 있으면 Bearer 강제, 없으면 x-vercel-cron 헤더.
+ * 인증: `Authorization: Bearer <CRON_SECRET>` 만 인정 (lib/security/cron-auth.ts).
  *
  * `?dryRun=1` — 삭제하지 않고 집계만 반환한다. 운영에 처음 붙일 때는 반드시 이걸로
  * 규모를 먼저 확인한다(이 엔드포인트는 되돌릴 수 없는 삭제를 한다).
  */
 export async function GET(req: Request) {
   try {
-    const auth = req.headers.get("authorization") ?? "";
-    const secret = process.env.CRON_SECRET;
-    const isVercelCron = req.headers.get("x-vercel-cron") === "1";
-    if (secret) {
-      if (auth !== `Bearer ${secret}`) {
-        return fail("UNAUTHORIZED", "인증 헤더가 올바르지 않습니다.", 401);
-      }
-    } else if (!isVercelCron) {
-      return fail("CRON_NOT_CONFIGURED", "CRON_SECRET 이 설정되지 않았습니다.", 500);
+    // 인증 규칙은 lib/security/cron-auth.ts 한 곳에서 관리한다 (SEC-14).
+    const cronAuth = verifyCronRequest(req);
+    if (!cronAuth.ok) {
+      return fail(cronAuth.code, cronAuth.message, cronAuth.status);
     }
 
     const dryRun = new URL(req.url).searchParams.get("dryRun") === "1";

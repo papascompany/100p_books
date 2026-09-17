@@ -42,6 +42,46 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # 의존성 취약점 가시화 (SEC-12) — **비차단**.
+      # next 14(지원 종료)의 high/critical advisory 가 남아 있어 게이트로 두면 CI 가 즉시 red 가 된다.
+      # continue-on-error 라 이 단계가 실패해도 잡 결론은 바뀌지 않고, 결과는 잡 요약에 남는다.
+      # registry 응답이 멈춰도 verify 잡 전체 timeout(20분)을 태우지 않게 audit 을 셸 timeout(150s)으로
+      # 끊는다 — exit 124 는 일반 단계 실패라 continue-on-error 가 확실히 흡수한다. 단계 timeout-minutes 는
+      # 요약 기록까지 멈추는 경우의 백스톱이다(단계 timeout 이 continue-on-error 로 흡수되는지는
+      # 공식 문서에 명시가 없어 1차 제한으로 쓰지 않는다).
+      # Next 16 전환으로 high 이상을 해소한 뒤 차단 게이트로 올린다.
+      - name: Dependency audit (non-blocking)
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          set +e
+          timeout --kill-after=10s 150s pnpm audit --prod --audit-level=high > "$RUNNER_TEMP/audit.txt" 2>&1
+          status=$?
+          {
+            echo "## pnpm audit --prod --audit-level=high"
+            echo
+            if [ "$status" -eq 0 ]; then
+              echo "high 이상 취약점 없음."
+            elif [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+              echo "audit 이 150s 안에 끝나지 않아 중단했다 (비차단)."
+            else
+              echo "exit code ${status} — high 이상 취약점이 있거나 audit 조회에 실패했다 (비차단)."
+            fi
+            echo
+            echo '```'
+            tail -n 5 "$RUNNER_TEMP/audit.txt"
+            echo '```'
+            echo
+            echo "<details><summary>전체 출력 (앞 400줄)</summary>"
+            echo
+            echo '```'
+            head -n 400 "$RUNNER_TEMP/audit.txt"
+            echo '```'
+            echo
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
       - name: Typecheck
         run: pnpm typecheck
 

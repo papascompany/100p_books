@@ -1,0 +1,57 @@
+# Dependabot 버전 업데이트 (SEC-12).
+#
+# - 저장소 Settings → Code security 의 "Dependabot alerts / security updates" 는 이 파일과 별개다.
+#   취약점 알림·보안 PR 은 그 설정을 켜야 동작한다(운영 콘솔 작업).
+# - minor/patch 는 한 PR 로 묶어 리뷰 부담을 줄인다. CI(typecheck·lint·test·pdf·build·e2e·a11y)가
+#   각 PR 에서 그대로 돈다.
+# - 프레임워크 메이저는 별도 마이그레이션 마일스톤으로 다룬다(아래 ignore). 서로 묶여 있어
+#   하나만 올리면 빌드가 깨진다: next ↔ react/react-dom ↔ @types/react* ↔ eslint-config-next ↔ eslint.
+#   fabric 메이저는 직렬화 포맷·에디터 전반 회귀가 크다. @types/node 메이저는 engines "24.x" 와 맞춘다.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Seoul
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: next
+        update-types: ["version-update:semver-major"]
+      - dependency-name: react
+        update-types: ["version-update:semver-major"]
+      - dependency-name: react-dom
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: fabric
+        update-types: ["version-update:semver-major"]
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
+      - dependency-name: eslint-config-next
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+    commit-message:
+      prefix: chore
+      include: scope
