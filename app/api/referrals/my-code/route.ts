@@ -1,7 +1,7 @@
 import "server-only";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { ensureReferralCode } from "@/lib/referrals/code";
 
@@ -27,7 +27,7 @@ export const runtime = "nodejs";
  */
 export async function GET() {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
     const admin = createAdminSupabase();
 
     const { code } = await ensureReferralCode(admin, user.id);

@@ -3,7 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { getSession, requireUser } from "@/lib/auth/session";
+import { getSession, requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 
@@ -136,7 +136,7 @@ const PatchBodySchema = z
 
 export async function PATCH(req: Request, { params }: RouteCtx) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     const parsedParams = ParamsSchema.safeParse(params);
     if (!parsedParams.success) {
@@ -217,7 +217,7 @@ export async function PATCH(req: Request, { params }: RouteCtx) {
 // =====================================================================
 export async function DELETE(_req: Request, { params }: RouteCtx) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     const parsedParams = ParamsSchema.safeParse(params);
     if (!parsedParams.success) {

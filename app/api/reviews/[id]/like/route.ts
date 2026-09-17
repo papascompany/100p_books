@@ -3,7 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 
@@ -32,12 +32,12 @@ interface ToggleResult {
  *
  *   주의:
  *     RPC 가 SECURITY DEFINER 라서 RLS 를 우회하므로, 라우트에서 다음을 검증한다:
- *       1) requireUser — 인증된 호출자만
+ *       1) requireActiveUser — 인증된 (탈퇴하지 않은) 호출자만
  *       2) 대상 후기가 public=true 또는 본인 후기 (비공개 타인 후기 좋아요 차단)
  */
 export async function POST(_req: Request, { params }: RouteCtx) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     const parsedParams = ParamsSchema.safeParse(params);
     if (!parsedParams.success) {

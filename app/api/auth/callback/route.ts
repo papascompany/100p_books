@@ -7,7 +7,9 @@ import { createAdminSupabase } from "@/lib/db/admin";
 import {
   PASSWORD_RECOVERY_COOKIE,
   PASSWORD_RECOVERY_MAX_AGE_SEC,
+  shouldIssueRecoveryMarker,
 } from "@/lib/auth/recovery";
+import { safeRedirectPath } from "@/lib/auth/safe-redirect";
 import { createServerSupabase } from "@/lib/db/server";
 import { ensureReferralCode } from "@/lib/referrals/code";
 
@@ -35,10 +37,8 @@ const REFERRAL_COOKIE = "referral_code";
 export async function GET(req: NextRequest) {
   const { searchParams, origin } = req.nextUrl;
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/";
-
-  // 상대 경로 허용, 외부 origin 리다이렉트 방지 (응답 객체 고정)
-  const target = next.startsWith("/") && !next.startsWith("//") ? next : "/";
+  // 같은 origin 경로만 허용 — 백슬래시·탭·인코딩 변형 우회 차단 (SEC-3, lib/auth/safe-redirect.ts)
+  const target = safeRedirectPath(searchParams.get("next"));
   const redirectUrl = new URL(target, origin);
 
   if (!code) {
@@ -61,9 +61,17 @@ export async function GET(req: NextRequest) {
   const userId = data.user?.id;
   const response = NextResponse.redirect(redirectUrl);
 
-  // 비밀번호 재설정 링크로 들어온 경우에만 재설정 마커를 굽는다.
+  // 비밀번호 재설정 메일 링크로 만든 세션(AMR=recovery)일 때만 재설정 마커를 굽는다.
+  // next=/reset-password 만 보면 OAuth 교환에도 발급된다 (SEC-13).
   // 이 마커가 /reset-password 의 유일한 통과 조건이다 (lib/auth/recovery.ts 참고).
-  if (userId && target.startsWith("/reset-password")) {
+  // access_token 은 방금 GoTrue 로부터 서버가 직접 받은 값이라 서명 재검증 없이 읽는다.
+  if (
+    userId &&
+    shouldIssueRecoveryMarker({
+      target,
+      accessToken: data.session?.access_token,
+    })
+  ) {
     response.cookies.set({
       name: PASSWORD_RECOVERY_COOKIE,
       value: userId,

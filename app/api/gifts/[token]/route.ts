@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser, requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { enqueueEmail } from "@/lib/email/queue";
 import { ORIGINALS_BUCKET, THUMBS_BUCKET } from "@/lib/image/constants";
@@ -284,7 +284,7 @@ export async function GET(_req: Request, { params }: RouteCtx) {
  */
 export async function POST(req: Request, { params }: RouteCtx) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     const tokenParse = TokenSchema.safeParse(params.token);
     if (!tokenParse.success) {

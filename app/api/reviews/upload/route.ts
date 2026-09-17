@@ -3,7 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import {
   ALLOWED_MIME_TYPES,
@@ -37,7 +37,7 @@ const ALLOWED_MIME_SET = new Set<string>(ALLOWED_MIME_TYPES);
  */
 export async function POST(req: Request) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     // 🛡 Rate limit — 시간당 20회 (남용 차단)
     const rl = await enforceRateLimit("review-upload", req, user.id);

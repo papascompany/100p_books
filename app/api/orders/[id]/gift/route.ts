@@ -3,7 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import { enqueueEmail } from "@/lib/email/queue";
@@ -43,7 +43,7 @@ function emailPrefix(email: string): string {
  *     }
  *
  * 흐름:
- *   1. requireUser
+ *   1. requireActiveUser (탈퇴 회원 차단)
  *   2. 주문 로드 (소유권 + status in ['paid','in_production','shipped','delivered'])
  *   3. project + book_size + page count 조회 (이메일 컨텍스트용)
  *   4. gifts INSERT (admin) — sender_id, recipient_email, message, gift_token
@@ -51,7 +51,7 @@ function emailPrefix(email: string): string {
  */
 export async function POST(req: Request, { params }: RouteCtx) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     const paramsParse = ParamsSchema.safeParse(params);
     if (!paramsParse.success) {

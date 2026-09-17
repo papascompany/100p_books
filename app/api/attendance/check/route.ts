@@ -1,7 +1,7 @@
 import "server-only";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 
 export const dynamic = "force-dynamic";
@@ -74,7 +74,7 @@ async function creditPoints(
  */
 export async function POST() {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
     const admin = createAdminSupabase();
 
     const { dateStr, monthKey } = kstToday();

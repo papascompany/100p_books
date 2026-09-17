@@ -45,7 +45,8 @@ function authError(
  *     계정탈취/IDOR 가 가능했다. getUser() 는 GoTrue 가 토큰을 검증하므로 위조 차단.
  *   - 비용: 요청당 GoTrue 왕복 1회(React cache 로 요청 내 1회로 축소). 보안상 불가피.
  *
- * 🔒 탈퇴 가드가 필요한 곳(account 삭제·민감 액션)은 `requireActiveUser()` 명시 호출.
+ * 🔒 탈퇴 가드가 필요한 곳(돈·정체성 변경 액션)은 `requireActiveUser()` 명시 호출.
+ *    이 함수는 deleted_at 을 보지 않는다.
  * 🛂 cookie 갱신은 middleware 의 createServerClient 가 매 요청마다 수행.
  */
 export const requireUser = cache(async (): Promise<User> => {
@@ -62,14 +63,22 @@ export const requireUser = cache(async (): Promise<User> => {
 });
 
 /**
- * requireUser() 와 동일하지만, 추가로 탈퇴 가드를 적용한다.
+ * requireUser() 와 동일하지만, 추가로 탈퇴 가드(profiles.deleted_at)를 적용한다.
  *
- * 사용 시점:
- *   - 회원 탈퇴 직후 잔존 세션이 보낸 위험 액션을 차단해야 할 때
- *   - 계정 관리(/mypage/account), 결제 confirm, gift 받기, sync_oauth_profile 등
+ * 탈퇴는 익명화(deleted_at) → auth soft delete(세션 전부 삭제) 순서다
+ * (lib/auth/account-deletion.ts). soft delete 가 끝나면 getUser() 자체가 실패하지만,
+ * auth 단계가 실패해 세션이 남은 사이에는 이 가드만이 탈퇴 회원의 행동을 막는다.
+ * RLS 는 deleted_at 을 보지 않는다.
+ *
+ * 사용 시점 (돈·정체성 변경):
+ *   - 결제 confirm, PDF 빌드, 주문 생성, 선물 보내기/받기, 출석 포인트, 할인 검증,
+ *     후기 작성·수정·삭제·좋아요, 추천 코드 발급
  *
  * 사용하지 않는 곳:
- *   - 단순 페이지 진입 / 조회 라우트 (RLS 가 deleted_at 검증된 행만 노출)
+ *   - 단순 페이지 진입 / 조회 라우트
+ *   - 회원 탈퇴 라우트 자체 (재시도로 탈퇴를 끝낼 수 있어야 하므로 requireUser + 자체 판정)
+ *
+ * 조회 실패 시에는 통과시키지 않는다(fail-closed, 503).
  *
  * RTT: getUser (1) + profiles.deleted_at SELECT (1) = 2회.
  */
@@ -77,15 +86,25 @@ export const requireActiveUser = cache(async (): Promise<User> => {
   const user = await requireUser();
   const supabase = createServerSupabase();
 
-  const { data: profile } = await supabase
+  const { data: profile, error } = await supabase
     .from("profiles")
     .select("deleted_at")
     .eq("id", user.id)
     .maybeSingle();
 
+  if (error) {
+    authError(
+      "계정 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      503,
+      "ACCOUNT_STATUS_UNAVAILABLE",
+    );
+  }
+
+  // 여기까지 온 탈퇴 계정은 getUser() 가 통과한 상태 = 익명화는 끝났지만 auth 단계가 남은 중간 상태다.
+  // (soft delete 까지 끝났다면 세션이 없어 위 requireUser 에서 401) → 필요한 조치는 탈퇴 재시도.
   if (profile?.deleted_at) {
     authError(
-      "탈퇴된 계정입니다. 다시 로그인하거나 신규 가입해 주세요.",
+      "탈퇴 처리가 끝나지 않은 계정이에요. 마이페이지 > 계정 관리에서 회원 탈퇴를 다시 진행해 주세요.",
       410,
       "ACCOUNT_DELETED",
     );

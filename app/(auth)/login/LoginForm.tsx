@@ -15,6 +15,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  isPasswordRecoveryPath,
+  PASSWORD_RECOVERY_PATH,
+} from "@/lib/auth/recovery";
+import { DEFAULT_REDIRECT_PATH, safeRedirectPath } from "@/lib/auth/safe-redirect";
 import { getBrowserSupabase } from "@/lib/db/browser";
 import { cn } from "@/lib/utils";
 
@@ -28,13 +33,6 @@ type Status =
   | { kind: "signup-sent"; email: string } // 가입 확인 메일 발송됨
   | { kind: "reset-sent"; email: string } // 비번 재설정 메일 발송됨
   | { kind: "error"; message: string };
-
-function sanitizeNext(next: string | null): string {
-  if (!next) return "/";
-  // 오픈 리다이렉트 방지 — 내부 경로만 허용
-  if (next.startsWith("/") && !next.startsWith("//")) return next;
-  return "/";
-}
 
 /** Supabase 에러 메시지를 사용자 친화적으로 변환. */
 function friendlyAuthError(message: string, mode: Mode): string {
@@ -75,7 +73,8 @@ function callbackErrorMessage(code: string): string {
 
 export default function LoginForm() {
   const searchParams = useSearchParams();
-  const next = sanitizeNext(searchParams.get("next"));
+  // 오픈 리다이렉트 방지 — 같은 origin 경로만 허용 (SEC-3, 콜백 라우트와 같은 헬퍼)
+  const next = safeRedirectPath(searchParams.get("next"));
   const errorParam = searchParams.get("error");
   const modeParam = searchParams.get("mode");
 
@@ -108,7 +107,9 @@ export default function LoginForm() {
     try {
       const supabase = getBrowserSupabase();
       const origin = window.location.origin;
-      const redirectTo = `${origin}/api/auth/callback?next=${encodeURIComponent(next)}`;
+      // OAuth 로는 재설정 폼으로 보내지 않는다 — 재설정은 메일 링크 전용 (SEC-13 심층 방어).
+      const oauthNext = isPasswordRecoveryPath(next) ? DEFAULT_REDIRECT_PATH : next;
+      const redirectTo = `${origin}/api/auth/callback?next=${encodeURIComponent(oauthNext)}`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "kakao",
         options: {
@@ -219,7 +220,7 @@ export default function LoginForm() {
 
       // ── 비밀번호 찾기 ────────────────────────────────────────
       const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
-        redirectTo: `${origin}/api/auth/callback?next=/reset-password`,
+        redirectTo: `${origin}/api/auth/callback?next=${PASSWORD_RECOVERY_PATH}`,
       });
       if (error) {
         setStatus({ kind: "error", message: friendlyAuthError(error.message, mode) });
