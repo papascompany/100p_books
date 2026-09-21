@@ -6,6 +6,7 @@ import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize } from "@/lib/db/types";
 import { computeDocVersion } from "@/lib/editor/doc-version";
+import { readProjectLockNotice } from "@/lib/editor/lock-notice";
 import { THUMBS_BUCKET } from "@/lib/image/constants";
 import { buildDefaultCoverDoc } from "@/lib/layout/cover";
 import { isPageDoc, type PageDoc } from "@/lib/layout/types";
@@ -27,6 +28,7 @@ const THUMB_SIGNED_TTL_SEC = 3600;
  *   2. project + book_size + page count 로드.
  *   3. project.cover_json 이 없으면 buildDefaultCoverDoc() 으로 즉시 빌드 (DB 저장 X).
  *   4. 표지에서 참조되는 사진 + 프로젝트 사진 일부의 thumb signed URL 발급.
+ *   5. 결제 후 편집 잠금 여부 — 잠겨 있으면 에디터를 읽기 전용으로 열고 배너로 안내한다(안내용, 쓰기는 API 가 막는다).
  *
  * 사용자가 저장 시 PATCH /api/cover 로 cover_json 이 업데이트된다.
  */
@@ -50,6 +52,9 @@ export default async function CoverPage({ params }: PageProps) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user || project.user_id !== user.id) notFound();
+
+  // 소유권 확인 뒤에만 판정한다(남의 결제 여부 비노출).
+  const lockMessage = await readProjectLockNotice(createAdminSupabase(), project.id);
 
   const { data: size } = await supabase
     .from("book_sizes")
@@ -151,6 +156,7 @@ export default async function CoverPage({ params }: PageProps) {
       bookSize={bookSize}
       pageCount={pageCount ?? 0}
       projectPhotos={projectPhotoSummaries}
+      initialLockMessage={lockMessage}
     />
   );
 }

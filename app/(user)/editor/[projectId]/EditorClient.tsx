@@ -16,6 +16,11 @@ export interface EditorClientProps {
   photoCount: number;
   initialPageCount: number;
   bookSize: BookSize | null;
+  /**
+   * 결제 후 편집 잠금 안내(서버 페이지 판정). 값이 있으면 배너로 알리고 재생성·추가·삭제·순서 변경을 막는다.
+   * 서버도 409 PROJECT_LOCKED 로 막으므로 이것은 안내다.
+   */
+  lockMessage: string | null;
 }
 
 /**
@@ -31,6 +36,7 @@ export default function EditorClient({
   photoCount,
   initialPageCount,
   bookSize,
+  lockMessage,
 }: EditorClientProps) {
   const [pages, setPages] = useState<PageSummary[]>([]);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
@@ -153,6 +159,11 @@ export default function EditorClient({
     [busy, layoutMode, projectId, refresh],
   );
 
+  /** 잠긴 포토북의 드래그 순서 변경 — 서버에 보내지 않고 되돌린다(PreviewGrid 가 롤백·안내). */
+  const rejectLockedReorder = useCallback(async () => {
+    throw new Error(lockMessage ?? "수정할 수 없는 포토북이에요.");
+  }, [lockMessage]);
+
   const handleDelete = useCallback(
     async (pageId: string) => {
       if (busy) return;
@@ -179,8 +190,19 @@ export default function EditorClient({
     [busy, refresh],
   );
 
+  const locked = lockMessage !== null;
+
   return (
     <div className="space-y-8">
+      {locked ? (
+        <div
+          role="status"
+          className="rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200"
+        >
+          <p className="font-medium">읽기 전용으로 보고 있어요</p>
+          <p className="mt-1">{lockMessage}</p>
+        </div>
+      ) : null}
       <TopBar
         projectId={projectId}
         initialTitle={initialTitle}
@@ -197,6 +219,7 @@ export default function EditorClient({
           setLayoutMode(res.layoutMode);
           void refresh();
         }}
+        disabled={locked}
       />
 
       <PdfActions projectId={projectId} pageCount={pageCount} />
@@ -228,9 +251,9 @@ export default function EditorClient({
           photoUrls={photoUrls}
           loading={loading}
           bookSize={bookSize}
-          onReorder={handleReorder}
-          onInsert={handleInsert}
-          onDelete={handleDelete}
+          onReorder={locked ? rejectLockedReorder : handleReorder}
+          onInsert={locked ? undefined : handleInsert}
+          onDelete={locked ? undefined : handleDelete}
           busy={busy}
         />
       </section>

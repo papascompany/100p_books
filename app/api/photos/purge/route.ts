@@ -6,7 +6,8 @@ import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
-import { ORIGINALS_BUCKET, THUMBS_BUCKET } from "@/lib/image/constants";
+
+import { removeUnreferencedPhotoObjects } from "./storage-cleanup";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,10 +22,13 @@ const BodySchema = z.object({
  *   body: { photoIds: uuid[] }
  *
  * 동작: 휴지통(deleted_at IS NOT NULL) 사진을 영구 삭제.
- *  - storage 객체 (원본 + 썸네일) 삭제
  *  - photos 테이블 행 삭제
+ *  - storage 객체 (원본 + 썸네일) 삭제 — 본인 폴더(`${userId}/`) 키이고, 행 삭제 뒤에도 다른 photos 행이
+ *    참조하지 않는 키만(./storage-cleanup.ts). 선물 수령 복사 실패 폴백으로 발신자 원본을 공유하는 행을
+ *    지워도 발신자의 결제 완료 포토북 원본은 남는다. Storage 정리는 best-effort(실패 시 orphan cron).
  *
  * 본인 프로젝트의 사진만 허용. active(=null) 사진은 거부 (먼저 trash 호출 필요).
+ * 응답: { deleted, skipped } (Storage 정리 결과는 서버 로그로만).
  */
 export async function POST(req: Request) {
   try {
@@ -72,20 +76,8 @@ export async function POST(req: Request) {
     // 이미 제외하므로 영구 삭제해도 인쇄물이 바뀌지 않는다. 막으면 결제한 포토북의 휴지통 사진을 지울 수 없다.
     const admin = createAdminSupabase();
 
-    // 2) Storage 객체 일괄 삭제 (best-effort — 실패해도 DB 삭제 진행)
-    const originalKeys = found.map((r) => r.storage_key);
-    const thumbKeys = found
-      .map((r) => r.thumb_key)
-      .filter((k): k is string => Boolean(k));
-
-    if (originalKeys.length > 0) {
-      await admin.storage.from(ORIGINALS_BUCKET).remove(originalKeys);
-    }
-    if (thumbKeys.length > 0) {
-      await admin.storage.from(THUMBS_BUCKET).remove(thumbKeys);
-    }
-
-    // 3) DB 행 삭제
+    // 2) DB 행 삭제 — Storage 보다 먼저: 참조 확인에서 방금 지울 행이 참조로 잡히지 않게 하고,
+    //    행 삭제가 실패하면 원본을 건드리지 않는다(예전 순서는 원본만 지우고 행이 남을 수 있었다).
     const idsToDelete = found.map((r) => r.id);
     const { error: delErr, data: deleted } = await admin
       .from("photos")
@@ -93,6 +85,17 @@ export async function POST(req: Request) {
       .in("id", idsToDelete)
       .select("id");
     if (delErr) return fail("PHOTO_PURGE_FAILED", delErr.message, 500);
+
+    // 3) Storage 정리 (best-effort) — 실제로 지운 행만, 본인 폴더 키 + 남은 참조 없는 키만.
+    const deletedIds = new Set((deleted ?? []).map((r) => r.id));
+    const cleanup = await removeUnreferencedPhotoObjects(
+      admin,
+      user.id,
+      found.filter((r) => deletedIds.has(r.id)),
+    );
+    if (cleanup.keptKeys > 0 || cleanup.deferred) {
+      console.info("[photos/purge] Storage 정리:", cleanup);
+    }
 
     return ok({
       deleted: deleted?.length ?? 0,

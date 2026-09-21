@@ -25,7 +25,9 @@ import {
 import {
   captureUserObjects,
   createBackgroundGate,
+  createLoadFailureLatch,
   replaceUserObjects,
+  type LoadDocResult,
 } from "@/lib/fabric/load-guards";
 import {
   applyBackgroundImageToCanvas,
@@ -76,8 +78,15 @@ export interface FabricStageHandle {
    * 호출 시점에 있던 객체만 교체한다. 기다리는 동안 추가된 객체는 새 문서 위에 보존되고,
    * 히스토리에 한 단계로 쌓이며 onModified 가 발화한다(저장 대상).
    * 배경은 호출 순서로 판정해, 기다리는 동안 setBackground 로 바꾼 레이어(색/이미지)는 덮지 않는다.
+   *
+   * 결과: "applied"(반영) · "superseded"(더 새 로드에 밀림) · "skipped"(캔버스 없음). 실패는 reject.
+   * 실패하면 로드 종료 알림 **전에** 저장 차단을 래치한다 — serializeForSave 가 "load_failed" 를
+   * 돌려준다(대기 중이던 저장이 호출자 catch 보다 먼저 재개돼도 막힌다). "applied" 만 차단을 푼다.
    */
-  loadDoc: (doc: PageDoc, photoUrls: Record<string, string>) => Promise<void>;
+  loadDoc: (
+    doc: PageDoc,
+    photoUrls: Record<string, string>,
+  ) => Promise<LoadDocResult>;
   serialize: (meta: PageDocMeta) => PageDoc;
   /**
    * 저장용 직렬화 — 저장 불변식(태그 없는 사용자 객체 0개)을 검사한다.
@@ -163,6 +172,11 @@ export interface FabricStageProps {
   onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void;
   /** 캔버스 초기화 완료 — lazy load 시 doc 로딩 트리거용. 최초 1회만 발생. */
   onReady?: () => void;
+  /**
+   * 읽기 전용(결제 후 편집 잠금). 선택·대상 탐색을 끄고, 문서를 바꾸는 명령(추가·삭제·undo 등)을
+   * 무시한다. 문서 로드(loadDoc)는 계속 동작한다 — 최신본을 보여줄 수 있어야 한다.
+   */
+  readOnly?: boolean;
   className?: string;
   /**
    * `next/dynamic` 경유용 ref 통로.
@@ -198,6 +212,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       onLongPress,
       onHistoryChange,
       onReady,
+      readOnly = false,
       className,
       forwardedRef,
     } = props;
@@ -219,6 +234,10 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
     const idleRef = useRef(createIdleTracker());
     /** 배경 변경 호출 순서 — 늦게 끝난 비동기 적용이 더 나중에 요청된 배경을 덮지 않게. */
     const bgGateRef = useRef(createBackgroundGate());
+    /** 마지막 문서 로드 실패 래치 — serializeForSave 가 본다(lib/fabric/load-guards.ts). */
+    const loadFailureRef = useRef(createLoadFailureLatch());
+    /** 읽기 전용 — 명령 가드와 캔버스 재생성 시 적용용. */
+    const readOnlyRef = useRef(readOnly);
     /** 마지막 loadDoc 입력 — 크기 변경으로 캔버스를 새로 만들 때 다시 올린다. */
     const lastLoadRef = useRef<{
       doc: PageDoc;
@@ -242,7 +261,11 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
     const undoRef = useRef<() => void>(() => {});
     const redoRef = useRef<() => void>(() => {});
     const loadDocRef = useRef<
-      ((doc: PageDoc, photoUrls: Record<string, string>) => Promise<void>) | null
+      | ((
+          doc: PageDoc,
+          photoUrls: Record<string, string>,
+        ) => Promise<LoadDocResult>)
+      | null
     >(null);
     useEffect(() => {
       onSelectionChangeRef.current = onSelectionChange;
@@ -263,6 +286,11 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       maxFitScaleRef.current = maxFitScale;
       refitRef.current?.();
     }, [maxFitScale]);
+    useEffect(() => {
+      readOnlyRef.current = readOnly;
+      const canvas = canvasRef.current;
+      if (canvas) applyReadOnly(canvas, readOnly);
+    }, [readOnly]);
 
     // 캔버스 논리 크기(px) — bleed 포함
     const stagePxSize = useMemo(() => {
@@ -290,6 +318,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         allowTouchScrolling: false,
       });
       canvasRef.current = canvas;
+      applyReadOnly(canvas, readOnlyRef.current);
 
       // 기본 origin = center (serialize 어댑터 규약)
       fabric.FabricObject.prototype.originX = "center";
@@ -385,8 +414,11 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         // 크기(widthMm 등)가 바뀌어 캔버스를 새로 만들었다 — 새 캔버스는 비어 있다.
         // 크기 변경은 항상 문서 교체(구규격 표지 재생성·템플릿·최신본 재로드)와 함께 오므로
         // 마지막 문서를 다시 올린다. 안 하면 빈 캔버스가 자동저장돼 표지가 비워진다.
+        // 실패는 loadDoc 이 저장 차단으로 래치한다 — 여기서는 처리되지 않은 reject 만 막는다.
         const last = lastLoadRef.current;
-        void loadDocRef.current?.(last.doc, last.photoUrls);
+        void loadDocRef.current?.(last.doc, last.photoUrls).catch((err: unknown) => {
+          console.warn("[FabricStage] 캔버스 재생성 후 문서 재로드 실패 — 저장을 멈춘다", err);
+        });
       }
 
       return () => {
@@ -424,9 +456,12 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
 
     // ---------- Imperative API ----------
     const loadDoc = useCallback(
-      async (doc: PageDoc, photoUrls: Record<string, string>) => {
+      async (
+        doc: PageDoc,
+        photoUrls: Record<string, string>,
+      ): Promise<LoadDocResult> => {
         const initialCanvas = canvasRef.current;
-        if (!initialCanvas) return;
+        if (!initialCanvas) return "skipped";
         lastLoadRef.current = { doc, photoUrls };
         photoUrlsRef.current = { ...photoUrlsRef.current, ...photoUrls };
         const seq = ++loadSeqRef.current;
@@ -478,7 +513,8 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
           });
           // 기다리는 동안 더 새 로드가 들어왔거나 캔버스가 재생성됐을 수 있다 — 현재 캔버스 기준.
           const canvas = canvasRef.current;
-          if (seq !== loadSeqRef.current || !canvas) return;
+          // 밀린 로드는 저장 차단을 건드리지 않는다 — 더 새 로드의 결과(실패 포함)가 판정한다.
+          if (seq !== loadSeqRef.current || !canvas) return "superseded";
 
           // 재생성된 캔버스의 recorder 도 교체 동안 멈춘다(이미 멈췄으면 no-op).
           const recorder = suspendActiveRecorder();
@@ -499,6 +535,8 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
           }
           // 기존 사용자 객체 제거(chrome 보존, 태그가 깨진 객체 포함) + 새 객체를 보존 객체 아래에 삽입.
           const { preserved } = replaceUserObjects(canvas, previous, objs);
+          // 캔버스가 이 문서를 반영했다 — 앞선 로드 실패로 멈춘 저장을 푼다.
+          loadFailureRef.current.markApplied();
 
           if (bgClaim.isCurrent("color")) {
             canvas.backgroundColor = doc.backgroundColor;
@@ -553,6 +591,13 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
               );
             }
           }
+          return "applied";
+        } catch (err) {
+          // 로드 종료 알림(finally 의 endLoading → whenIdle 대기자 재개) **전에** 동기로 저장을 막는다.
+          // 호출자(에디터)의 catch 는 대기 중이던 저장보다 늦게 돈다 — 그 틈에 실패한 캔버스(빈 문서)가
+          // 서버를 덮던 경로(A 리뷰). 더 새 로드가 이미 시작됐으면 그 결과에 맡긴다.
+          loadFailureRef.current.markFailed(seq === loadSeqRef.current);
+          throw err;
         } finally {
           resumeRecorders();
           endLoading();
@@ -601,6 +646,10 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         if (!canvas) {
           return { ok: false, reason: "not_ready", untaggedCount: 0 };
         }
+        // 마지막 문서 로드가 실패했다 — 캔버스가 문서를 반영하지 못했으니 서버를 덮지 않는다.
+        if (loadFailureRef.current.failed) {
+          return { ok: false, reason: "load_failed", untaggedCount: 0 };
+        }
         // 태그 없는 사용자 객체가 있으면 직렬화가 그 객체들을 조용히 버린다 →
         // 화면에 보이는 내용이 저장본에서 사라진다. 저장 자체를 막는다.
         const untagged = findUntaggedUserObjects(
@@ -620,6 +669,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
 
     const addPhoto = useCallback(
       async (photoId: string, url: string) => {
+        if (readOnlyRef.current) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
         const img = await fabric.FabricImage.fromURL(url, {
@@ -668,6 +718,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         fontSizePt?: number;
         fill?: string;
       }) => {
+        if (readOnlyRef.current) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
         const cx = mmToPx(bleedMm + widthMm / 2, dpi);
@@ -698,6 +749,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
 
     const addClipart = useCallback(
       async (url: string, resourceId?: string) => {
+        if (readOnlyRef.current) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
         const img = await fabric.FabricImage.fromURL(url, {
@@ -735,6 +787,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
 
     const pasteLayoutObject = useCallback(
       async (obj: LayoutObject, photoUrls?: Record<string, string>) => {
+        if (readOnlyRef.current) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
         if (photoUrls) {
@@ -804,6 +857,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
 
     const replacePhoto = useCallback(
       async (photoId: string, url: string) => {
+        if (readOnlyRef.current) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
         const sel = canvas.getActiveObject() as TaggedFabricObject | null;
@@ -858,6 +912,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
     );
 
     const duplicateSelected = useCallback(async () => {
+      if (readOnlyRef.current) return;
       const canvas = canvasRef.current;
       if (!canvas) return;
       const sel = canvas.getActiveObject() as TaggedFabricObject | null;
@@ -900,6 +955,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
 
     const setBackground = useCallback(
       (value: SetBackgroundInput) => {
+        if (readOnlyRef.current) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
 
@@ -1059,15 +1115,15 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
     );
 
     const undo = useCallback(() => {
-      // 로드 중에는 옛 문서의 히스토리라 되돌릴 대상이 아니다.
-      if (loadingCountRef.current > 0) return;
+      // 로드 중에는 옛 문서의 히스토리라 되돌릴 대상이 아니다. 읽기 전용이면 문서를 바꾸지 않는다.
+      if (loadingCountRef.current > 0 || readOnlyRef.current) return;
       const snap = recorderRef.current?.undo();
       if (snap == null) return;
       void restoreSnapshot(snap, "undo");
     }, [restoreSnapshot]);
 
     const redo = useCallback(() => {
-      if (loadingCountRef.current > 0) return;
+      if (loadingCountRef.current > 0 || readOnlyRef.current) return;
       const snap = recorderRef.current?.redo();
       if (snap == null) return;
       void restoreSnapshot(snap, "redo");
@@ -1076,6 +1132,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
     redoRef.current = redo;
 
     const remove = useCallback(() => {
+      if (readOnlyRef.current) return;
       const canvas = canvasRef.current;
       if (!canvas) return;
       const a = canvas.getActiveObject();
@@ -1086,6 +1143,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
     }, []);
 
     const bringForward = useCallback(() => {
+      if (readOnlyRef.current) return;
       const canvas = canvasRef.current;
       if (!canvas) return;
       const a = canvas.getActiveObject();
@@ -1095,6 +1153,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
     }, []);
 
     const sendBackward = useCallback(() => {
+      if (readOnlyRef.current) return;
       const canvas = canvasRef.current;
       if (!canvas) return;
       const a = canvas.getActiveObject();
@@ -1192,7 +1251,11 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         // 키보드 접근: 탭 진입 시 안내
         tabIndex={0}
         role="application"
-        aria-label="페이지 편집 캔버스. 화살표로 객체 이동, Delete 로 삭제, Cmd/Ctrl+Z 로 되돌리기."
+        aria-label={
+          readOnly
+            ? "페이지 캔버스 (읽기 전용 — 결제가 완료돼 수정할 수 없어요)."
+            : "페이지 편집 캔버스. 화살표로 객체 이동, Delete 로 삭제, Cmd/Ctrl+Z 로 되돌리기."
+        }
       >
         <div
           ref={containerRef}
@@ -1209,6 +1272,23 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
     );
   },
 );
+
+/**
+ * 읽기 전용 전환 — 선택·대상 탐색을 끄고 진행 중인 선택·텍스트 편집을 끝낸다.
+ * 대상 탐색이 꺼지면 키보드 이동·삭제(lib/fabric/gestures.ts 는 활성 객체가 있어야 동작)도 멈춘다.
+ */
+function applyReadOnly(canvas: fabric.Canvas, readOnly: boolean) {
+  canvas.selection = !readOnly;
+  canvas.skipTargetFind = readOnly;
+  if (!readOnly) return;
+  const active = canvas.getActiveObject();
+  if (active) {
+    const text = active as fabric.IText;
+    if (text.isEditing) text.exitEditing();
+    canvas.discardActiveObject();
+  }
+  canvas.requestRenderAll();
+}
 
 /**
  * 교체로 지워질 객체가 선택돼 있으면 교체 전에 선택을 푼다.

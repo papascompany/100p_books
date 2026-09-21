@@ -4,6 +4,8 @@ import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { verifyCronRequest } from "@/lib/security/cron-auth";
 
+import { monthlyBonusMemo } from "./monthly-bonus";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -110,13 +112,23 @@ export async function GET(req: Request) {
 
     // 2) 20일 이상 사용자에게 보너스 지급 (best-effort).
     //    멱등 — cron 은 at-least-once(재시도/수동 재호출) 라 이중 지급 위험이 있다.
-    //    이번 달 'attendance_bonus' 가 이미 적립된 사용자(point_ledger.memo 에 monthKey
-    //    포함)는 건너뛴다. (동시 중복 실행 edge 는 드물어 사전조회로 충분.)
-    const { data: grantedRows } = await admin
+    //    직전 달 **20일 보너스 memo 와 정확히 같은** 'attendance_bonus' 가 이미 적립된 사용자는 건너뛴다.
+    //    (LIKE '%YYYY-MM%' 는 같은 달 10일 보너스에도 걸려 월 보너스가 사실상 지급되지 않았다 — ./monthly-bonus.ts)
+    //    (동시 중복 실행 edge 는 드물어 사전조회로 충분.)
+    const bonusMemo = monthlyBonusMemo(prevMonthKey);
+    const { data: grantedRows, error: grantedErr } = await admin
       .from("point_ledger")
       .select("user_id")
       .eq("reason", "attendance_bonus")
-      .like("memo", `%${prevMonthKey}%`);
+      .eq("memo", bonusMemo);
+    if (grantedErr) {
+      // 조회 실패를 "지급 이력 없음" 으로 보면 재실행 때 이중 지급된다 — 이번 실행을 멈춘다(재시도 가능).
+      return fail(
+        "BONUS_LEDGER_QUERY_FAILED",
+        `보너스 지급 이력 조회 실패: ${grantedErr.message}`,
+        500,
+      );
+    }
     const alreadyGranted = new Set(
       (grantedRows ?? []).map((g) => g.user_id as string),
     );
@@ -140,7 +152,7 @@ export async function GET(req: Request) {
           p_reason: "attendance_bonus",
           p_ref_type: null,
           p_ref_id: null,
-          p_memo: `${prevMonthKey} 월 출석 보너스 (20일+)`,
+          p_memo: bonusMemo,
         });
         if (rpcErr) throw new Error(rpcErr.message);
 

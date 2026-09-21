@@ -26,6 +26,10 @@ const BodySchema = z.object({
  *   - 복원 대상 프로젝트의 active 사진 수가 100장을 넘지 않도록 — 넘는 분은 skip.
  *   - 결제 후 편집 잠금 (DEBT-2): 결제 이후 주문이 있는 포토북의 사진은 skip(skippedLocked).
  *     요청 사진이 전부 잠긴 포토북 소속이면 409 PROJECT_LOCKED.
+ *
+ * 응답(모든 성공 경로에서 같은 모양): { restored, skipped, skippedQuota, skippedLocked, reason? }
+ *   - skipped = 요청 수 - restored. 그 밖의 skipped 는 휴지통에 없거나 없는 사진.
+ *   - reason: NOT_IN_TRASH(휴지통 사진 없음) · QUOTA_EXCEEDED(복원 가능한 사진이 모두 한도 초과).
  */
 export async function POST(req: Request) {
   try {
@@ -55,7 +59,13 @@ export async function POST(req: Request) {
 
     const found = rows ?? [];
     if (found.length === 0) {
-      return ok({ restored: 0, skipped: photoIds.length, reason: "NOT_IN_TRASH" });
+      return ok({
+        restored: 0,
+        skipped: photoIds.length,
+        skippedQuota: 0,
+        skippedLocked: 0,
+        reason: "NOT_IN_TRASH",
+      });
     }
 
     const projectIds = Array.from(new Set(found.map((r) => r.project_id)));
@@ -106,8 +116,9 @@ export async function POST(req: Request) {
       return ok({
         restored: 0,
         skipped: photoIds.length,
-        reason: "QUOTA_EXCEEDED",
+        skippedQuota,
         skippedLocked,
+        reason: "QUOTA_EXCEEDED",
       });
     }
 

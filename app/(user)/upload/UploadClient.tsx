@@ -24,6 +24,11 @@ interface UploadClientProps {
   bookSizes: BookSize[];
   /** 이 프로젝트에 이미 업로드된 active 사진 (재진입/새로고침 복원용, UP-2). */
   serverPhotos: ServerPhotoSeed[];
+  /**
+   * 결제 후 편집 잠금 안내(서버 페이지 판정). 값이 있으면 배너로 알리고 사진 추가·삭제·책 사이즈 변경을 막는다.
+   * 서버도 409 PROJECT_LOCKED 로 막으므로 이것은 안내다.
+   */
+  lockMessage: string | null;
 }
 
 export default function UploadClient({
@@ -31,6 +36,7 @@ export default function UploadClient({
   initialBookSizeId,
   bookSizes,
   serverPhotos,
+  lockMessage,
 }: UploadClientProps) {
   const items = useUploadStore((s) => s.items);
   const overall = useUploadStore((s) => s.overall);
@@ -84,6 +90,7 @@ export default function UploadClient({
     return { done, error, working };
   }, [items]);
 
+  const locked = lockMessage !== null;
   const remainingSlots = MAX_PHOTOS_PER_PROJECT - items.length;
   const allDone = items.length > 0 && counts.done === items.length;
 
@@ -109,6 +116,7 @@ export default function UploadClient({
   }, [busy, counts.working]);
 
   function handleAddFiles(files: File[]) {
+    if (locked) return;
     setTopLevelError(null);
     if (files.length > remainingSlots) {
       setTopLevelError(
@@ -133,6 +141,10 @@ export default function UploadClient({
   async function handleRemoveItem(id: string) {
     const target = items.find((i) => i.id === id);
     if (!target) return;
+    if (locked && target.status === "done") {
+      toast({ description: lockMessage, variant: "warning" });
+      return;
+    }
     if (target.status === "done" && target.photoId) {
       try {
         const res = await fetch("/api/photos/trash", {
@@ -167,6 +179,10 @@ export default function UploadClient({
   async function handleDeleteSelected() {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
+    if (locked) {
+      toast({ description: lockMessage, variant: "warning" });
+      return;
+    }
 
     // 업로드 완료(=서버에 photoId 가 있는) 항목은 soft delete API 호출.
     const completedWithIds = items.filter(
@@ -211,7 +227,7 @@ export default function UploadClient({
   }
 
   async function handleBookSizeChange(nextId: string) {
-    if (nextId === bookSizeId) return;
+    if (locked || nextId === bookSizeId) return;
     setBookSizeId(nextId);
     setBookSizeSaving(true);
     setBookSizeError(null);
@@ -235,6 +251,15 @@ export default function UploadClient({
 
   return (
     <div className="space-y-8">
+      {locked ? (
+        <div
+          role="status"
+          className="rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200"
+        >
+          <p className="font-medium">사진을 바꿀 수 없는 포토북이에요</p>
+          <p className="mt-1">{lockMessage}</p>
+        </div>
+      ) : null}
       {/* 책 사이즈 선택 */}
       <section aria-labelledby="book-size-heading">
         <h2 id="book-size-heading" className="mb-3 text-sm font-medium text-muted-foreground">
@@ -249,7 +274,7 @@ export default function UploadClient({
                 type="button"
                 onClick={() => handleBookSizeChange(b.id)}
                 aria-pressed={selected}
-                disabled={bookSizeSaving}
+                disabled={bookSizeSaving || locked}
                 className={cn(
                   "rounded-xl border p-4 text-left transition-colors",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
@@ -307,11 +332,13 @@ export default function UploadClient({
       {/* Dropzone */}
       <Dropzone
         onFiles={handleAddFiles}
-        disabled={remainingSlots <= 0}
+        disabled={locked || remainingSlots <= 0}
         hint={
-          remainingSlots <= 0
-            ? `최대 ${MAX_PHOTOS_PER_PROJECT}장까지 추가했어요. 일부를 제거하면 더 추가할 수 있어요.`
-            : `더 추가 가능: ${remainingSlots}장`
+          locked
+            ? "결제가 완료된 포토북에는 사진을 추가할 수 없어요."
+            : remainingSlots <= 0
+              ? `최대 ${MAX_PHOTOS_PER_PROJECT}장까지 추가했어요. 일부를 제거하면 더 추가할 수 있어요.`
+              : `더 추가 가능: ${remainingSlots}장`
         }
       />
 

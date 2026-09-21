@@ -10,6 +10,8 @@ import { createAdminSupabase } from "@/lib/db/admin";
 import { enqueueEmail } from "@/lib/email/queue";
 import { ORIGINALS_BUCKET, THUMBS_BUCKET } from "@/lib/image/constants";
 
+import { giftSenderOwnsOrder } from "./sender-guard";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -101,9 +103,17 @@ interface LoadError {
 
 type LoadResult = LoadedGift | LoadError;
 
+/** 토큰이 없을 때와 같은 응답 — 부정 gift 여부를 드러내지 않는다. */
+const GIFT_NOT_FOUND: LoadError = {
+  error: { code: "NOT_FOUND", message: "유효하지 않은 선물 링크입니다." },
+};
+
 /**
  * 발신자 + 프로젝트 메타 + 페이지 수 + 책 사이즈를 한 번에 로드.
  * GET / claim 양쪽에서 재사용.
+ *
+ * 발신자가 원본 주문자·프로젝트 소유자가 아니면(0032 이전 직접 INSERT 로 만든 부정 gift) 수령·미리보기를
+ * 거부하고 pending 이면 만료 처리한다 — 응답은 토큰이 없을 때와 같은 404(./sender-guard.ts).
  */
 async function loadGiftFull(
   admin: ReturnType<typeof createAdminSupabase>,
@@ -127,6 +137,7 @@ async function loadGiftFull(
       created_at,
       orders!inner (
         id,
+        user_id,
         status,
         project_id,
         projects!inner (
@@ -148,11 +159,12 @@ async function loadGiftFull(
     return { error: { code: "GIFT_QUERY_FAILED", message: giftErr.message } };
   }
   if (!gift) {
-    return { error: { code: "NOT_FOUND", message: "유효하지 않은 선물 링크입니다." } };
+    return GIFT_NOT_FOUND;
   }
 
   const order = (gift.orders as unknown) as {
     id: string;
+    user_id: string | null;
     status: string;
     project_id: string;
     projects: {
@@ -167,6 +179,29 @@ async function loadGiftFull(
   };
 
   const project = order.projects;
+
+  // 발신자 = 주문자 = 프로젝트 소유자 검증 — 남의 결제 주문을 가리키는 gift 는 복제·노출하지 않는다.
+  if (
+    !giftSenderOwnsOrder({
+      senderId: gift.sender_id,
+      orderUserId: order.user_id,
+      projectUserId: project.user_id,
+    })
+  ) {
+    console.warn("[gifts] 발신자와 원본 주문 소유자 불일치 — 수령 거부·만료 처리", {
+      giftId: gift.id,
+      orderId: order.id,
+    });
+    const { error: expireErr } = await admin
+      .from("gifts")
+      .update({ status: "expired" })
+      .eq("id", gift.id)
+      .eq("status", "pending"); // 이미 수령된 행은 감사 기록으로 남긴다
+    if (expireErr) {
+      console.warn("[gifts] 부정 gift 만료 처리 실패:", expireErr.message);
+    }
+    return GIFT_NOT_FOUND;
+  }
 
   // 발신자 표시명
   const { data: senderProfile } = await admin

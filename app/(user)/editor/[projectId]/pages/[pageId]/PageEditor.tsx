@@ -43,11 +43,15 @@ import {
   type SaveBlockReason,
 } from "@/lib/editor/doc-sync";
 import {
+  createEditLockGate,
+  decideNavigationAfterSave,
   interpretSaveResponse,
+  LEAVE_WITHOUT_SAVING_CONFIRM,
   type SaveOutcome,
 } from "@/lib/editor/edit-conflict";
 // fabricClipboard: 실제 사용 시점에 동적으로 import (fabric.js 번들 분리)
 const getClipboard = () => import("@/lib/fabric/clipboard").then((m) => m.fabricClipboard);
+import type { LoadDocResult } from "@/lib/fabric/load-guards";
 import type { TaggedFabricObject } from "@/lib/fabric/serialize";
 import {
   isPageDoc,
@@ -72,6 +76,11 @@ export interface PageEditorProps {
   nextPageId: string | null;
   /** 프로젝트의 모든 페이지 — 페이지 번호 점프용. */
   siblings?: { id: string; pageNo: number }[];
+  /**
+   * 결제 후 편집 잠금 안내(서버 페이지가 진입 시 판정). null 이면 편집 가능.
+   * 값이 있으면 읽기 전용으로 열고 배너로 안내한다 — 저장 409 PROJECT_LOCKED 때 다시 토스트하지 않는다.
+   */
+  initialLockMessage: string | null;
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 5000;
@@ -120,7 +129,9 @@ type PhotoPickerMode = "add" | "replace";
  *   - 저장은 한 줄로 직렬화하고 캔버스 로드·복원이 끝난 뒤 직렬화한다.
  *   - 태그 없는 객체가 섞이면 저장을 중단한다(빈 페이지 덮어쓰기 방지).
  *   - 진입 직후 서버 최신본과 버전을 비교해 라우터 캐시로 옛 문서가 올라왔으면 교체한다.
- *   - 페이지 이동(이전/다음/점프/J·K)은 dirty 면 저장 후 이동, 저장 실패 시에만 confirm.
+ *   - 페이지 이동(이전/다음/점프/J·K)은 dirty 면 저장 후 이동, 저장하지 못하면(차단·실패) confirm.
+ *   - 409 PROJECT_LOCKED(결제 후 편집 잠금): 서버 안내를 한 번 보여주고 읽기 전용으로 전환한다
+ *     (도구 숨김·자동저장 중단·dirty 해제로 이탈 경고 해제). 이후 저장은 서버 호출 없이 "locked".
  *   - 하드 내비게이션(새로고침/탭 닫기)은 beforeunload 로 경고.
  *   - 배경(색/이미지)은 metaRef 로 추적해 serialize meta 로 전달 — 저장 시 보존.
  */
@@ -136,6 +147,7 @@ export default function PageEditor({
   prevPageId,
   nextPageId,
   siblings = [],
+  initialLockMessage,
 }: PageEditorProps) {
   const router = useRouter();
   const stageRef = useRef<FabricStageHandle>(null);
@@ -163,6 +175,10 @@ export default function PageEditor({
   const photoUrlsRef = useRef<Record<string, string>>(initialPhotoUrls);
   /** 저장을 서버 호출 없이 멈춘 사유(doc-sync SaveBlockReason). */
   const saveBlockRef = useRef<SaveBlockReason | null>(null);
+  /** 결제 후 편집 잠금 — 한 번 잠기면 새로고침 전까지 읽기 전용(lib/editor/edit-conflict.ts). */
+  const lockGateRef = useRef(createEditLockGate(initialLockMessage));
+  const [lockMessage, setLockMessage] = useState<string | null>(initialLockMessage);
+  const readOnly = lockMessage !== null;
 
   // M17-9: 모바일 탭 바 상태
   // null = 모든 시트 닫힘, 값 = 해당 시트 오픈
@@ -171,9 +187,34 @@ export default function PageEditor({
   // 편집 시퀀스 — 저장 요청 중 발생한 편집을 dirty 해제에서 보호 (EC-16).
   const editSeqRef = useRef(0);
   const markDirty = useCallback(() => {
+    // 읽기 전용이면 저장할 수 없는 변경이다 — dirty(자동저장·이탈 경고)를 만들지 않는다.
+    if (lockGateRef.current.locked) return;
     editSeqRef.current += 1;
     setDirty(true);
   }, []);
+
+  /**
+   * 409 PROJECT_LOCKED → 읽기 전용 전환. 안내 토스트는 처음 잠길 때 한 번만(진입 배너로 이미 알렸으면 생략).
+   * dirty 를 내려 자동저장 타이머와 beforeunload 경고를 끈다 — 저장할 수 없는 변경을 붙잡지 않는다.
+   */
+  const enterReadOnly = useCallback((message: string | null) => {
+    const firstLock = lockGateRef.current.lock(message);
+    const shown = lockGateRef.current.message;
+    setLockMessage(shown);
+    setDirty(false);
+    setError(null);
+    if (firstLock && shown) {
+      toast({
+        title: "수정할 수 없는 포토북이에요",
+        description: shown,
+        variant: "warning",
+      });
+    }
+  }, []);
+  // 서버 재렌더(router.refresh)가 새로 잠금을 알려주면 반영한다.
+  useEffect(() => {
+    if (initialLockMessage !== null) enterReadOnly(initialLockMessage);
+  }, [enterReadOnly, initialLockMessage]);
 
   // 직렬화 메타(레이아웃 모드/배경) — 저장 시 meta 로 전달해 배경 소실 방지 (EC-3).
   // 자동저장 타이머의 stale closure 를 피하려고 state 대신 ref 로 추적한다.
@@ -204,13 +245,18 @@ export default function PageEditor({
   /**
    * 캔버스에 문서를 올린다. 실패해도 던지지 않고 false — 저장을 멈추고 새로고침을 안내한다
    * (캔버스가 문서를 반영하지 못한 채 저장하면 저장된 객체가 빠진 페이지가 서버를 덮는다).
+   *
+   * 저장 차단의 1차 방어는 FabricStage 가 로드 실패를 동기로 래치하는 것이다(serializeForSave
+   * "load_failed") — 여기 catch 는 대기 중이던 저장보다 늦게 돌 수 있다. 차단 해제는 문서가 실제로
+   * 반영된 "applied" 때만: 더 새 로드에 밀린 "superseded" 가 그 새 로드의 실패를 지우면 안 된다.
    */
   const loadIntoStage = useCallback(
     async (doc: PageDoc, urls: Record<string, string>): Promise<boolean> => {
       const handle = stageRef.current;
       if (!handle) return false;
+      let result: LoadDocResult;
       try {
-        await handle.loadDoc(doc, urls);
+        result = await handle.loadDoc(doc, urls);
       } catch (err) {
         console.warn("[PageEditor] 페이지 캔버스 로드 실패", err);
         if (saveBlockRef.current === null) saveBlockRef.current = "load_failed";
@@ -222,7 +268,8 @@ export default function PageEditor({
         });
         return false;
       }
-      if (saveBlockRef.current === "load_failed") {
+      if (result === "skipped") return false;
+      if (result === "applied" && saveBlockRef.current === "load_failed") {
         saveBlockRef.current = null;
         setError(null);
       }
@@ -307,8 +354,8 @@ export default function PageEditor({
       });
       if (!result.loaded) return;
       editSeqRef.current += 1;
-      // 로드를 기다리는 동안 추가한 객체는 캔버스에 보존됐다 — dirty 를 내리지 않는다.
-      setDirty(result.editedDuringLoad);
+      // 로드를 기다리는 동안 추가한 객체는 캔버스에 보존됐다 — dirty 를 내리지 않는다(읽기 전용 제외).
+      setDirty(!lockGateRef.current.locked && result.editedDuringLoad);
       if (saveBlockRef.current === null) setError(null);
       setDocReloadedAt(Date.now());
       if (discardedLocalEdits) {
@@ -357,6 +404,8 @@ export default function PageEditor({
       saveQueueRef.current.run(async (): Promise<SaveOutcome> => {
         const handle = stageRef.current;
         if (!handle) return "skipped";
+        // 결제 후 편집 잠금 — 서버 호출 없이 끝낸다(안내는 잠길 때 한 번 했다).
+        if (lockGateRef.current.locked) return "locked";
         // 콜라주 적용·undo 복원이 진행 중이면 끝난 캔버스를 저장한다.
         if (!(await handle.whenIdle(STAGE_IDLE_TIMEOUT_MS))) {
           setError("페이지를 불러오는 중이라 저장하지 못했어요. 잠시 후 다시 시도해주세요.");
@@ -388,11 +437,19 @@ export default function PageEditor({
         });
         if (!result.ok) {
           if (result.reason === "not_ready") return "skipped";
-          // 서버에 보내면 화면에 보이는 요소가 저장본에서 사라진다 — 덮어쓰기 금지.
-          setError(SAVE_BLOCKED_MESSAGE);
+          // load_failed: 마지막 로드가 실패한 캔버스(FabricStage 래치) — 새로고침 전까지 멈춘다.
+          // untagged_objects: 서버에 보내면 화면에 보이는 요소가 저장본에서 사라진다 — 덮어쓰기 금지.
+          if (result.reason === "load_failed" && saveBlockRef.current === null) {
+            saveBlockRef.current = "load_failed";
+          }
+          const blockedMessage =
+            result.reason === "load_failed"
+              ? SAVE_BLOCK_MESSAGES.load_failed
+              : SAVE_BLOCKED_MESSAGE;
+          setError(blockedMessage);
           toast({
             title: "저장을 멈췄어요",
-            description: SAVE_BLOCKED_MESSAGE,
+            description: blockedMessage,
             variant: "destructive",
           });
           return "blocked";
@@ -411,6 +468,11 @@ export default function PageEditor({
           });
           const json: unknown = await res.json().catch(() => null);
           const outcome = interpretSaveResponse(res.status, json);
+          if (outcome.kind === "locked") {
+            // 결제가 끝난 포토북 — 서버 안내를 한 번 보여주고 읽기 전용으로 전환(재시도·실패 토스트 없음).
+            enterReadOnly(outcome.message);
+            return "locked";
+          }
           if (outcome.kind === "conflict") {
             // 조용히 덮어쓰지 않는다 — 최신본을 불러오고 알린다.
             await syncWithServer("conflict");
@@ -434,7 +496,7 @@ export default function PageEditor({
           setSaving(false);
         }
       }),
-    [bookSize, pageId, pageNo, syncWithServer],
+    [bookSize, enterReadOnly, pageId, pageNo, syncWithServer],
   );
 
   // 자동 저장 debounce.
@@ -442,7 +504,7 @@ export default function PageEditor({
   // docReloadedAt 의존 포함: 최신본 재로드 중 편집으로 dirty 가 true 로 유지된 경우 재무장한다.
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!dirty || !autosave) return;
+    if (!dirty || !autosave || readOnly) return;
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = setTimeout(() => {
       void save();
@@ -451,7 +513,7 @@ export default function PageEditor({
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dirty, autosave, savedAt, docReloadedAt]);
+  }, [dirty, autosave, readOnly, savedAt, docReloadedAt]);
 
   // beforeunload guard — 하드 내비게이션(새로고침/탭 닫기) 전용.
   useEffect(() => {
@@ -467,19 +529,20 @@ export default function PageEditor({
   /**
    * 소프트 내비게이션 가드 (EC-1).
    * App Router 소프트 내비에서는 beforeunload 가 발화하지 않으므로,
-   * dirty 면 저장 후 이동하고 저장 실패 시에만 확인을 받는다.
+   * dirty 면 저장 후 이동하고 저장하지 못했을 때(차단·실패)만 확인을 받는다.
    */
   const navigateTo = useCallback(
     async (href: string) => {
-      if (dirty) {
+      if (dirty && !lockGateRef.current.locked) {
         const outcome = await save();
-        // conflict: 최신본을 불러왔다(토스트 안내됨) — 사용자가 확인한 뒤 다시 이동한다.
-        if (outcome === "conflict") return;
-        if (outcome !== "saved") {
-          const proceed = window.confirm(
-            "저장에 실패했어요. 저장하지 않고 이동하면 최근 변경 사항이 사라져요. 그래도 이동할까요?",
-          );
-          if (!proceed) return;
+        const decision = decideNavigationAfterSave(outcome);
+        // stay: 최신본 재로드·읽기 전용 전환 안내가 방금 떴다 — 확인한 뒤 다시 누르면 이동한다.
+        if (decision === "stay") return;
+        if (
+          decision === "confirm_discard" &&
+          !window.confirm(LEAVE_WITHOUT_SAVING_CONFIRM)
+        ) {
+          return;
         }
       }
       // 저장 뒤 목적지가 최신 서버 렌더를 보여주게 하는 순서: push → refresh.
@@ -497,15 +560,19 @@ export default function PageEditor({
 
   /** 미리보기 열기 — 저장 성공 시에만 오픈 (EC-17). */
   const openPreview = useCallback(() => {
-    if (!dirty) {
+    if (!dirty || lockGateRef.current.locked) {
       setPreviewOpen(true);
       return;
     }
     void save().then((outcome) => {
       if (outcome === "saved") {
         setPreviewOpen(true);
-      } else if (outcome === "conflict" || outcome === "blocked") {
-        // 최신본 재로드·저장 중단 안내가 이미 떴다.
+      } else if (
+        outcome === "conflict" ||
+        outcome === "blocked" ||
+        outcome === "locked"
+      ) {
+        // 최신본 재로드·저장 중단·읽기 전용 전환 안내가 이미 떴다.
         return;
       } else {
         toast({
@@ -573,6 +640,8 @@ export default function PageEditor({
   }, [pageId]);
 
   const pasteFromClipboard = useCallback(async () => {
+    // 읽기 전용 — 단축키로도 문서를 바꾸지 않는다(안내 토스트도 띄우지 않는다).
+    if (lockGateRef.current.locked) return;
     const handle = stageRef.current;
     if (!handle) return;
     const clipboard = await getClipboard();
@@ -591,6 +660,7 @@ export default function PageEditor({
   }, [markDirty]);
 
   const duplicateSelection = useCallback(async () => {
+    if (lockGateRef.current.locked) return;
     const handle = stageRef.current;
     if (!handle) return;
     const sel = handle.getSelection();
@@ -897,22 +967,30 @@ export default function PageEditor({
             <Keyboard className="size-5" />
           </Button>
 
-          <label className="hidden items-center gap-2 text-xs text-muted-foreground md:flex">
-            <input
-              type="checkbox"
-              checked={autosave}
-              onChange={(e) => setAutosave(e.target.checked)}
-            />
-            자동 저장
-          </label>
+          {readOnly ? null : (
+            <label className="hidden items-center gap-2 text-xs text-muted-foreground md:flex">
+              <input
+                type="checkbox"
+                checked={autosave}
+                onChange={(e) => setAutosave(e.target.checked)}
+              />
+              자동 저장
+            </label>
+          )}
           <Button
             onClick={() => void save()}
-            disabled={saving}
+            disabled={saving || readOnly}
             size="sm"
             variant="gradient"
           >
             <Save className="size-4" aria-hidden />
-            {saving ? "저장 중…" : dirty ? "저장" : "저장됨"}
+            {readOnly
+              ? "읽기 전용"
+              : saving
+                ? "저장 중…"
+                : dirty
+                  ? "저장"
+                  : "저장됨"}
           </Button>
         </div>
         {savedAt ? (
@@ -940,7 +1018,8 @@ export default function PageEditor({
        * 데스크탑: 3단 flex-row.
        */}
       <div className="flex flex-1 flex-col gap-3 p-3 pb-[var(--toolbar-h)] md:flex-row md:gap-4 md:p-6 md:pb-6">
-        {/* 좌측 (데스크탑만) — Toolbar + Palette */}
+        {/* 좌측 (데스크탑만) — Toolbar + Palette. 읽기 전용이면 편집 도구를 두지 않는다. */}
+        {readOnly ? null : (
         <aside
           aria-label="도구 / 리소스"
           className="hidden md:flex md:w-72 md:shrink-0 md:flex-col md:gap-3"
@@ -970,6 +1049,7 @@ export default function PageEditor({
             />
           </div>
         </aside>
+        )}
 
         {/* 중앙 — Stage */}
         <main
@@ -979,6 +1059,15 @@ export default function PageEditor({
             "touch-action-none",
           )}
         >
+          {readOnly ? (
+            <div
+              role="status"
+              className="w-full rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200"
+            >
+              <p className="font-medium">읽기 전용으로 보고 있어요</p>
+              <p className="mt-1">{lockMessage}</p>
+            </div>
+          ) : null}
           <FabricStage
             ref={stageRef}
             widthMm={bookSize.width_mm}
@@ -993,50 +1082,57 @@ export default function PageEditor({
               setCanRedo(r);
             }}
             onReady={handleStageReady}
+            readOnly={readOnly}
           />
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCollageOpen(true)}
-            >
-              콜라주 템플릿 변경
-            </Button>
-          </div>
+          {readOnly ? null : (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCollageOpen(true)}
+              >
+                콜라주 템플릿 변경
+              </Button>
+            </div>
+          )}
         </main>
 
         {/* 우측 (데스크탑만) — SelectionPanel */}
-        <aside
-          aria-label="속성"
-          className="hidden md:block md:w-72 md:shrink-0"
-        >
-          <SelectionPanel
-            selection={selection}
-            dpi={PREVIEW_DPI}
-            onChange={markDirty}
-            onReplacePhoto={() => setPhotoPicker("replace")}
-          />
-        </aside>
+        {readOnly ? null : (
+          <aside
+            aria-label="속성"
+            className="hidden md:block md:w-72 md:shrink-0"
+          >
+            <SelectionPanel
+              selection={selection}
+              dpi={PREVIEW_DPI}
+              onChange={markDirty}
+              onReplacePhoto={() => setPhotoPicker("replace")}
+            />
+          </aside>
+        )}
       </div>
 
       {/* ====================== 모바일 전용 영역 ====================== */}
 
-      {/* 하단 퀵 바(Undo/Redo 상시 + 선택 객체 도구) + 탭 바 (모바일) */}
-      <MobileToolbar
-        activeTab={mobileTab}
-        onTabPress={handleMobileTabPress}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        onUndo={() => stageRef.current?.undo()}
-        onRedo={() => stageRef.current?.redo()}
-        hasSelection={Boolean(selection)}
-        onDuplicate={() => void duplicateSelection()}
-        onBringForward={() => stageRef.current?.bringForward()}
-        onSendBackward={() => stageRef.current?.sendBackward()}
-        onDelete={() => stageRef.current?.remove()}
-        onMore={() => setMobileTab("layers")}
-        className="md:hidden"
-      />
+      {/* 하단 퀵 바(Undo/Redo 상시 + 선택 객체 도구) + 탭 바 (모바일). 읽기 전용이면 두지 않는다. */}
+      {readOnly ? null : (
+        <MobileToolbar
+          activeTab={mobileTab}
+          onTabPress={handleMobileTabPress}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={() => stageRef.current?.undo()}
+          onRedo={() => stageRef.current?.redo()}
+          hasSelection={Boolean(selection)}
+          onDuplicate={() => void duplicateSelection()}
+          onBringForward={() => stageRef.current?.bringForward()}
+          onSendBackward={() => stageRef.current?.sendBackward()}
+          onDelete={() => stageRef.current?.remove()}
+          onMore={() => setMobileTab("layers")}
+          className="md:hidden"
+        />
+      )}
 
       {/* 도구 탭 시트 — 기존 Toolbar 콘텐츠 (2열 그리드) */}
       <MobileBottomSheet

@@ -24,6 +24,9 @@ const BodySchema = z.object({
  * 결제 후 편집 잠금 (DEBT-2): 결제 이후 주문이 있는 포토북의 사진은 건너뛰고 skippedLocked 로 센다.
  *   요청 사진이 전부 잠긴 포토북 소속이면 409 PROJECT_LOCKED.
  *
+ * 응답(모든 성공 경로에서 같은 모양): { updated, skipped, skippedLocked }
+ *   - skipped = 요청 수 - updated (잠금 제외분 포함). 그 밖의 skipped 는 이미 휴지통이거나 없는 사진.
+ *
  * 페이지/표지 fabric_json 에서 해당 photoId 가 남아있으면 PDF 빌드 시
  * createPhotoResolver 가 deleted_at 필터로 photo not found 를 throw —
  * 빌드 잡 측 try/catch 가 placeholder 처리해야 한다 (이미 render-page 폴백 존재).
@@ -56,7 +59,7 @@ export async function POST(req: Request) {
 
     const found = rows ?? [];
     if (found.length === 0) {
-      return ok({ updated: 0, skipped: photoIds.length });
+      return ok({ updated: 0, skipped: photoIds.length, skippedLocked: 0 });
     }
 
     const projectIds = Array.from(new Set(found.map((r) => r.project_id)));

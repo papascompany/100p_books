@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize } from "@/lib/db/types";
+import { readProjectLockNotice } from "@/lib/editor/lock-notice";
 import { THUMBS_BUCKET } from "@/lib/image/constants";
 import type { ServerPhotoSeed } from "@/lib/image/upload-queue";
 
@@ -132,6 +133,10 @@ export default async function UploadPage({ searchParams }: PageProps) {
     redirect("/upload");
   }
 
+  // 결제 후 편집 잠금 안내 — 소유권 확인 뒤에만 판정. 사진 추가·삭제는 API 가 409 로 막는다.
+  const admin = createAdminSupabase();
+  const lockMessage = await readProjectLockNotice(admin, project.id);
+
   // 이미 업로드된 active 사진 — 재진입/새로고침 시 그리드·'다음' CTA 복원 (UP-2).
   const { data: photoRows } = await supabase
     .from("photos")
@@ -146,7 +151,6 @@ export default async function UploadPage({ searchParams }: PageProps) {
     .map((r) => r.thumb_key)
     .filter((k): k is string => !!k);
   if (thumbKeys.length > 0) {
-    const admin = createAdminSupabase();
     const { data: signed } = await admin.storage
       .from(THUMBS_BUCKET)
       .createSignedUrls(thumbKeys, THUMB_SIGNED_TTL_SEC);
@@ -185,6 +189,7 @@ export default async function UploadPage({ searchParams }: PageProps) {
           initialBookSizeId={project.book_size_id}
           bookSizes={bookSizes}
           serverPhotos={serverPhotos}
+          lockMessage={lockMessage}
         />
       </div>
     </div>

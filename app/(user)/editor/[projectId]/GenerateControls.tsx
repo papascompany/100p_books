@@ -56,6 +56,8 @@ export interface GenerateControlsProps {
   currentPageCount: number;
   initialLayoutMode: LayoutMode;
   onGenerated: (res: GenerateResult) => void;
+  /** 결제 후 편집 잠금 등으로 재생성을 막을 때 — 버튼 비활성(서버도 409 PROJECT_LOCKED 로 막는다). */
+  disabled?: boolean;
 }
 
 export default function GenerateControls({
@@ -64,6 +66,7 @@ export default function GenerateControls({
   currentPageCount,
   initialLayoutMode,
   onGenerated,
+  disabled = false,
 }: GenerateControlsProps) {
   const [sortMode, setSortMode] = useState<SortMode>("exif");
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(initialLayoutMode);
@@ -284,7 +287,7 @@ export default function GenerateControls({
           type="button"
           variant="gradient"
           size="lg"
-          disabled={submitting || photoCount === 0}
+          disabled={disabled || submitting || photoCount === 0}
           onClick={handleClickGenerate}
         >
           <Sparkles className="size-4" aria-hidden />

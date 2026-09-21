@@ -6,6 +6,7 @@ import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize } from "@/lib/db/types";
 import { computeDocVersion } from "@/lib/editor/doc-version";
+import { readProjectLockNotice } from "@/lib/editor/lock-notice";
 import { THUMBS_BUCKET } from "@/lib/image/constants";
 import { isPageDoc } from "@/lib/layout/types";
 
@@ -25,6 +26,7 @@ const THUMB_SIGNED_TTL_SEC = 3600;
  *   1. 인증 + 소유권 확인.
  *   2. 페이지 + 책 사이즈 + 인접 페이지(이전/다음) 로드.
  *   3. 해당 페이지의 PageDoc 이 참조하는 photoId 들의 thumb signed URL 일괄 발급.
+ *   4. 결제 후 편집 잠금 여부 — 잠겨 있으면 에디터를 읽기 전용으로 열고 배너로 안내한다(안내용, 쓰기는 API 가 막는다).
  */
 export default async function EditorSinglePage({ params }: PageProps) {
   try {
@@ -57,6 +59,9 @@ export default async function EditorSinglePage({ params }: PageProps) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user || project.user_id !== user.id) notFound();
+
+  // 소유권 확인 뒤에만 판정한다(남의 결제 여부 비노출).
+  const lockMessage = await readProjectLockNotice(createAdminSupabase(), project.id);
 
   const { data: size } = await supabase
     .from("book_sizes")
@@ -135,6 +140,7 @@ export default async function EditorSinglePage({ params }: PageProps) {
       prevPageId={prevPage?.id ?? null}
       nextPageId={nextPage?.id ?? null}
       siblings={list.map((p) => ({ id: p.id, pageNo: p.page_no }))}
+      initialLockMessage={lockMessage}
     />
   );
 }

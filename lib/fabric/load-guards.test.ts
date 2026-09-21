@@ -13,11 +13,15 @@
 import * as fabric from "fabric";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { createIdleTracker } from "@/lib/editor/async-gates";
+
 import { connectCanvasHistory, HistoryRecorder, HistoryStack } from "./history";
 import {
   captureUserObjects,
   createBackgroundGate,
+  createLoadFailureLatch,
   replaceUserObjects,
+  type LoadDocResult,
 } from "./load-guards";
 import type { TaggedFabricObject } from "./serialize";
 import {
@@ -234,5 +238,99 @@ describe("createBackgroundGate — 배경은 호출 순서로 판정한다", () 
     const gate = createBackgroundGate();
     const pick = gate.claim(["image"]);
     expect(pick.isCurrent("color")).toBe(false);
+  });
+});
+
+describe("createLoadFailureLatch — 로드 실패 시 저장 차단 (A 리뷰: load_failed 틈)", () => {
+  /**
+   * FabricStage.loadDoc 과 같은 구조(순번 · idle begin → try/await → catch(래치) → finally(idle end))와
+   * 에디터 저장(whenIdle 대기 → 직렬화 판정), 호출자 catch(에디터 saveBlockRef)를 흉내 낸다.
+   * 예전에는 차단을 호출자 catch 에서만 걸어, finally 의 idle end 로 먼저 재개된 저장이 빈 캔버스를 보냈다.
+   * FabricStage 배선 자체는 components/editor/editor-source-guards.test.ts 가 고정한다.
+   */
+  function makeStage() {
+    const idle = createIdleTracker();
+    const latch = createLoadFailureLatch();
+    let seq = 0;
+    const log: string[] = [];
+    async function loadDoc(work: Promise<void>): Promise<LoadDocResult> {
+      const mine = ++seq;
+      const endIdle = idle.begin();
+      try {
+        await work;
+        if (mine !== seq) return "superseded";
+        latch.markApplied();
+        return "applied";
+      } catch (err) {
+        latch.markFailed(mine === seq);
+        throw err;
+      } finally {
+        endIdle();
+      }
+    }
+    async function save(): Promise<"saved" | "blocked"> {
+      await idle.whenIdle();
+      log.push("save:check");
+      return latch.failed ? "blocked" : "saved";
+    }
+    return { latch, loadDoc, save, log };
+  }
+
+  function deferred() {
+    let resolve!: () => void;
+    let reject!: (e: Error) => void;
+    const promise = new Promise<void>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  it("로드 실패 — 대기 중이던 저장이 호출자 catch 보다 먼저 재개돼도 막힌다", async () => {
+    const stage = makeStage();
+    const work = deferred();
+    const loading = stage
+      .loadDoc(work.promise)
+      .catch(() => stage.log.push("caller:catch"));
+    const saving = stage.save();
+    work.reject(new Error("image load failed"));
+    await expect(saving).resolves.toBe("blocked");
+    await loading;
+    // 저장 판정이 호출자 catch 보다 먼저 돈다 — 호출자 쪽 차단만으로는 늦다는 것을 고정한다.
+    expect(stage.log).toEqual(["save:check", "caller:catch"]);
+  });
+
+  it("다음 로드가 반영(applied)되면 차단이 풀린다", async () => {
+    const stage = makeStage();
+    await expect(stage.loadDoc(Promise.reject(new Error("x")))).rejects.toThrow("x");
+    expect(stage.latch.failed).toBe(true);
+    await expect(stage.loadDoc(Promise.resolve())).resolves.toBe("applied");
+    expect(stage.latch.failed).toBe(false);
+    await expect(stage.save()).resolves.toBe("saved");
+  });
+
+  it("밀린(superseded) 옛 로드의 완료가 더 새 로드의 실패를 지우지 않는다", async () => {
+    const stage = makeStage();
+    const older = deferred();
+    const newer = deferred();
+    const olderLoad = stage.loadDoc(older.promise);
+    const newerLoad = stage.loadDoc(newer.promise).catch(() => "failed" as const);
+    newer.reject(new Error("newer failed"));
+    await expect(newerLoad).resolves.toBe("failed");
+    older.resolve();
+    await expect(olderLoad).resolves.toBe("superseded");
+    expect(stage.latch.failed).toBe(true);
+    await expect(stage.save()).resolves.toBe("blocked");
+  });
+
+  it("밀린 옛 로드의 실패는 무시한다 — 더 새 로드가 반영했으면 저장 가능", async () => {
+    const stage = makeStage();
+    const older = deferred();
+    const olderLoad = stage.loadDoc(older.promise).catch(() => "failed" as const);
+    await expect(stage.loadDoc(Promise.resolve())).resolves.toBe("applied");
+    older.reject(new Error("older failed"));
+    await expect(olderLoad).resolves.toBe("failed");
+    expect(stage.latch.failed).toBe(false);
+    await expect(stage.save()).resolves.toBe("saved");
   });
 });

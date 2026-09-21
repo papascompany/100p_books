@@ -10,6 +10,12 @@ import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 
 import type { TrashItem } from "./page";
+import {
+  describePurgeResult,
+  describeRestoreResult,
+  type PurgeResponseData,
+  type RestoreResponseData,
+} from "./trash-result";
 
 interface Props {
   items: TrashItem[];
@@ -49,22 +55,14 @@ export default function TrashClient({ items, purgeAfterDays }: Props) {
       });
       const json = (await res.json()) as {
         ok: boolean;
-        data?: { restored: number; skipped: number; skippedQuota?: number };
+        data?: RestoreResponseData;
         error?: { message?: string };
       };
       if (!res.ok || !json.ok) {
         throw new Error(json.error?.message ?? "복원 실패");
       }
-      const restored = json.data?.restored ?? 0;
-      const skippedQuota = json.data?.skippedQuota ?? 0;
-      toast({
-        title: "복원 완료",
-        description:
-          skippedQuota > 0
-            ? `${restored}장 복원, ${skippedQuota}장은 한도(100장) 초과로 제외됐어요.`
-            : `${restored}장이 라이브러리로 돌아왔어요.`,
-        variant: "success",
-      });
+      // 실제 복원 장수와 제외 사유(결제 완료 포토북·100장 한도)를 함께 알린다.
+      toast(describeRestoreResult(json.data, selected.size));
       setSelected(new Set());
       router.refresh();
     } catch (e) {
@@ -96,17 +94,13 @@ export default function TrashClient({ items, purgeAfterDays }: Props) {
       });
       const json = (await res.json()) as {
         ok: boolean;
-        data?: { deleted: number };
+        data?: PurgeResponseData;
         error?: { message?: string };
       };
       if (!res.ok || !json.ok) {
         throw new Error(json.error?.message ?? "영구 삭제 실패");
       }
-      toast({
-        title: "영구 삭제 완료",
-        description: `${json.data?.deleted ?? 0}장이 영구 삭제됐어요.`,
-        variant: "success",
-      });
+      toast(describePurgeResult(json.data, selected.size));
       setSelected(new Set());
       router.refresh();
     } catch (e) {

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser, requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import { computeDocVersion, parseBaseVersion } from "@/lib/editor/doc-version";
@@ -16,6 +16,7 @@ import {
 } from "@/lib/editor/version-guard";
 import { THUMBS_BUCKET } from "@/lib/image/constants";
 import { isPageDoc, type PageDoc } from "@/lib/layout/types";
+import { assertProjectsEditable } from "@/lib/orders/edit-lock";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -139,17 +140,24 @@ interface PatchBody {
  *   응답: { id, pageNo, fabricJson, updatedAt, version }
  *
  * 검증:
- *   1. 로그인.
+ *   1. 로그인 + 탈퇴 가드(requireActiveUser, 410 ACCOUNT_DELETED).
  *   2. page → project 소유권 확인.
  *   3. isPageDoc() 가드 통과.
- *   4. fabricJson.bookSizeId / pageNo 가 DB 와 일치하는지 확인 (실수 방지).
+ *   4. 결제 후 편집 잠금(DEBT-2) — 결제 이후 주문이 있는 포토북이면 409 PROJECT_LOCKED, 쓰기 0건.
  *   5. baseVersion 이 있으면 stale-write 방어 — 서버 fabric_json 해시가 다르면
  *      409 EDIT_CONFLICT { details: { currentVersion } }. 저장 이전 화면(라우터 캐시 재생·
  *      다른 탭)이 최신 저장본을 덮어쓰지 못하게 한다. 없으면(구 클라이언트) 기존 동작.
+ *   6. fabricJson.bookSizeId / pageNo 가 DB 와 일치하는지 확인 (실수 방지).
+ *
+ * 판정 순서: 소유권 → 잠금 → 버전.
+ *   - 잠금은 소유권 **뒤** — 남의 포토북 결제 여부가 403/409 차이로 새지 않게.
+ *   - 잠금은 버전 **앞** — 잠금은 종착 상태다. stale 기준으로 먼저 409 EDIT_CONFLICT 를 주면
+ *     에디터가 최신본을 다시 불러와 로컬 변경을 버리고("저장되지 않았어요" 안내) 재저장한 뒤에야
+ *     PROJECT_LOCKED 를 받는다. 잠금을 먼저 알려 한 번에 읽기 전용으로 전환시킨다.
  */
 export async function PATCH(req: Request, { params }: Params) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
     const pageId = params.id;
     if (!pageId) return fail("INVALID_PARAM", "잘못된 페이지 ID 입니다.", 400);
 
@@ -194,6 +202,9 @@ export async function PATCH(req: Request, { params }: Params) {
     if (project.user_id !== user.id) {
       return fail("FORBIDDEN", "해당 페이지에 대한 권한이 없습니다.", 403);
     }
+
+    // 결제 후 편집 잠금 — 소유권 뒤, 버전 판정 앞(근거는 위 주석). 잠겨 있으면 409 PROJECT_LOCKED.
+    await assertProjectsEditable(createAdminSupabase(), row.project_id);
 
     // stale 기준이면 다른 검증보다 먼저 409 — 클라이언트가 최신본을 다시 불러와야 한다.
     if (baseVersion !== null) {
@@ -339,8 +350,9 @@ export async function PATCH(req: Request, { params }: Params) {
  * DELETE /api/pages/[id]
  *
  * 검증:
- *   1. 로그인.
+ *   1. 로그인 + 탈퇴 가드(requireActiveUser).
  *   2. page → project 소유권 확인.
+ *   3. 결제 후 편집 잠금(DEBT-2) — 페이지 삭제는 인쇄 페이지 수를 바꾼다 → 409 PROJECT_LOCKED.
  *
  * 처리:
  *   - DELETE FROM pages WHERE id = ?
@@ -350,7 +362,7 @@ export async function PATCH(req: Request, { params }: Params) {
  */
 export async function DELETE(_req: Request, { params }: Params) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
     const pageId = params.id;
     if (!pageId) return fail("INVALID_PARAM", "잘못된 페이지 ID 입니다.", 400);
 
@@ -376,6 +388,8 @@ export async function DELETE(_req: Request, { params }: Params) {
     }
 
     const admin = createAdminSupabase();
+    // 결제 후 편집 잠금 — 소유권 검증 뒤, 삭제 전에.
+    await assertProjectsEditable(admin, row.project_id);
 
     // 1) 페이지 삭제
     const { error: delErr } = await admin

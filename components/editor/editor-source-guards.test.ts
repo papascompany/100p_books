@@ -181,3 +181,144 @@ describe("에디터 소스 가드 — 저장이 읽는 문서 메타·캔버스 
     }
   });
 });
+
+describe("로드 실패 저장 차단 — 대기 중 저장보다 먼저 선다 (A 리뷰 should_fix)", () => {
+  it("FabricStage.loadDoc: 실패 래치는 catch 에서, 로드 종료 알림(finally)보다 앞에 건다", () => {
+    const body = section(
+      STAGE,
+      "const loadDoc = useCallback(",
+      "loadDocRef.current = loadDoc;",
+    );
+    const catchAt = indexOrFail(body, "} catch (err) {");
+    const latchAt = indexOrFail(body, "loadFailureRef.current.markFailed(");
+    const finallyAt = indexOrFail(body, "} finally {");
+    expect(catchAt).toBeLessThan(latchAt);
+    expect(latchAt).toBeLessThan(finallyAt);
+    // 최신 로드일 때만 — 밀린 옛 로드의 실패가 새 로드 결과를 덮지 않게.
+    expect(body).toContain("markFailed(seq === loadSeqRef.current)");
+  });
+
+  it("FabricStage.loadDoc: 밀린 로드는 해제하지 않는다 — markApplied 는 교체(replaceUserObjects) 뒤에만", () => {
+    const body = section(
+      STAGE,
+      "const loadDoc = useCallback(",
+      "loadDocRef.current = loadDoc;",
+    );
+    expect(count(body, "markApplied()")).toBe(1);
+    expect(indexOrFail(body, 'return "superseded"')).toBeLessThan(
+      indexOrFail(body, "markApplied()"),
+    );
+    expect(indexOrFail(body, "replaceUserObjects(canvas, previous, objs)")).toBeLessThan(
+      indexOrFail(body, "markApplied()"),
+    );
+  });
+
+  it("FabricStage.serializeForSave 가 래치를 본다 → load_failed", () => {
+    const body = section(
+      STAGE,
+      "const serializeForSave = useCallback(",
+      "[serialize],",
+    );
+    expect(body).toContain("loadFailureRef.current.failed");
+    expect(body).toContain('reason: "load_failed"');
+  });
+
+  it("캔버스 재생성 후 재로드의 reject 를 삼키지 않고 처리한다(래치가 저장을 막는다)", () => {
+    expect(STAGE).not.toMatch(/void loadDocRef\.current\?\.\([^)]*\);/);
+  });
+
+  it("에디터: 차단 해제는 applied 일 때만, load_failed 직렬화 결과는 blocked", () => {
+    for (const src of [COVER, PAGE]) {
+      const wrapper = section(
+        src,
+        "const loadIntoStage = useCallback(",
+        "const syncWithServer = useCallback(",
+      );
+      expect(wrapper).toContain('result === "applied" && saveBlockRef.current === "load_failed"');
+      const save = section(src, "const save = useCallback(", "const res = await fetch(");
+      expect(save).toContain('result.reason === "load_failed"');
+    }
+  });
+});
+
+describe("결제 후 편집 잠금 — 에디터 읽기 전용 전환 (DEBT-2 클라이언트)", () => {
+  it("저장은 잠금이면 서버 호출·idle 대기 없이 locked, 409 PROJECT_LOCKED 는 enterReadOnly", () => {
+    for (const src of [COVER, PAGE]) {
+      const save = section(src, "const save = useCallback(", "} finally {");
+      expect(indexOrFail(save, "lockGateRef.current.locked) return \"locked\"")).toBeLessThan(
+        indexOrFail(save, "handle.whenIdle("),
+      );
+      expect(save).toMatch(/outcome\.kind === "locked"\) \{\s*[^}]*enterReadOnly\(outcome\.message\);\s*return "locked";/);
+    }
+  });
+
+  it("잠금이면 편집이 dirty 를 만들지 않고 자동저장이 돌지 않는다", () => {
+    for (const src of [COVER, PAGE]) {
+      const mark = section(src, "const markDirty = useCallback(", "}, []);");
+      expect(mark).toContain("if (lockGateRef.current.locked) return;");
+      expect(src).toContain("if (!dirty || !autosave || readOnly) return;");
+    }
+  });
+
+  it("읽기 전용 전환은 dirty 를 내리고(이탈 경고 해제) 안내 토스트는 처음 잠길 때만", () => {
+    for (const src of [COVER, PAGE]) {
+      const enter = section(src, "const enterReadOnly = useCallback(", "}, []);");
+      expect(enter).toContain("lockGateRef.current.lock(message)");
+      expect(enter).toContain("setDirty(false);");
+      expect(enter).toMatch(/if \(firstLock && shown\) \{\s*toast\(/);
+    }
+  });
+
+  it("FabricStage 에 readOnly 를 넘긴다", () => {
+    for (const src of [COVER, PAGE]) {
+      expect(src).toContain("readOnly={readOnly}");
+    }
+  });
+
+  it("FabricStage: 문서를 바꾸는 명령은 읽기 전용이면 무시한다(loadDoc 은 예외)", () => {
+    for (const name of [
+      "addPhoto",
+      "addClipart",
+      "pasteLayoutObject",
+      "replacePhoto",
+      "duplicateSelected",
+      "setBackground",
+      "remove",
+      "bringForward",
+      "sendBackward",
+    ]) {
+      const start = STAGE.indexOf(`const ${name} = useCallback(`);
+      expect(start, name).toBeGreaterThanOrEqual(0);
+      const head = STAGE.slice(start, start + 160);
+      expect(head, name).toContain("if (readOnlyRef.current) return;");
+    }
+    const loadDoc = section(STAGE, "const loadDoc = useCallback(", "loadDocRef.current = loadDoc;");
+    expect(loadDoc).not.toContain("readOnlyRef");
+  });
+});
+
+describe("저장 막힘·실패 시 이동 — 화면에 가두지 않는다 (A 리뷰 should_fix)", () => {
+  it("표지·내지 이동은 decideNavigationAfterSave + '저장하지 않고 이동' 확인을 쓴다", () => {
+    const cover = section(COVER, "const flushAndNavigate = useCallback(", "router.push(href);");
+    const page = section(PAGE, "const navigateTo = useCallback(", "router.push(href);");
+    for (const nav of [cover, page]) {
+      expect(nav).toContain("decideNavigationAfterSave(outcome)");
+      expect(nav).toContain("window.confirm(LEAVE_WITHOUT_SAVING_CONFIRM)");
+      // 예전 CoverEditor: blocked 면 이동 없이 return → 새로고침 전까지 갇혔다.
+      expect(nav).not.toMatch(/outcome === "blocked"\) return/);
+    }
+  });
+});
+
+describe("CoverEditor 진입 로드 — 첫 렌더 props 고정 금지 (A 리뷰 should_fix)", () => {
+  it("handleStageReady 는 같은 props 에서 문서·기준 버전·메타를 맞추고 props 를 의존한다", () => {
+    const ready = section(COVER, "const handleStageReady = useCallback(", "const autosaveTimerRef");
+    expect(ready).toContain("baseVersionRef.current = initialVersion;");
+    expect(ready).toContain("commitCurrentDoc(initialDoc);");
+    expect(indexOrFail(ready, "baseVersionRef.current = initialVersion;")).toBeLessThan(
+      indexOrFail(ready, "await loadIntoStage("),
+    );
+    expect(ready).not.toMatch(/\}, \[\]\);/);
+    expect(ready).toMatch(/initialVersion,\s*loadIntoStage,/);
+  });
+});

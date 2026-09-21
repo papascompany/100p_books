@@ -462,8 +462,12 @@ export type SerializeForSaveResult =
   | { ok: true; doc: PageDoc }
   | {
       ok: false;
-      /** untagged_objects: 저장 불변식 위반 / not_ready: 캔버스 미초기화. */
-      reason: "untagged_objects" | "not_ready";
+      /**
+       * untagged_objects: 저장 불변식 위반 / not_ready: 캔버스 미초기화 /
+       * load_failed: 마지막 문서 로드가 실패해 캔버스가 문서를 반영하지 못했다(lib/fabric/load-guards.ts
+       * createLoadFailureLatch) — 이 캔버스를 저장하면 빈 문서·옛 내용이 서버를 덮는다.
+       */
+      reason: "untagged_objects" | "not_ready" | "load_failed";
       untaggedCount: number;
     };
 

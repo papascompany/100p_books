@@ -23,6 +23,8 @@ import { DEFAULT_REDIRECT_PATH, safeRedirectPath } from "@/lib/auth/safe-redirec
 import { getBrowserSupabase } from "@/lib/db/browser";
 import { cn } from "@/lib/utils";
 
+import { callbackErrorMessage } from "./callback-error";
+
 /** 로그인 폼 모드. */
 type Mode = "signin" | "signup" | "forgot";
 
@@ -60,16 +62,6 @@ function friendlyAuthError(message: string, mode: Mode): string {
  * (미설정 시 버튼을 숨겨 "죽은 버튼"이 노출되지 않게 한다 — LAUNCH-RUNBOOK §5)
  */
 const KAKAO_ENABLED = process.env.NEXT_PUBLIC_KAKAO_ENABLED === "1";
-
-/** 콜백 라우트(?error=코드)가 전달하는 에러 코드를 한국어 안내문으로 변환. */
-function callbackErrorMessage(code: string): string {
-  switch (code) {
-    case "callback_failed":
-      return "로그인 처리 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.";
-    default:
-      return "로그인에 실패했어요. 다시 시도해주세요.";
-  }
-}
 
 export default function LoginForm() {
   const searchParams = useSearchParams();

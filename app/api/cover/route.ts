@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { trackFunnelEvent } from "@/lib/analytics/funnel";
-import { requireUser } from "@/lib/auth/session";
+import { requireActiveUser, requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize } from "@/lib/db/types";
@@ -21,6 +21,7 @@ import {
 import { THUMBS_BUCKET } from "@/lib/image/constants";
 import { buildDefaultCoverDoc } from "@/lib/layout/cover";
 import { isPageDoc, type PageDoc } from "@/lib/layout/types";
+import { assertProjectsEditable } from "@/lib/orders/edit-lock";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -183,16 +184,20 @@ export async function GET(req: Request) {
  *   응답: { id, coverJson, updatedAt, version }
  *
  * 검증:
- *   1. 로그인 + 소유권.
+ *   1. 로그인 + 탈퇴 가드(requireActiveUser) + 소유권.
  *   2. isPageDoc + layoutMode === "cover".
- *   3. bookSizeId 일치.
+ *   3. 결제 후 편집 잠금(DEBT-2) — 결제 이후 주문이 있는 포토북이면 409 PROJECT_LOCKED, 쓰기 0건.
  *   4. baseVersion 이 있으면 stale-write 방어 — 서버 cover_json 내용 해시가 다르면
  *      409 EDIT_CONFLICT { details: { currentVersion } }.
  *      내용 해시라서 제목 변경 등 projects 의 다른 컬럼 갱신은 충돌로 보지 않는다.
+ *   5. bookSizeId 일치.
+ *
+ * 판정 순서: 소유권 → 잠금 → 버전 (근거는 PATCH /api/pages/[id] 주석과 같다 — 잠금은 결제 여부를
+ * 남에게 드러내지 않도록 소유권 뒤, 종착 상태라 재로드를 유발하는 EDIT_CONFLICT 보다 앞).
  */
 export async function PATCH(req: Request) {
   try {
-    const user = await requireUser();
+    const user = await requireActiveUser();
 
     const raw = (await req.json().catch(() => ({}))) as unknown;
     const parsed = PatchSchema.safeParse(raw ?? {});
@@ -237,6 +242,8 @@ export async function PATCH(req: Request) {
     if (project.user_id !== user.id) {
       return fail("FORBIDDEN", "해당 프로젝트에 대한 권한이 없습니다.", 403);
     }
+    // 결제 후 편집 잠금 — 소유권 뒤, 버전 판정 앞. 잠겨 있으면 409 PROJECT_LOCKED.
+    await assertProjectsEditable(createAdminSupabase(), projectId);
     // stale 기준이면 다른 검증보다 먼저 409 — 클라이언트가 최신본을 다시 불러와야 한다.
     if (baseVersion !== null) {
       const stale = isStaleBase(baseVersion, project.cover_json, {

@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import CopyToProjectDialog from "./CopyToProjectDialog";
+import { describeTrashResult, type TrashResponseData } from "./trash-result";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
@@ -162,16 +163,14 @@ export default function PhotoLibraryClient({ photos, projects }: Props) {
       });
       const json = (await res.json()) as {
         ok: boolean;
+        data?: TrashResponseData;
         error?: { message?: string };
       };
       if (!res.ok || !json.ok) {
         throw new Error(json.error?.message ?? "휴지통 이동 실패");
       }
-      toast({
-        title: "휴지통으로 옮겼어요.",
-        description: `${selected.size}장이 휴지통에 있어요.`,
-        variant: "success",
-      });
+      // 선택 장수가 아니라 서버가 실제로 옮긴 장수·제외 사유(결제 완료 포토북)를 알린다.
+      toast(describeTrashResult(json.data, selected.size));
       clearSelection();
       router.refresh();
     } catch (e) {

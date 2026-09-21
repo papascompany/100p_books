@@ -37,9 +37,13 @@ import {
   type SaveBlockReason,
 } from "@/lib/editor/doc-sync";
 import {
+  createEditLockGate,
+  decideNavigationAfterSave,
   interpretSaveResponse,
+  LEAVE_WITHOUT_SAVING_CONFIRM,
   type SaveOutcome,
 } from "@/lib/editor/edit-conflict";
+import type { LoadDocResult } from "@/lib/fabric/load-guards";
 import type { TaggedFabricObject } from "@/lib/fabric/serialize";
 import {
   buildDefaultCoverDoc,
@@ -68,6 +72,11 @@ export interface CoverEditorProps {
   pageCount: number;
   /** 사용자가 표지에 추가할 수 있는 프로젝트 사진 목록(앞쪽 N장). */
   projectPhotos: ProjectPhotoSummary[];
+  /**
+   * 결제 후 편집 잠금 안내(서버 페이지가 진입 시 판정). null 이면 편집 가능.
+   * 값이 있으면 읽기 전용으로 열고 배너로 안내한다 — 저장 409 PROJECT_LOCKED 때 다시 토스트하지 않는다.
+   */
+  initialLockMessage: string | null;
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 5000;
@@ -120,6 +129,9 @@ const SEGMENTS: Array<{ id: CoverSegment; label: string }> = [
  *   - 태그 없는 객체가 섞이면 저장을 중단한다(빈 표지 덮어쓰기 방지).
  *   - dirty 시 beforeunload guard + 클라이언트 네비게이션(주문/내지) 전 flush 저장.
  *   - 진입 직후 서버 최신본과 버전을 비교해, 라우터 캐시로 옛 문서가 올라왔으면 교체한다.
+ *   - 409 PROJECT_LOCKED(결제 후 편집 잠금): 서버 안내를 한 번 보여주고 읽기 전용으로 전환한다
+ *     (도구 숨김·자동저장 중단·dirty 해제로 이탈 경고 해제). 이후 저장은 서버 호출 없이 "locked".
+ *   - 저장이 막히거나 실패한 채 이동하면 "저장하지 않고 이동" 확인으로 빠져나갈 수 있다.
  *
  * 책등 가이드는 CoverSpineGuide 가 캔버스 위 absolute 오버레이로 그린다.
  */
@@ -133,6 +145,7 @@ export default function CoverEditor({
   bookSize,
   pageCount,
   projectPhotos,
+  initialLockMessage,
 }: CoverEditorProps) {
   const router = useRouter();
   const stageRef = useRef<FabricStageHandle>(null);
@@ -144,14 +157,20 @@ export default function CoverEditor({
   const [savedAt, setSavedAt] = useState<number | null>(null);
   /** 첫 캔버스 로드 + 최신본 확인 완료 시각 — 자동저장 재무장 트리거. */
   const [stageLoadedAt, setStageLoadedAt] = useState<number | null>(null);
-  // 초기 doc 가 default(미저장) 면 dirty=true 로 시작 (자동저장이 작동하도록).
+  /** 결제 후 편집 잠금 — 한 번 잠기면 새로고침 전까지 읽기 전용(lib/editor/edit-conflict.ts). */
+  const lockGateRef = useRef(createEditLockGate(initialLockMessage));
+  const [lockMessage, setLockMessage] = useState<string | null>(initialLockMessage);
+  const readOnly = lockMessage !== null;
+  // 초기 doc 가 default(미저장) 면 dirty=true 로 시작 (자동저장이 작동하도록). 잠긴 포토북은 저장하지 않는다.
   // 로드 자체는 dirty 를 만들지 않으므로(FabricStage), 이것이 로드 시 저장이 필요한 유일한 경로다.
-  const [dirty, setDirty] = useState(initialIsDefault);
+  const [dirty, setDirty] = useState(initialIsDefault && initialLockMessage === null);
   /** 서버 cover_json 기준 버전 — 저장 성공·최신본 재로드 때 갱신. */
   const baseVersionRef = useRef(initialVersion);
   /** 사용자 편집 순번 — 저장 중 편집이 있으면 dirty 를 유지한다. */
   const editSeqRef = useRef(0);
   const markDirty = useCallback(() => {
+    // 읽기 전용이면 저장할 수 없는 변경이다 — dirty(자동저장·이탈 경고)를 만들지 않는다.
+    if (lockGateRef.current.locked) return;
     editSeqRef.current += 1;
     setDirty(true);
   }, []);
@@ -180,6 +199,30 @@ export default function CoverEditor({
   }, []);
   /** 저장을 서버 호출 없이 멈춘 사유(doc-sync SaveBlockReason). */
   const saveBlockRef = useRef<SaveBlockReason | null>(null);
+
+  /**
+   * 409 PROJECT_LOCKED → 읽기 전용 전환. 안내 토스트는 처음 잠길 때 한 번만(진입 배너로 이미 알렸으면 생략).
+   * dirty 를 내려 자동저장 타이머와 beforeunload 경고를 끈다 — 저장할 수 없는 변경을 붙잡지 않는다.
+   */
+  const enterReadOnly = useCallback((message: string | null) => {
+    const firstLock = lockGateRef.current.lock(message);
+    const shown = lockGateRef.current.message;
+    setLockMessage(shown);
+    setDirty(false);
+    setError(null);
+    if (firstLock && shown) {
+      toast({
+        title: "수정할 수 없는 포토북이에요",
+        description: shown,
+        variant: "warning",
+      });
+    }
+  }, []);
+  // 서버 재렌더(router.refresh)가 새로 잠금을 알려주면 반영한다.
+  useEffect(() => {
+    if (initialLockMessage !== null) enterReadOnly(initialLockMessage);
+  }, [enterReadOnly, initialLockMessage]);
+
   const [showGuide, setShowGuide] = useState(true);
   const [title, setTitle] = useState(projectTitle);
   const [titleSaving, setTitleSaving] = useState(false);
@@ -247,13 +290,18 @@ export default function CoverEditor({
   /**
    * 캔버스에 문서를 올린다. 실패해도 던지지 않고 false — 저장을 멈추고 새로고침을 안내한다
    * (캔버스가 문서를 반영하지 못한 채 저장하면 화면과 다른 내용·빈 표지가 서버를 덮는다).
+   *
+   * 저장 차단의 1차 방어는 FabricStage 가 로드 실패를 동기로 래치하는 것이다(serializeForSave
+   * "load_failed") — 여기 catch 는 대기 중이던 저장보다 늦게 돌 수 있다. 차단 해제는 문서가 실제로
+   * 반영된 "applied" 때만: 더 새 로드에 밀린 "superseded" 가 그 새 로드의 실패를 지우면 안 된다.
    */
   const loadIntoStage = useCallback(
     async (doc: PageDoc, urls: Record<string, string>): Promise<boolean> => {
       const handle = stageRef.current;
       if (!handle) return false;
+      let result: LoadDocResult;
       try {
-        await handle.loadDoc(doc, urls);
+        result = await handle.loadDoc(doc, urls);
       } catch (err) {
         console.warn("[CoverEditor] 표지 캔버스 로드 실패", err);
         if (saveBlockRef.current === null) saveBlockRef.current = "load_failed";
@@ -265,7 +313,8 @@ export default function CoverEditor({
         });
         return false;
       }
-      if (saveBlockRef.current === "load_failed") {
+      if (result === "skipped") return false;
+      if (result === "applied" && saveBlockRef.current === "load_failed") {
         saveBlockRef.current = null;
         setError(null);
       }
@@ -347,7 +396,8 @@ export default function CoverEditor({
       const isDefault = data?.isDefault === true;
       // 서버에도 표지가 없으면(기본값) 진입 때와 같이 자동저장 대상이다.
       // 로드를 기다리는 동안 추가한 객체는 캔버스에 보존됐다 — dirty 를 내리지 않는다.
-      setDirty(isDefault || result.editedDuringLoad);
+      // 읽기 전용이면 어느 쪽도 저장 대상이 아니다.
+      setDirty(!lockGateRef.current.locked && (isDefault || result.editedDuringLoad));
       if (!isDefault) celebratedRef.current = true;
       if (saveBlockRef.current === null) setError(null);
       // 자동저장 재무장 — dirty 가 true 로 유지되면 effect 가 다시 돌지 않는다.
@@ -370,6 +420,8 @@ export default function CoverEditor({
       saveQueueRef.current.run(async (): Promise<SaveOutcome> => {
         const handle = stageRef.current;
         if (!handle) return "skipped";
+        // 결제 후 편집 잠금 — 서버 호출 없이 끝낸다(안내는 잠길 때 한 번 했다).
+        if (lockGateRef.current.locked) return "locked";
         // 템플릿 적용·undo 복원이 진행 중이면 끝난 캔버스를 저장한다.
         if (!(await handle.whenIdle(STAGE_IDLE_TIMEOUT_MS))) {
           setError("표지를 불러오는 중이라 저장하지 못했어요. 잠시 후 다시 시도해주세요.");
@@ -401,11 +453,19 @@ export default function CoverEditor({
         });
         if (!result.ok) {
           if (result.reason === "not_ready") return "skipped";
-          // 서버에 보내면 화면에 보이는 요소가 저장본에서 사라진다 — 덮어쓰기 금지.
-          setError(SAVE_BLOCKED_MESSAGE);
+          // load_failed: 마지막 로드가 실패한 캔버스(FabricStage 래치) — 새로고침 전까지 멈춘다.
+          // untagged_objects: 서버에 보내면 화면에 보이는 요소가 저장본에서 사라진다 — 덮어쓰기 금지.
+          if (result.reason === "load_failed" && saveBlockRef.current === null) {
+            saveBlockRef.current = "load_failed";
+          }
+          const blockedMessage =
+            result.reason === "load_failed"
+              ? SAVE_BLOCK_MESSAGES.load_failed
+              : SAVE_BLOCKED_MESSAGE;
+          setError(blockedMessage);
           toast({
             title: "저장을 멈췄어요",
-            description: SAVE_BLOCKED_MESSAGE,
+            description: blockedMessage,
             variant: "destructive",
           });
           return "blocked";
@@ -425,6 +485,11 @@ export default function CoverEditor({
           });
           const json: unknown = await res.json().catch(() => null);
           const outcome = interpretSaveResponse(res.status, json);
+          if (outcome.kind === "locked") {
+            // 결제가 끝난 포토북 — 서버 안내를 한 번 보여주고 읽기 전용으로 전환(재시도·실패 토스트 없음).
+            enterReadOnly(outcome.message);
+            return "locked";
+          }
           if (outcome.kind === "conflict") {
             // 조용히 덮어쓰지 않는다 — 최신본을 불러오고 알린다.
             await syncWithServer("conflict");
@@ -457,15 +522,25 @@ export default function CoverEditor({
           setSaving(false);
         }
       }),
-    [bookSize.id, commitCurrentDoc, projectId, syncWithServer],
+    [bookSize.id, commitCurrentDoc, enterReadOnly, projectId, syncWithServer],
   );
 
-  // 첫 마운트 시 doc 로드 — FabricStage 준비 완료 시 (lazy load 지원)
+  // 첫 캔버스 준비 시 doc 로드 — FabricStage 준비 완료 시 (lazy load 지원)
   const handleStageReady = useCallback(() => {
     void (async () => {
+      // 로드하는 문서와 기준 버전·메타·사진 URL·미저장 여부를 **같은 props** 에서 맞춘다(PageEditor 와 같은 규약).
+      // lazy 캔버스가 준비되기 전에 push→refresh 재렌더가 도착하면 props 는 새 값인데 ref·state(첫 렌더 값)는
+      // 옛 값이라, 옛 문서를 옛 기준으로 올려 불필요한 재로드·"저장되지 않았어요" 안내가 나고, 최신본 확인이
+      // 실패하면 옛 기준으로 저장해 거짓 409 가 났다.
+      // onReady 는 캔버스 생성 시 1회뿐이고 그 전에는 저장이 돌지 않으므로(핸들 없음) 덮어써도 안전하다.
+      baseVersionRef.current = initialVersion;
+      commitPhotoUrls({ ...photoUrlsRef.current, ...initialPhotoUrls });
+      commitCurrentDoc(initialDoc);
+      if (!initialIsDefault) celebratedRef.current = true;
+      setDirty(initialIsDefault && !lockGateRef.current.locked);
       try {
         // 실패하면 loadIntoStage 가 저장을 멈추고 안내한다(던지지 않는다).
-        await loadIntoStage(initialDoc, initialPhotoUrls);
+        await loadIntoStage(initialDoc, photoUrlsRef.current);
         // 진입 직후 서버 최신본 확인 — 저장 큐에 넣어 자동저장과 섞이지 않게 한다.
         await saveQueueRef.current.run(() => syncWithServer("stale"));
       } catch (err) {
@@ -475,9 +550,16 @@ export default function CoverEditor({
         setStageLoadedAt(Date.now());
       }
     })();
-    // 의도적으로 초기 1회만 로드.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [
+    commitCurrentDoc,
+    commitPhotoUrls,
+    initialDoc,
+    initialIsDefault,
+    initialPhotoUrls,
+    initialVersion,
+    loadIntoStage,
+    syncWithServer,
+  ]);
 
   // 자동 저장 debounce.
   // savedAt 의존 포함: 저장 중 편집(dirty 유지)된 경우 저장 완료 후 타이머를 재무장한다.
@@ -485,7 +567,7 @@ export default function CoverEditor({
   // 돌아 skipped 되면 다시 돌지 않았다 — 첫 로드가 끝나면 재무장한다.
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!dirty || !autosave) return;
+    if (!dirty || !autosave || readOnly) return;
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = setTimeout(() => {
       void save();
@@ -493,21 +575,21 @@ export default function CoverEditor({
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [dirty, autosave, save, savedAt, stageLoadedAt]);
+  }, [dirty, autosave, readOnly, save, savedAt, stageLoadedAt]);
 
-  // 클라이언트 네비게이션 전 dirty flush — 실패 시 이동 차단 (편집 무음 유실 방지).
+  // 클라이언트 네비게이션 전 dirty flush — 저장하지 못하면 확인을 받는다 (편집 무음 유실 방지).
   const flushAndNavigate = useCallback(
     async (href: string) => {
-      if (dirty) {
+      if (dirty && !lockGateRef.current.locked) {
         const outcome = await save();
-        // conflict: 최신본을 불러왔다(토스트 안내됨) — 사용자가 확인한 뒤 다시 이동한다.
-        // blocked: 저장 중단 안내가 이미 떴다.
-        if (outcome === "conflict" || outcome === "blocked") return;
-        if (outcome !== "saved") {
-          toast({
-            description: "저장에 실패해 이동을 멈췄어요. 다시 시도해주세요.",
-            variant: "destructive",
-          });
+        const decision = decideNavigationAfterSave(outcome);
+        // stay: 최신본 재로드·읽기 전용 전환 안내가 방금 떴다 — 확인한 뒤 다시 누르면 이동한다.
+        if (decision === "stay") return;
+        // confirm_discard: 차단(blocked)은 새로고침 전까지 풀리지 않는다 — 확인 없이 멈추면 화면에 갇힌다.
+        if (
+          decision === "confirm_discard" &&
+          !window.confirm(LEAVE_WITHOUT_SAVING_CONFIRM)
+        ) {
           return;
         }
       }
@@ -747,11 +829,14 @@ export default function CoverEditor({
     setPreviewStale(false);
 
     // dirty 면 먼저 저장 (서버 미리보기는 저장된 cover_json 기반)
-    if (dirty) {
+    if (dirty && !lockGateRef.current.locked) {
       const outcome = await save();
       // 저장 실패 시 마지막 저장본으로 진행 — 모달 내부 배너로 알림.
       // conflict 는 최신 저장본을 불러왔으므로 화면과 미리보기가 일치한다.
-      if (outcome !== "saved" && outcome !== "conflict") setPreviewStale(true);
+      // locked 는 저장본이 곧 인쇄본이고 읽기 전용 안내가 떴다 — "다시 저장해주세요" 배너는 틀린 안내다.
+      if (decideNavigationAfterSave(outcome) === "confirm_discard") {
+        setPreviewStale(true);
+      }
     }
 
     try {
@@ -845,19 +930,21 @@ export default function CoverEditor({
               (e.currentTarget as HTMLInputElement).blur();
             }
           }}
-          disabled={titleSaving}
+          disabled={titleSaving || readOnly}
           aria-label="프로젝트 제목"
           className="ml-1 max-w-[12rem] flex-1 truncate bg-transparent text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-md md:text-base"
         />
 
         <div className="ml-auto flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={openTemplateDialog}
-          >
-            기본 템플릿 적용
-          </Button>
+          {readOnly ? null : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openTemplateDialog}
+            >
+              기본 템플릿 적용
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -868,22 +955,30 @@ export default function CoverEditor({
             <span className="hidden sm:inline ml-1">3D 미리보기</span>
           </Button>
 
-          <label className="hidden items-center gap-2 text-xs text-muted-foreground md:flex">
-            <input
-              type="checkbox"
-              checked={autosave}
-              onChange={(e) => setAutosave(e.target.checked)}
-            />
-            자동 저장
-          </label>
+          {readOnly ? null : (
+            <label className="hidden items-center gap-2 text-xs text-muted-foreground md:flex">
+              <input
+                type="checkbox"
+                checked={autosave}
+                onChange={(e) => setAutosave(e.target.checked)}
+              />
+              자동 저장
+            </label>
+          )}
           <Button
             onClick={() => void save()}
-            disabled={saving}
+            disabled={saving || readOnly}
             size="sm"
             variant="gradient"
           >
             <Save className="size-4" aria-hidden />
-            {saving ? "저장 중…" : dirty ? "저장" : "저장됨"}
+            {readOnly
+              ? "읽기 전용"
+              : saving
+                ? "저장 중…"
+                : dirty
+                  ? "저장"
+                  : "저장됨"}
           </Button>
           <Button
             variant="coral"
@@ -912,7 +1007,8 @@ export default function CoverEditor({
       </header>
 
       <div className="flex flex-1 flex-col gap-3 p-3 md:flex-row md:gap-4 md:p-6">
-        {/* 좌측 — 도구 + 팔레트 (데스크탑) */}
+        {/* 좌측 — 도구 + 팔레트 (데스크탑). 읽기 전용이면 편집 도구를 두지 않는다. */}
+        {readOnly ? null : (
         <aside
           aria-label="도구 / 리소스"
           className={cn("hidden md:flex md:w-72 md:shrink-0 md:flex-col md:gap-3")}
@@ -991,10 +1087,20 @@ export default function CoverEditor({
             />
           </div>
         </aside>
+        )}
 
         {/* 중앙 — Stage + 가이드 오버레이 */}
         <main className="flex min-h-0 flex-1 flex-col items-center justify-start gap-3">
-          {legacyWidthMismatch ? (
+          {readOnly ? (
+            <div
+              role="status"
+              className="w-full rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200"
+            >
+              <p className="font-medium">읽기 전용으로 보고 있어요</p>
+              <p className="mt-1">{lockMessage}</p>
+            </div>
+          ) : null}
+          {legacyWidthMismatch && !readOnly ? (
             <div
               role="alert"
               className="w-full rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200"
@@ -1060,6 +1166,7 @@ export default function CoverEditor({
                   setCanRedo(r);
                 }}
                 onReady={handleStageReady}
+                readOnly={readOnly}
               />
               {showGuide ? (
                 <CoverSpineGuide
@@ -1073,32 +1180,36 @@ export default function CoverEditor({
         </main>
 
         {/* 우측 — SelectionPanel */}
-        <aside
-          aria-label="속성"
-          className="hidden md:block md:w-72 md:shrink-0"
-        >
-          <SelectionPanel
-            selection={selection}
-            dpi={PREVIEW_DPI}
-            onChange={markDirty}
-            onReplacePhoto={() => setPhotoPickerOpen(true)}
-          />
-        </aside>
+        {readOnly ? null : (
+          <aside
+            aria-label="속성"
+            className="hidden md:block md:w-72 md:shrink-0"
+          >
+            <SelectionPanel
+              selection={selection}
+              dpi={PREVIEW_DPI}
+              onChange={markDirty}
+              onReplacePhoto={() => setPhotoPickerOpen(true)}
+            />
+          </aside>
+        )}
       </div>
 
       {/* 하단 (모바일) — Toolbar (safe-area 패딩 포함) */}
-      <div className="sticky bottom-0 z-20 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden">
-        <Toolbar
-          mobile
-          onPick={onToolPick}
-          onUndo={() => stageRef.current?.undo()}
-          onRedo={() => stageRef.current?.redo()}
-          onDelete={() => stageRef.current?.remove()}
-          canUndo={canUndo}
-          canRedo={canRedo}
-          hasSelection={Boolean(selection)}
-        />
-      </div>
+      {readOnly ? null : (
+        <div className="sticky bottom-0 z-20 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden">
+          <Toolbar
+            mobile
+            onPick={onToolPick}
+            onUndo={() => stageRef.current?.undo()}
+            onRedo={() => stageRef.current?.redo()}
+            onDelete={() => stageRef.current?.remove()}
+            canUndo={canUndo}
+            canRedo={canRedo}
+            hasSelection={Boolean(selection)}
+          />
+        </div>
+      )}
 
       {/* 모바일 툴 바텀시트 */}
       <MobileBottomSheet

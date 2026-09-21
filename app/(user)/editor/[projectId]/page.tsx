@@ -2,8 +2,10 @@ import { notFound, redirect } from "next/navigation";
 
 import EditorClient from "./EditorClient";
 import { requireUser } from "@/lib/auth/session";
+import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize } from "@/lib/db/types";
+import { readProjectLockNotice } from "@/lib/editor/lock-notice";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -41,8 +43,12 @@ export default async function EditorPage({ params }: PageProps) {
   } = await supabase.auth.getUser();
   if (!user || project.user_id !== user.id) notFound();
 
-  const [{ count: photoCount }, { count: pageCount }, { data: size }] =
-    await Promise.all([
+  const [
+    { count: photoCount },
+    { count: pageCount },
+    { data: size },
+    lockMessage,
+  ] = await Promise.all([
       supabase
         .from("photos")
         .select("id", { count: "exact", head: true })
@@ -59,6 +65,8 @@ export default async function EditorPage({ params }: PageProps) {
         )
         .eq("id", project.book_size_id)
         .maybeSingle(),
+      // 결제 후 편집 잠금 안내 — 소유권 확인 뒤에만 판정(남의 결제 여부 비노출). 쓰기는 API 가 막는다.
+      readProjectLockNotice(createAdminSupabase(), project.id),
     ]);
 
   const bookSize: BookSize | null = size ?? null;
@@ -72,6 +80,7 @@ export default async function EditorPage({ params }: PageProps) {
         photoCount={photoCount ?? 0}
         initialPageCount={pageCount ?? 0}
         bookSize={bookSize}
+        lockMessage={lockMessage}
       />
     </div>
   );

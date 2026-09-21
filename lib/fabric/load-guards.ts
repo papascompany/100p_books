@@ -13,6 +13,10 @@
  *     이미 저장 메타에 반영)이 화면에서만 되돌아가 저장본과 화면이 어긋났다.
  *     → 배경 변경을 "호출 순서" 로 판정한다(createBackgroundGate). 에디터 메타도 호출 순서로
  *     갱신되므로 둘이 같은 결론에 도달한다.
+ *  3. 로드 실패: 저장은 whenIdle(로드 종료)을 기다린다. 로드 종료 알림은 loadDoc 의 finally 에서
+ *     나가고 실패(reject)는 그 뒤에 호출자에게 전달된다 → 호출자가 catch 에서 저장을 막기 **전에**
+ *     대기 중이던 저장이 실패한 캔버스(빈 문서)를 서버에 보냈다. → 실패를 로드 종료 알림 **전에**
+ *     동기로 래치하고(createLoadFailureLatch) 저장 직렬화가 그 래치를 본다.
  */
 
 /** chrome(안전선 등) 판정에 쓰는 최소 속성. */
@@ -103,3 +107,44 @@ export function createBackgroundGate(): BackgroundGate {
     },
   };
 }
+
+/**
+ * 문서 로드 실패 래치 (FabricStage.loadDoc ↔ serializeForSave).
+ *
+ * 규약:
+ *  - 실패는 **로드 종료 알림(idle end) 전에** markFailed 한다 — catch 는 finally 보다 먼저 돈다.
+ *    그래야 whenIdle 로 기다리던 저장이 재개될 때 이미 failed 를 본다(마이크로태스크 순서 무관).
+ *  - 더 새 로드가 이미 시작된 옛 로드의 실패는 무시한다(isLatest=false) — 새 로드의 결과가 판정한다.
+ *  - 해제는 문서가 캔버스에 실제로 반영됐을 때(markApplied)만. 순번에 밀려 반영을 건너뛴(superseded)
+ *    로드는 해제하지 않는다 — 더 새 로드의 실패를 옛 로드의 "성공" 이 지우던 경로를 막는다.
+ *  - 캔버스 재생성 뒤 마지막 문서 재로드(void 호출)도 같은 래치를 쓰므로 호출자 catch 없이도 막힌다.
+ */
+export interface LoadFailureLatch {
+  readonly failed: boolean;
+  markApplied(): void;
+  markFailed(isLatest: boolean): void;
+}
+
+export function createLoadFailureLatch(): LoadFailureLatch {
+  let failed = false;
+  return {
+    get failed() {
+      return failed;
+    },
+    markApplied() {
+      failed = false;
+    },
+    markFailed(isLatest: boolean) {
+      if (isLatest) failed = true;
+    },
+  };
+}
+
+/** FabricStage.loadDoc 결과 — applied 일 때만 로드 실패 차단을 풀 수 있다. */
+export type LoadDocResult =
+  /** 문서가 캔버스에 반영됐다. */
+  | "applied"
+  /** 더 새 로드가 시작됐거나 캔버스가 재생성돼 이 문서는 반영하지 않았다. */
+  | "superseded"
+  /** 캔버스가 없다(언마운트 등) — 아무것도 하지 않았다. */
+  | "skipped";

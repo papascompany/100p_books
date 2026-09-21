@@ -33,7 +33,12 @@ vi.mock("@/lib/db/server", () => ({
   }),
 }));
 
-import { requireActiveUser, requireUser } from "./session";
+import {
+  ACCOUNT_DELETED_LOGIN_MESSAGE,
+  callbackErrorMessage,
+} from "@/app/(auth)/login/callback-error";
+
+import { ACCOUNT_DELETED_MESSAGE, requireActiveUser, requireUser } from "./session";
 
 async function rejection(p: Promise<unknown>) {
   try {
@@ -77,5 +82,33 @@ describe("requireActiveUser", () => {
   it("requireUser 는 deleted_at 을 보지 않는다 (탈퇴 재시도 경로용)", async () => {
     state.profile = { deleted_at: "2026-09-17T00:00:00Z" };
     await expect(requireUser()).resolves.toEqual({ id: "user-1" });
+  });
+});
+
+describe("탈퇴 중간 상태 안내 — 410 문구와 로그인 콜백 동작의 일치", () => {
+  it("410 message 는 ACCOUNT_DELETED_MESSAGE 그대로", async () => {
+    state.profile = { deleted_at: "2026-09-17T00:00:00Z" };
+    const err = (await rejection(requireActiveUser())) as { message?: string };
+    expect(err.message).toBe(ACCOUNT_DELETED_MESSAGE);
+  });
+
+  it("410(세션 있음): 지금 세션으로 탈퇴 재시도 + 링크 로그인은 콜백이 끊는다는 사실 + 고객센터", () => {
+    expect(ACCOUNT_DELETED_MESSAGE).toContain("계정 관리에서 회원 탈퇴를 다시 진행");
+    expect(ACCOUNT_DELETED_MESSAGE).toContain("카카오·이메일 링크로는 다시 로그인할 수 없");
+    expect(ACCOUNT_DELETED_MESSAGE).toContain("고객센터");
+  });
+
+  it("로그인 화면(error=account_deleted, 세션 끊김): 따를 수 없는 '마이페이지에서 재시도' 대신 고객센터", () => {
+    expect(callbackErrorMessage("account_deleted")).toBe(ACCOUNT_DELETED_LOGIN_MESSAGE);
+    expect(ACCOUNT_DELETED_LOGIN_MESSAGE).toContain("카카오·이메일 링크로는 로그인할 수 없");
+    expect(ACCOUNT_DELETED_LOGIN_MESSAGE).toContain("고객센터");
+    expect(ACCOUNT_DELETED_LOGIN_MESSAGE).not.toContain("마이페이지");
+    // 일반 실패 문구로 떨어지지 않는다(예전: '로그인에 실패했어요').
+    expect(callbackErrorMessage("account_deleted")).not.toBe(callbackErrorMessage("unknown_code"));
+  });
+
+  it("기존 코드 매핑은 유지", () => {
+    expect(callbackErrorMessage("callback_failed")).toContain("로그인 처리 중 문제");
+    expect(callbackErrorMessage("whatever")).toBe("로그인에 실패했어요. 다시 시도해주세요.");
   });
 });

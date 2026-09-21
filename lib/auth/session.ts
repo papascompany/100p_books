@@ -63,6 +63,17 @@ export const requireUser = cache(async (): Promise<User> => {
 });
 
 /**
+ * 탈퇴 중간 상태(익명화 완료·auth 잔존) 계정이 **로그인된 세션으로** 쓰기 API 를 부를 때의 410 안내.
+ *
+ * 세션이 살아 있으니 마이페이지 > 계정 관리에서 탈퇴를 다시 진행할 수 있다(account/delete 는 requireUser).
+ * 단 카카오·이메일 링크로 새로 로그인하면 콜백(app/api/auth/callback)이 세션을 끊고
+ * /login?error=account_deleted 로 보내므로, 로그아웃 뒤에는 그 경로를 쓸 수 없다는 것도 함께 알린다
+ * (로그인 화면 안내 app/(auth)/login/callback-error.ts 와 같은 사실을 말한다 — session.test.ts 가 고정).
+ */
+export const ACCOUNT_DELETED_MESSAGE =
+  "탈퇴 처리가 끝나지 않은 계정이에요. 로그인된 지금 마이페이지 > 계정 관리에서 회원 탈퇴를 다시 진행해 주세요. 카카오·이메일 링크로는 다시 로그인할 수 없으니, 진행이 어려우면 고객센터로 문의해 주세요.";
+
+/**
  * requireUser() 와 동일하지만, 추가로 탈퇴 가드(profiles.deleted_at)를 적용한다.
  *
  * 탈퇴는 익명화(deleted_at) → auth soft delete(세션 전부 삭제) 순서다
@@ -70,13 +81,18 @@ export const requireUser = cache(async (): Promise<User> => {
  * auth 단계가 실패해 세션이 남은 사이에는 이 가드만이 탈퇴 회원의 행동을 막는다.
  * RLS 는 deleted_at 을 보지 않는다.
  *
- * 사용 시점 (돈·정체성 변경):
- *   - 결제 confirm, PDF 빌드, 주문 생성, 선물 보내기/받기, 출석 포인트, 할인 검증,
- *     후기 작성·수정·삭제·좋아요, 추천 코드 발급
+ * 사용 시점 (돈·정체성 변경 + 탈퇴 회원 콘텐츠가 다시 생기는 쓰기):
+ *   - 돈·정체성: 결제 confirm, 주문 생성·취소, PDF 빌드, 선물 보내기/받기, 출석 포인트, 할인 검증,
+ *     후기 작성·수정·삭제·좋아요·이미지 업로드, 추천 코드 발급
+ *   - 프로젝트 콘텐츠 쓰기: 프로젝트 생성·수정·삭제, 페이지 삽입·순서 변경·저장(PATCH)·삭제,
+ *     표지 저장(PATCH /api/cover), 자동 편집 재생성(layout/generate),
+ *     사진 업로드 서명·확정·포기·복사·휴지통·복원·영구 삭제, 공유 링크 생성·삭제
+ *   - 편집 미리보기 렌더 POST (cover/preview, pages/[id]/preview POST)
  *
  * 사용하지 않는 곳:
- *   - 단순 페이지 진입 / 조회 라우트
+ *   - 단순 페이지 진입 / 조회 라우트(GET — 성능상 requireUser. pages/[id] GET·preview GET 포함)
  *   - 회원 탈퇴 라우트 자체 (재시도로 탈퇴를 끝낼 수 있어야 하므로 requireUser + 자체 판정)
+ *   - 로그인 콜백 — 탈퇴 계정이면 세션을 끊고 /login?error=account_deleted 로 보낸다(자체 판정)
  *
  * 조회 실패 시에는 통과시키지 않는다(fail-closed, 503).
  *
@@ -103,11 +119,7 @@ export const requireActiveUser = cache(async (): Promise<User> => {
   // 여기까지 온 탈퇴 계정은 getUser() 가 통과한 상태 = 익명화는 끝났지만 auth 단계가 남은 중간 상태다.
   // (soft delete 까지 끝났다면 세션이 없어 위 requireUser 에서 401) → 필요한 조치는 탈퇴 재시도.
   if (profile?.deleted_at) {
-    authError(
-      "탈퇴 처리가 끝나지 않은 계정이에요. 마이페이지 > 계정 관리에서 회원 탈퇴를 다시 진행해 주세요.",
-      410,
-      "ACCOUNT_DELETED",
-    );
+    authError(ACCOUNT_DELETED_MESSAGE, 410, "ACCOUNT_DELETED");
   }
 
   return user;
