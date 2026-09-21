@@ -10,6 +10,11 @@ import { createAdminSupabase } from "@/lib/db/admin";
 import { enqueueEmail } from "@/lib/email/queue";
 import { ORIGINALS_BUCKET, THUMBS_BUCKET } from "@/lib/image/constants";
 
+import {
+  effectiveGiftStatus,
+  shouldPersistExpiry,
+  type GiftStatus,
+} from "./gift-status";
 import { giftSenderOwnsOrder } from "./sender-guard";
 
 export const dynamic = "force-dynamic";
@@ -47,17 +52,21 @@ interface GiftPreview {
 }
 
 /**
- * 만료 검사 + (필요 시) status='expired' 마킹.
+ * 만료 검사 + (필요 시) status='expired' 마킹 — **수령(claim) 경로 전용**.
  * 반환: 조회 시점 status (실시간 만료 적용 후).
+ *
+ * 미리보기(GET)는 이 함수를 쓰지 않는다. 읽기 요청이 상태를 바꾸면 안 되므로
+ * `effectiveGiftStatus()` 로 계산만 한다.
  */
 async function ensureExpired(
   admin: ReturnType<typeof createAdminSupabase>,
   giftId: string,
   expiresAt: string,
-  currentStatus: "pending" | "claimed" | "expired",
-): Promise<"pending" | "claimed" | "expired"> {
-  if (currentStatus !== "pending") return currentStatus;
-  if (new Date(expiresAt).getTime() >= Date.now()) return currentStatus;
+  currentStatus: GiftStatus,
+): Promise<GiftStatus> {
+  if (!shouldPersistExpiry(currentStatus, expiresAt)) {
+    return effectiveGiftStatus(currentStatus, expiresAt);
+  }
   await admin
     .from("gifts")
     .update({ status: "expired" })
@@ -108,16 +117,25 @@ const GIFT_NOT_FOUND: LoadError = {
   error: { code: "NOT_FOUND", message: "유효하지 않은 선물 링크입니다." },
 };
 
+/** 호출 맥락 — 쓰기가 허용되는 경로인지 구분한다. */
+type LoadMode = "preview" | "claim";
+
 /**
  * 발신자 + 프로젝트 메타 + 페이지 수 + 책 사이즈를 한 번에 로드.
  * GET / claim 양쪽에서 재사용.
  *
- * 발신자가 원본 주문자·프로젝트 소유자가 아니면(0032 이전 직접 INSERT 로 만든 부정 gift) 수령·미리보기를
- * 거부하고 pending 이면 만료 처리한다 — 응답은 토큰이 없을 때와 같은 404(./sender-guard.ts).
+ * 발신자가 원본 주문자·프로젝트 소유자가 아니면(0032 이전 직접 INSERT 로 만든 부정 gift)
+ * **양쪽 모두** 수령·미리보기를 거부한다 — 응답은 토큰이 없을 때와 같은 404(./sender-guard.ts).
+ *
+ * 다만 `status='expired'` 기록은 `mode === "claim"` 일 때만 한다.
+ * 미리보기(GET)는 읽기 요청이라 되돌릴 수 없는 쓰기를 유발하면 안 된다 — 링크를 한 번 여는 것만으로
+ * (또는 토큰을 아는 누구나 GET 을 날리는 것만으로) 선물이 만료되던 부작용을 제거했다.
+ * 탐지 자체는 양쪽에서 유지하고, GET 은 경고 로그만 남긴다.
  */
 async function loadGiftFull(
   admin: ReturnType<typeof createAdminSupabase>,
   token: string,
+  mode: LoadMode,
 ): Promise<LoadResult> {
   // gifts + 발신자 profile + order + project + book_size 단일 호출
   const { data: gift, error: giftErr } = await admin
@@ -188,17 +206,20 @@ async function loadGiftFull(
       projectUserId: project.user_id,
     })
   ) {
-    console.warn("[gifts] 발신자와 원본 주문 소유자 불일치 — 수령 거부·만료 처리", {
+    console.warn("[gifts] 발신자와 원본 주문 소유자 불일치 — 접근 거부", {
       giftId: gift.id,
       orderId: order.id,
+      mode,
     });
-    const { error: expireErr } = await admin
-      .from("gifts")
-      .update({ status: "expired" })
-      .eq("id", gift.id)
-      .eq("status", "pending"); // 이미 수령된 행은 감사 기록으로 남긴다
-    if (expireErr) {
-      console.warn("[gifts] 부정 gift 만료 처리 실패:", expireErr.message);
+    if (mode === "claim") {
+      const { error: expireErr } = await admin
+        .from("gifts")
+        .update({ status: "expired" })
+        .eq("id", gift.id)
+        .eq("status", "pending"); // 이미 수령된 행은 감사 기록으로 남긴다
+      if (expireErr) {
+        console.warn("[gifts] 부정 gift 만료 처리 실패:", expireErr.message);
+      }
     }
     return GIFT_NOT_FOUND;
   }
@@ -248,6 +269,10 @@ async function loadGiftFull(
  *
  * 로그인 필요 — 선물 미리보기 정보 반환.
  * 만료/없음/이미 수령 케이스는 status 값으로 표현 (UI에서 분기).
+ *
+ * **부작용 없음** — 이 핸들러는 gifts 를 포함해 어떤 행도 쓰지 않는다.
+ * 실시간 만료는 응답 값으로만 반영하고(`effectiveGiftStatus`), 실제 `status='expired'` 기록은
+ * 수령(POST claim) 경로가 담당한다.
  */
 export async function GET(_req: Request, props: RouteCtx) {
   const params = await props.params;
@@ -261,7 +286,7 @@ export async function GET(_req: Request, props: RouteCtx) {
     const token = tokenParse.data;
 
     const admin = createAdminSupabase();
-    const loaded = await loadGiftFull(admin, token);
+    const loaded = await loadGiftFull(admin, token, "preview");
     if ("error" in loaded) {
       return fail(
         loaded.error.code,
@@ -271,13 +296,8 @@ export async function GET(_req: Request, props: RouteCtx) {
     }
     const { gift, project, senderName, bookSizeName, pageCount } = loaded;
 
-    // 실시간 만료 적용
-    const status = await ensureExpired(
-      admin,
-      gift.id,
-      gift.expires_at,
-      gift.status,
-    );
+    // 실시간 만료 — 계산만 한다(쓰기 없음).
+    const status = effectiveGiftStatus(gift.status, gift.expires_at);
 
     const preview: GiftPreview = {
       giftId: gift.id,
@@ -341,7 +361,7 @@ export async function POST(req: Request, props: RouteCtx) {
     }
 
     const admin = createAdminSupabase();
-    const loaded = await loadGiftFull(admin, token);
+    const loaded = await loadGiftFull(admin, token, "claim");
     if ("error" in loaded) {
       return fail(
         loaded.error.code,

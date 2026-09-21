@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readJson, resetHarness, USER_ID } from "@/app/api/payments/_test/harness";
 import type { MemoryDb, Row } from "@/app/api/payments/_test/memory-supabase";
 
+import { effectiveGiftStatus, shouldPersistExpiry } from "./gift-status";
 import { giftSenderOwnsOrder } from "./sender-guard";
 
 /**
@@ -65,6 +66,7 @@ function setup(opts: {
   orderUser: string;
   projectUser: string;
   status?: "pending" | "claimed" | "expired";
+  expiresAt?: string;
 }): { db: MemoryDb; gift: Row } {
   const db = resetHarness({ atomic: true });
   storage.copies = [];
@@ -95,7 +97,7 @@ function setup(opts: {
     status: opts.status ?? "pending",
     claimed_project_id: opts.status === "claimed" ? "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" : null,
     claimed_at: null,
-    expires_at: "2099-01-01T00:00:00Z",
+    expires_at: opts.expiresAt ?? "2099-01-01T00:00:00Z",
     created_at: "2026-09-01T00:00:00Z",
     orders: {
       id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
@@ -134,6 +136,13 @@ function preview() {
   });
 }
 
+/** MemoryDb 호출 로그(`action:table`) 중 쓰기만. GET 이 읽기 전용인지 검사한다. */
+function writeCalls(db: MemoryDb): string[] {
+  return db.calls.filter((c) =>
+    /^(insert|update|upsert|delete|rpc):/.test(c),
+  );
+}
+
 beforeEach(() => {
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
   vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -167,12 +176,14 @@ describe("선물 수령 — 발신자가 원본 주문자가 아니면 거부·�
     expect(db.find("gifts", (r) => r.id === gift.id)?.status).toBe("claimed");
   });
 
-  it("미리보기(GET)도 같은 판정 — 남의 포토북 제목·장수를 노출하지 않고 만료", async () => {
+  it("미리보기(GET)도 같은 판정 — 남의 포토북 제목·장수를 노출하지 않는다", async () => {
     const { db, gift } = setup({ orderUser: VICTIM, projectUser: VICTIM });
     const res = await preview();
     expect(res.status).toBe(404);
     expect(JSON.stringify(await readJson(res))).not.toContain("남의 책");
-    expect(db.find("gifts", (r) => r.id === gift.id)?.status).toBe("expired");
+    // 탐지는 하되 **쓰기는 하지 않는다** — 만료 처리는 claim 경로 몫이다.
+    expect(db.find("gifts", (r) => r.id === gift.id)?.status).toBe("pending");
+    expect(writeCalls(db)).toEqual([]);
   });
 
   it("정상 선물(발신자 = 주문자 = 소유자)은 수령된다", async () => {
@@ -183,6 +194,93 @@ describe("선물 수령 — 발신자가 원본 주문자가 아니면 거부·�
     expect(json.data?.alreadyClaimed).toBe(false);
     expect(db.calls).toContain("insert:projects");
     expect(db.find("gifts", (r) => r.id === gift.id)?.status).toBe("claimed");
+  });
+});
+
+describe("미리보기(GET)는 읽기 전용 — 상태를 바꾸지 않는다", () => {
+  const PAST = "2020-01-01T00:00:00Z";
+
+  it("만료된 pending 선물 — 응답 status 는 expired 지만 DB 행은 그대로", async () => {
+    const { db, gift } = setup({
+      orderUser: SENDER,
+      projectUser: SENDER,
+      expiresAt: PAST,
+    });
+    const res = await preview();
+    const json = await readJson(res);
+    expect(res.status).toBe(200);
+    expect(json.data?.status).toBe("expired");
+    expect(db.find("gifts", (r) => r.id === gift.id)?.status).toBe("pending");
+    expect(writeCalls(db)).toEqual([]);
+  });
+
+  it("정상 pending 선물 — 미리보기가 깨지지 않고, 쓰기도 없다", async () => {
+    const { db, gift } = setup({ orderUser: SENDER, projectUser: SENDER });
+    const res = await preview();
+    const json = await readJson(res);
+    expect(res.status).toBe(200);
+    expect(json.data?.status).toBe("pending");
+    expect((json.data?.project as { title?: string } | undefined)?.title).toBe("남의 책");
+    expect(json.data?.senderName).toBe("보낸이");
+    expect(db.find("gifts", (r) => r.id === gift.id)?.status).toBe("pending");
+    expect(writeCalls(db)).toEqual([]);
+  });
+
+  it("이미 수령된 선물 — status 는 claimed 그대로, 쓰기 없음", async () => {
+    const { db } = setup({
+      orderUser: SENDER,
+      projectUser: SENDER,
+      status: "claimed",
+    });
+    const res = await preview();
+    expect((await readJson(res)).data?.status).toBe("claimed");
+    expect(writeCalls(db)).toEqual([]);
+  });
+
+  it("만료 처리(쓰기)는 claim 경로에만 남는다 — 410 + DB expired", async () => {
+    const { db, gift } = setup({
+      orderUser: SENDER,
+      projectUser: SENDER,
+      expiresAt: PAST,
+    });
+    const res = await claim();
+    expect(res.status).toBe(410);
+    expect((await readJson(res)).error?.code).toBe("GIFT_EXPIRED");
+    expect(db.find("gifts", (r) => r.id === gift.id)?.status).toBe("expired");
+  });
+
+  it("부정 gift 의 만료 처리도 claim 경로에서만 일어난다", async () => {
+    const { db, gift } = setup({ orderUser: VICTIM, projectUser: VICTIM });
+    await preview();
+    expect(db.find("gifts", (r) => r.id === gift.id)?.status).toBe("pending");
+    await claim();
+    expect(db.find("gifts", (r) => r.id === gift.id)?.status).toBe("expired");
+  });
+});
+
+describe("effectiveGiftStatus / shouldPersistExpiry", () => {
+  const NOW = Date.parse("2026-09-21T00:00:00Z");
+
+  it("pending 은 만료일이 지났을 때만 expired 로 계산된다", () => {
+    expect(effectiveGiftStatus("pending", "2026-09-22T00:00:00Z", NOW)).toBe("pending");
+    expect(effectiveGiftStatus("pending", "2026-09-21T00:00:00Z", NOW)).toBe("pending");
+    expect(effectiveGiftStatus("pending", "2026-09-20T23:59:59Z", NOW)).toBe("expired");
+  });
+
+  it("pending 이 아니면 만료일과 무관하게 그대로", () => {
+    expect(effectiveGiftStatus("claimed", "2020-01-01T00:00:00Z", NOW)).toBe("claimed");
+    expect(effectiveGiftStatus("expired", "2099-01-01T00:00:00Z", NOW)).toBe("expired");
+  });
+
+  it("파싱 불가한 만료일은 만료로 본다 (유효로 오인해 수령을 열지 않는다)", () => {
+    expect(effectiveGiftStatus("pending", "not-a-date", NOW)).toBe("expired");
+  });
+
+  it("DB 기록이 필요한 전이는 pending → expired 뿐", () => {
+    expect(shouldPersistExpiry("pending", "2026-09-20T00:00:00Z", NOW)).toBe(true);
+    expect(shouldPersistExpiry("pending", "2026-09-22T00:00:00Z", NOW)).toBe(false);
+    expect(shouldPersistExpiry("claimed", "2020-01-01T00:00:00Z", NOW)).toBe(false);
+    expect(shouldPersistExpiry("expired", "2020-01-01T00:00:00Z", NOW)).toBe(false);
   });
 });
 
