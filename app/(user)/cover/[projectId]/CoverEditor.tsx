@@ -12,6 +12,7 @@ import CoverSpineGuide from "@/components/editor/CoverSpineGuide";
 import CoverTemplateDialog from "@/components/editor/CoverTemplateDialog";
 import type { FabricStageHandle } from "@/components/editor/FabricStage";
 import PhotoPickerDialog from "@/components/editor/PhotoPickerDialog";
+import ReadOnlyNotice from "@/components/editor/ReadOnlyNotice";
 import ResourcePalette from "@/components/editor/ResourcePalette";
 
 // ⚠️ FabricStage 를 dynamic() 으로 직접 감싸면 ref 가 전달되지 않아 stageRef 가 null 이
@@ -1092,15 +1093,7 @@ export default function CoverEditor({
 
         {/* 중앙 — Stage + 가이드 오버레이 */}
         <main className="flex min-h-0 flex-1 flex-col items-center justify-start gap-3">
-          {readOnly ? (
-            <div
-              role="status"
-              className="w-full rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200"
-            >
-              <p className="font-medium">읽기 전용으로 보고 있어요</p>
-              <p className="mt-1">{lockMessage}</p>
-            </div>
-          ) : null}
+          <ReadOnlyNotice message={lockMessage} />
           {legacyWidthMismatch && !readOnly ? (
             <div
               role="alert"

@@ -18,6 +18,7 @@ import KeyboardShortcutsHelp, {
 import MobileToolbar, { type MobileTab } from "@/components/editor/MobileToolbar";
 import PagePreviewDialog from "@/components/editor/PagePreviewDialog";
 import PhotoPickerDialog from "@/components/editor/PhotoPickerDialog";
+import ReadOnlyNotice from "@/components/editor/ReadOnlyNotice";
 import ResourcePalette from "@/components/editor/ResourcePalette";
 const SelectionPanel = dynamic(() => import("@/components/editor/SelectionPanel"), { ssr: false });
 import Toolbar, { type ToolbarTool } from "@/components/editor/Toolbar";
@@ -1060,15 +1061,7 @@ export default function PageEditor({
             "touch-action-none",
           )}
         >
-          {readOnly ? (
-            <div
-              role="status"
-              className="w-full rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200"
-            >
-              <p className="font-medium">읽기 전용으로 보고 있어요</p>
-              <p className="mt-1">{lockMessage}</p>
-            </div>
-          ) : null}
+          <ReadOnlyNotice message={lockMessage} />
           <FabricStage
             ref={stageRef}
             widthMm={bookSize.width_mm}

@@ -6,8 +6,10 @@ import GenerateControls from "./GenerateControls";
 import PdfActions from "./PdfActions";
 import PreviewGrid, { type PageSummary } from "./PreviewGrid";
 import TopBar from "./TopBar";
+import ReadOnlyNotice from "@/components/editor/ReadOnlyNotice";
 import { toast } from "@/components/ui/use-toast";
 import type { BookSize, LayoutMode } from "@/lib/db/types";
+import { normalizeLockMessage } from "@/lib/editor/lock-ui";
 
 export interface EditorClientProps {
   projectId: string;
@@ -161,7 +163,9 @@ export default function EditorClient({
 
   /** 잠긴 포토북의 드래그 순서 변경 — 서버에 보내지 않고 되돌린다(PreviewGrid 가 롤백·안내). */
   const rejectLockedReorder = useCallback(async () => {
-    throw new Error(lockMessage ?? "수정할 수 없는 포토북이에요.");
+    throw new Error(
+      normalizeLockMessage(lockMessage) ?? "수정할 수 없는 포토북이에요.",
+    );
   }, [lockMessage]);
 
   const handleDelete = useCallback(
@@ -190,24 +194,19 @@ export default function EditorClient({
     [busy, refresh],
   );
 
-  const locked = lockMessage !== null;
+  // 잠금 판정은 한 곳에서 — 배너·TopBar 비활성·생성/편집 차단이 같은 값을 본다.
+  const lockNotice = normalizeLockMessage(lockMessage);
+  const locked = lockNotice !== null;
 
   return (
     <div className="space-y-8">
-      {locked ? (
-        <div
-          role="status"
-          className="rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200"
-        >
-          <p className="font-medium">읽기 전용으로 보고 있어요</p>
-          <p className="mt-1">{lockMessage}</p>
-        </div>
-      ) : null}
+      <ReadOnlyNotice message={lockNotice} />
       <TopBar
         projectId={projectId}
         initialTitle={initialTitle}
         photoCount={photoCount}
         pageCount={pageCount}
+        lockMessage={lockNotice}
       />
 
       <GenerateControls

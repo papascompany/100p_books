@@ -6,12 +6,21 @@ import { useEffect, useRef, useState } from "react";
 
 import ShareDialog from "@/components/editor/ShareDialog";
 import { Button } from "@/components/ui/button";
+import {
+  READ_ONLY_BADGE_LABEL,
+  resolveTitleFieldLockState,
+} from "@/lib/editor/lock-ui";
 
 export interface TopBarProps {
   projectId: string;
   initialTitle: string;
   photoCount: number;
   pageCount: number;
+  /**
+   * 결제 후 편집 잠금 안내(서버 페이지 판정). 값이 있으면 제목 편집·저장을 막는다.
+   * 배너는 EditorClient 가 1회 노출하므로 여기서는 비활성 + 짧은 상태 표시만 한다.
+   */
+  lockMessage: string | null;
 }
 
 /**
@@ -23,6 +32,7 @@ export default function TopBar({
   initialTitle,
   photoCount,
   pageCount,
+  lockMessage,
 }: TopBarProps) {
   const [title, setTitle] = useState(initialTitle);
   const [saving, setSaving] = useState(false);
@@ -34,7 +44,15 @@ export default function TopBar({
     lastSavedRef.current = initialTitle;
   }, [initialTitle]);
 
+  /** 표지(CoverEditor)와 같은 규약 — 잠기면 입력 비활성 + 저장 요청 자체를 보내지 않는다. */
+  const titleField = resolveTitleFieldLockState({ saving, lockMessage });
+
   async function persistTitle(next: string) {
+    // 잠긴 포토북: 서버에 보내봐야 409 PROJECT_LOCKED 다 — 직전 제목으로 되돌린다.
+    if (!titleField.canPersist) {
+      setTitle(lastSavedRef.current);
+      return;
+    }
     const clean = next.trim();
     if (clean.length === 0 || clean === lastSavedRef.current) {
       setTitle(lastSavedRef.current);
@@ -85,7 +103,8 @@ export default function TopBar({
               (e.currentTarget as HTMLInputElement).blur();
             }
           }}
-          disabled={saving}
+          disabled={titleField.disabled}
+          title={titleField.lockMessage ?? undefined}
           aria-label="프로젝트 제목"
           className="mt-1 w-full max-w-xl bg-transparent font-display text-2xl font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-3xl"
         />
@@ -93,6 +112,11 @@ export default function TopBar({
           <span>사진 {photoCount}장</span>
           <span aria-hidden>·</span>
           <span>페이지 {pageCount}p</span>
+          {titleField.lockMessage !== null ? (
+            <span className="rounded-full border border-amber-300/60 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
+              {READ_ONLY_BADGE_LABEL}
+            </span>
+          ) : null}
           {saving ? <span aria-live="polite">저장 중…</span> : null}
           {saveError ? (
             <span className="text-destructive" role="alert">
