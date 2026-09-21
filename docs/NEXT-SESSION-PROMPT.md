@@ -2,9 +2,10 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 **2026-09-21** · `main` = `34a5897` = `origin/main` · CI green · Vercel prod success
+> 갱신 **2026-09-21** · `main` = `4346c0b` = `origin/main` · CI 3잡 green · Vercel prod success
 > **미병합 브랜치 없음** — `integ/wave2` 는 `bacadc1` 위로 rebase 해 ff 병합했다
 > (rebase 이전 SHA 는 더 이상 존재하지 않는다).
+> 🆕 **`4346c0b` = Next.js 16.3.5 + React 19.3.0 전환**(운영 배포 완료, STATUS.md §0-12).
 > ⚠️ **운영 미적용 마이그레이션 2건: `0032`·`0033`** — 코드가 먼저 배포됐으므로
 > `0033` 적용 전까지 SEC-7(주문 간 동시 결제 이중 사용) 창이 열려 있다.
 > 남은 운영 액션은 전부 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md),
@@ -14,27 +15,34 @@
 > 탈퇴 잔존, 메일 cron·에러 경계·cron 인증, **편집 무결성 QA-1~4(critical)**,
 > 결제 무결성(0033), 주문 수명주기, 관리자 환불, **RLS 봉쇄 0032**,
 > 편집 잠금 완결·409 읽기 전용 전환·출석 20일 보너스 버그 수정.
+> 이어서 **Next 16 + React 19 전환**(`4346c0b`) — `next` advisory 23건이 전부 해소돼
+> prod 취약점이 60건 → 36건이 됐다.
 
 ---
 
 ## ■ 붙여넣기 블록 (여기부터 복사) ─────────────────────────
 
-너는 100p_books(Next.js 14 App Router + TypeScript + Supabase + TossPayments + Storige 인쇄 백엔드 +
-@napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 개발/CTO다. 모든 사고과정과 대화는 한글로.
+너는 100p_books(**Next.js 16 App Router + React 19** + TypeScript + Supabase + TossPayments +
+Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 개발/CTO다.
+모든 사고과정과 대화는 한글로.
 
 ### 0. 작업 환경
 
 - **정본 로컬**: `/Users/yohan/Developer/claude/100p_books` (branch `main`).
   Documents 사본은 node_modules 제거됨 — 쓰지 말 것.
 - 레포 `papascompany/100p_books` (PUBLIC). main push → **Vercel auto-deploy** 정상.
-- **브랜치 상태 (2026-09-21)** — `main` = `34a5897` = `origin/main`. **미병합 브랜치 없음.**
+- **브랜치 상태 (2026-09-21)** — `main` = `4346c0b` = `origin/main`. **미병합 브랜치 없음.**
+  `4346c0b` 은 **Next 16.3.5 + React 19.3.0 전환**이고 그 부모가 `34a5897` 이다.
   `integ/wave2` 를 `bacadc1` 위로 rebase 해 ff 병합했으므로 **rebase 이전 SHA
   (`552f6e1`·`c6deee9`·`5161cc9`·`67c8f2f`·`692c888`·`3d4b24e`·`69df5d2`·`f4af049`)는 존재하지 않는다.**
   현재 main 의 해당 커밋은 `31eaabf`·`88163d0`·`488cccb`·`061273a`·`be00e1b`·`b47834c`·`aed8404`·`513ba21`
   이고, 그 위에 INT-ui `34a5897` 이 올라가 있다.
 - **main 브랜치 보호가 켜져 있다**(2026-09-17): CI 3잡 필수 체크, force-push·삭제 금지,
-  관리자 우회 허용(`enforce_admins=false`). Dependabot alerts·security updates 도 활성화됐고
-  보안 PR(`next` 15.5.24 등)이 열려 있다 — **머지 정책은 Next 16 전환에서 함께 결정**(지금 머지 금지).
+  관리자 우회 허용(`enforce_admins=false`). Dependabot alerts·security updates 활성화.
+  **`next` 15.5.24 보안 PR 은 16.3.5 직행 전환으로 해소됐다.** 현재 열린 PR 은 actions 메이저,
+  `@napi-rs/canvas` 1.x, `lucide-react` 1.x, `nanoid` 6, `typescript` 6, `postcss` 패치,
+  npm-minor-patch 그룹 등이다 — **머지 전에 `dependabot.yml` 의 메이저 ignore 규칙(14/18 기준으로
+  작성됨)을 16/19 기준으로 재검토할 것.**
 - **로컬에서 전체 검증이 가능하다**:
   ```
   pnpm typecheck && pnpm lint && pnpm test && pnpm test:pdf && pnpm build
@@ -79,25 +87,29 @@
 로컬 `.env.local` 에는 Supabase 3종 + TOSS 3종만 있고 **`STORIGE_*` 키가 없다** →
 Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(미설정 시 503/SKIPPED).
 
-- 첫 작업 전 루트 `STATUS.md`(§0-11) + 이 문서를 읽고 현재 상태를 사용자에게 보고할 것.
+- 첫 작업 전 루트 `STATUS.md`(§0-12·§0-11) + 이 문서를 읽고 현재 상태를 사용자에게 보고할 것.
   ⚠️ **성능 수치 정본은 `STATUS.md` §0-5(2026-08-07, prod 5회 중앙값)** 다.
   STATUS.md 안의 "Performance 97 · LCP 1.5s"(§M8 QA 표)는 **2026-05-13 옛 측정치**이니
   baseline 으로 쓰지 말 것.
 
 ### 1. 검증 명령 (전부 로컬에서 동작)
 
-**기준선은 `main`(`34a5897`)에서 2026-09-21 실측한 값이다.**
+**기준선은 `main`(`4346c0b`, Next 16 전환 후)에서 2026-09-21 실측한 값이다.**
 
 | 대상 | 명령 | 현재 기준선 |
 |---|---|---|
 | 타입 | `pnpm typecheck` | 0 에러 |
-| 린트 | `pnpm lint` | 0 경고 |
-| 유닛 | `pnpm test` | **78 파일 / 1,371 passed / 1 skipped** (7.1s) |
-| PDF 회귀 | `pnpm test:pdf` | 4 케이스 OK (394ms, darwin-arm64) |
+| 린트 | `pnpm lint` | **0 error / 41 warning** — 38건이 `react-hooks` v7 신규 규칙. **전환 방침상 warn 유지**이므로 "경고 0" 을 기준선으로 쓰지 말 것 |
+| 유닛 | `pnpm test` | **78 파일 / 1,371 passed / 1 skipped** (7.1s — 전환 전후 동일) |
+| PDF 회귀 | `pnpm test:pdf` | 4 케이스 OK (394ms, darwin-arm64 — baseline 무수정) |
 | 접근성 | `pnpm test:a11y` | 25 passed / 1 skipped (WCAG 2.1 AA 위반 0) |
 | E2E 스모크 | `pnpm e2e` | 12 passed |
-| **인증 + 편집 무결성** | `pnpm e2e:auth` | **5 passed** — 골든 플로우 2 + 편집 무결성 회귀 3(QA-1/QA-4/QA-2). `bacadc1` 기준 운영 URL 실측 — **`34a5897` 배포 후 재실행 필요** |
-| 빌드 | `pnpm build` | 성공 |
+| **인증 + 편집 무결성** | `pnpm e2e:auth` | **5 passed** — 골든 플로우 2 + 편집 무결성 회귀 3(QA-1/QA-4/QA-2). `4346c0b` 배포본 대상 실측 완료 |
+| 빌드 | `pnpm build` | 성공 (**Turbopack**, `--webpack` 불요. 라우트 121개 렌더링 모드 변경 0) |
+
+> `pnpm lint` 는 Next 16 에서 `next lint` 가 제거돼 **`eslint` CLI 직접 호출**이다
+> (`eslint app components lib hooks`, flat config `eslint.config.mjs`).
+> Lighthouse 는 Next 16 이 First Load JS 표를 내지 않아 **기준선(§0-5)과 같은 방식의 비교가 불가**하다.
 
 ⚠️ `pnpm e2e` / `pnpm test:a11y` 는 playwright webServer 로 `pnpm dev --port 3000` 을 띄우는데
 `reuseExistingServer: true` 다. **포트 3000 에 옛 dev 서버가 떠 있으면 그 서버를 그대로 재사용해
@@ -112,6 +124,17 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 ```
 
 ### 2. 완료된 것 — 재작업 금지 (증거 커밋 포함)
+
+**2026-09-21 (Next 16 + React 19 전환)** — 상세는 `STATUS.md` §0-12
+
+0. **Next.js 16.3.5 · React 19.3.0 전환**(`4346c0b`, 운영 배포 완료) — codemod 2-hop 후 수동 정리.
+   `createServerSupabase` async 화(+호출부 41곳 await), 페이지 `params`/`searchParams` await,
+   `withAdmin` 이 `ctx.params` 를 바깥에서 await(관리자 라우트 21개 무수정),
+   `revalidateTag(..., { expire: 0 })`, ESLint flat config, `serverExternalPackages` 이관,
+   `images.minimumCacheTTL: 60` 명시, `agentRules: false`, `sw.js` CACHE_NAME v3, `tsconfig` `jsx: react-jsx`.
+   **의도적으로 제외한 것**(되돌리지 말고 후속 웨이브에서 판단): `middleware`→`proxy` 전환,
+   `@supabase/ssr`·`supabase-js` 업그레이드, React Compiler, Cache Components, AVIF 재활성화.
+   자세한 함정은 아래 19~24 번.
 
 **2026-09-17~18 세션 (보안·결제·편집 무결성)** — 상세는 `STATUS.md` §0-11
 
@@ -218,8 +241,9 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
     돌려준다. 클라이언트는 409 를 받으면 최신본을 불러오고 사용자에게 알린다.
     `baseVersion` 이 없는 구 클라이언트는 기존 동작으로 폴백한다 — **이 폴백을 제거하지 말 것.**
     재로드 순서도 고정돼 있다(`reloadEditorDoc`: 메타 → 캔버스 → 기준 버전).
-    또한 에디터 이동은 반드시 **`push` → `refresh`** 순서다. 반대로 하면 Next 14.2.35 의
-    action-queue 가 refresh 를 폐기해 `staleTimes` 30초 안의 왕복이 옛 RSC 를 재생한다(QA-2/QA-3).
+    또한 에디터 이동은 반드시 **`push` → `refresh`** 순서다. 반대로 하면 (당시) Next 14.2.35 의
+    action-queue 가 refresh 를 폐기해 `staleTimes` 30초 안의 왕복이 옛 RSC 를 재생했다(QA-2/QA-3).
+    **Next 16 전환 후에도 이 순서와 `staleTimes` 설정은 그대로 유지한다.**
 13. **결제 후 편집 잠금 판정은 `lib/orders/edit-lock.ts` 한 곳에 있다.**
     paid·in_production·shipped·delivered 주문이 있는 프로젝트의 인쇄물 영향 쓰기를
     409 `PROJECT_LOCKED` 로 거부한다. 판정표는 `Record<OrderStatus>` 라 **주문 상태를 추가하면
@@ -256,8 +280,34 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
     새 cron 라우트를 만들면 `lib/security/cron-auth.ts` 를 쓸 것 — 판정을 복제하지 말 것.
 17. **업로드 경로의 sharp 하드닝을 우회하지 말 것.** sharp 를 직접 import 하지 말고
     `lib/image/sharp-safe.ts` 를 쓰고, 디코드 **전에** `lib/image/sniff.ts` 로 매직바이트를 판정한다.
-    통과 포맷은 JPEG/PNG/WebP/HEIC 뿐이고 **AVIF 는 의도적으로 거부**한다
-    (`next.config` 의 `images.formats` 에서 avif 를 뺀 것도 같은 이유 — `GHSA-2xp9-vwfh-vxw4` 완화).
+    통과 포맷은 JPEG/PNG/WebP/HEIC 뿐이고 **AVIF 는 의도적으로 거부**한다.
+    `next.config` 의 `images.formats` 도 **webp 단독을 유지**한다 — `GHSA-2xp9-vwfh-vxw4` 자체는
+    Next 16.3.5 에서 해소됐지만 재활성화는 인코딩 비용·품질 회귀를 측정한 뒤 판단하기로 했다
+    (Next 16 기본값도 webp 단독이다).
+
+--- 아래는 2026-09-21 Next 16 전환에서 새로 생긴 함정이다 ---
+
+19. **`cookies()` 와 `params`/`searchParams` 는 전부 async 다.** 따라서
+    **`createServerSupabase()` 는 반드시 `await` 로 부른다**(`await cookies()` 를 내부에서 쓴다).
+    `await` 를 빠뜨리면 Promise 객체에 `.from()` 을 호출해 런타임에서 터진다 — typecheck 가 잡지만
+    새 라우트를 복붙할 때 자주 놓친다. 서버 페이지도 `const { id } = await params` 형태다.
+20. **관리자 라우트 핸들러 시그니처를 바꾸지 말 것.** `withAdmin` 이 `ctx.params` 를 **바깥에서
+    await 해서** 핸들러에 평범한 객체로 넘긴다. 그래서 관리자 라우트 21개가 전환에서 무수정으로
+    남았다. 핸들러 안에서 다시 `await params` 를 하거나 시그니처를 `Promise<...>` 로 바꾸면 깨진다.
+21. **`revalidateTag` 는 Next 16 에서 2번째 인자가 필수다.** 현재 코드는
+    `revalidateTag(SITE_CONTENT_TAG, { expire: 0 })` — **`{ expire: 0 }` 이 즉시 무효화**이고
+    CMS 콘텐츠 즉시 반영이 여기에 걸려 있다. 값을 늘리면 관리자 콘텐츠 변경이 늦게 반영된다.
+22. **`next.config` 의 `images.minimumCacheTTL: 60` 을 지우지 말 것.** Next 16 기본값이
+    60초 → **4시간**으로 바뀌었다. 지우면 서명 URL 회전·콘텐츠 교체 반영이 최대 4시간 늦게
+    체감된다(기존 동작을 유지하려고 일부러 명시해 둔 값이다).
+23. **`middleware.ts` 는 의도적으로 유지 중이다.** Next 16 은 `proxy.ts` 로의 리네임을 권하고
+    **빌드에 deprecation 경고 1건이 나오지만 정상**이다. 이번 웨이브에서 동작 변경을 피하려고
+    codemod 의 리네임을 되돌렸다 — 경고를 보고 "고장"으로 오판하거나 즉흥적으로 전환하지 말 것.
+24. **ESLint 는 flat config(`eslint.config.mjs`)이고 `.eslintrc.json` 은 삭제됐다.**
+    Next 16 이 `next lint` 를 제거해 `pnpm lint` 가 `eslint` CLI 를 직접 부른다(검사 범위는
+    스크립트의 `app components lib hooks`). **전환으로 새로 생긴 규칙은 warn 유지가 방침**이라
+    현재 기준선은 **0 error / 41 warning**(38건이 `react-hooks` v7)이다. 규칙을 error 로 올리거나
+    경고 0 을 목표로 일괄 수정하는 것은 별도 웨이브에서 규칙별로 판단한다.
 
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
 
@@ -276,7 +326,13 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 3. **런북 §11 — QA-1 피해 조회**(읽기 전용 SQL 3개). 되돌리기 후 0객체로 저장된 내지·표지와
    그중 결제된 건을 찾는다. 이미 발생한 피해라 조회가 먼저다.
 
-그리고 **`34a5897` 배포 후 운영 URL `pnpm e2e:auth` 재실행**이 남아 있다(직전 실측은 `bacadc1` 기준).
+**검증 후속(운영 액션 아님, 런북 백로그에도 등재)**
+
+- **Vercel Preview 런타임 검증 불가** — Preview 환경변수가 0종이라 PDF 네이티브 바이너리·
+  토스 결제·카카오 콜백을 프리뷰에서 실증할 수 없다. Next 16 전환분도 운영 배포본으로만 검증했다.
+- **Lighthouse 비교 보류** — Next 16 이 빌드에서 First Load JS 표를 내지 않아 기준선(§0-5,
+  2026-08-07 Performance 88 · LCP 3.6s)과 **같은 방식의 비교가 불가능**하다. 측정 방법을 먼저 정할 것.
+- `pnpm e2e:auth` 재실행은 **완료**됐다 — `4346c0b` 배포본에서 5 passed.
 
 운영 규칙: **환불은 전액만**(부분 취소는 앱이 의도적으로 무시), **`CRON_SECRET` 을 지우지 말 것.**
 

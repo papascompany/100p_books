@@ -3,13 +3,15 @@
 > 사진 최대 100장으로 나만의 포토북을 만들고, 인쇄용 PDF로 주문하는 모바일 친화 웹앱.
 > Fabric.js 기반의 캔바 수준 표지·내지 에디터, 300dpi 고해상도 출력, 관리자 콘솔 포함.
 
-[![Built with Next.js 14](https://img.shields.io/badge/Next.js-14.2-black?logo=next.js)](https://nextjs.org/)
+[![Built with Next.js 16](https://img.shields.io/badge/Next.js-16.3-black?logo=next.js)](https://nextjs.org/)
+[![React 19](https://img.shields.io/badge/React-19.3-61dafb?logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178c6?logo=typescript)](https://www.typescriptlang.org/)
 [![Supabase](https://img.shields.io/badge/Supabase-Auth%20%2B%20DB%20%2B%20Storage-3FCF8E?logo=supabase)](https://supabase.com/)
 [![Fabric.js 6](https://img.shields.io/badge/Fabric.js-6.x-FE6E3A)](http://fabricjs.com/)
 [![License](https://img.shields.io/badge/license-Private-lightgrey)](#)
 
-> 최종 갱신: **2026-09-21** · 운영 빌드 `34a5897` (미병합 브랜치 없음)
+> 최종 갱신: **2026-09-21** · 운영 빌드 `4346c0b` (Next.js 16.3.5 + React 19.3.0 전환 배포 완료,
+> 미병합 브랜치 없음)
 > 현황은 [STATUS.md](STATUS.md), 남은 운영 액션은 [docs/LAUNCH-RUNBOOK.md](docs/LAUNCH-RUNBOOK.md),
 > 보안 상태는 [SECURITY.md](SECURITY.md).
 
@@ -38,7 +40,7 @@
 
 | 레이어 | 선택 |
 |---|---|
-| 프레임워크 | **Next.js 14 (App Router)** + TypeScript 5.5 |
+| 프레임워크 | **Next.js 16.3 (App Router)** + **React 19.3** + TypeScript 5.5 |
 | 스타일 | **Tailwind CSS** + shadcn/ui + Pretendard / Playfair Display |
 | 상태 | Zustand |
 | 에디터 | **Fabric.js 6.9.x** (직렬화·제스처·히스토리·스냅·폰트 동적 로드) |
@@ -49,6 +51,7 @@
 | 송장 | exceljs |
 | 이메일 | Resend SDK |
 | 테스트 | Vitest 2 + jsdom (유닛) · **Playwright 1.60** (E2E desktop+mobile) |
+| 린트 | **ESLint 9 flat config**(`eslint.config.mjs`) + `eslint-config-next` 16 — Next 16 이 `next lint` 를 제거해 `pnpm lint` 가 `eslint` CLI 를 직접 부른다 |
 | 배포 | Vercel + Supabase |
 
 ---
@@ -211,29 +214,29 @@ update public.profiles set role = 'admin' where email = '<your-email>';
 ```bash
 pnpm dev          # → http://localhost:3000
 pnpm typecheck    # tsc --noEmit
-pnpm lint         # next lint
+pnpm lint         # eslint (flat config — Next 16 에서 `next lint` 제거됨)
 pnpm test         # vitest
-pnpm build        # production 빌드
+pnpm build        # production 빌드 (Turbopack)
 ```
 
 ---
 
 ## 📊 빌드/품질 현황
 
-> 2026-09-21 실측 (main = `34a5897`)
+> 2026-09-21 실측 (main = `4346c0b`, Next 16 전환 후)
 
 | 검증 | 결과 |
 |---|---|
 | `pnpm typecheck` | ✅ 에러 0건 |
-| `pnpm lint` | ✅ 경고 0건 |
-| `pnpm test` | ✅ 78 파일 / 1,371 통과 / 1 skip |
-| `pnpm build` | ✅ production 성공 |
+| `pnpm lint` | ✅ 0 error / 41 warning (38건이 `react-hooks` v7 신규 규칙 — 전환 방침상 warn 유지) |
+| `pnpm test` | ✅ 78 파일 / 1,371 통과 / 1 skip (전환 전후 동일) |
+| `pnpm build` | ✅ production 성공 (Turbopack · 라우트 121개 렌더링 모드 변경 0) |
 | `pnpm test:pdf` | ✅ 4 케이스 (구조 2 + 픽셀 해시 4) / 394ms |
 | `pnpm verify:pdf` | ✅ PDF 파이프라인 런타임 1페이지 검증 |
 | `pnpm e2e` (chromium desktop+mobile) | ✅ 12/12 통과 |
 | `pnpm test:a11y` (axe-core WCAG 2.1 AA) | ✅ 25 통과 / 1 skip · 위반 0 |
-| `pnpm e2e:auth` (⚠️ 운영 Supabase) | ✅ 5 통과 — 골든 플로우 2 + 편집 무결성 회귀 3 (`34a5897` 배포본 대상 2026-09-21 실측) |
-| Lighthouse 모바일 (운영, 2026-08-07 5회 중앙값) | Performance 88 · LCP 3.6s · CLS 0 |
+| `pnpm e2e:auth` (⚠️ 운영 Supabase) | ✅ 5 통과 — 골든 플로우 2 + 편집 무결성 회귀 3 (`4346c0b` 배포본 대상 2026-09-21 실측) |
+| Lighthouse 모바일 (운영, 2026-08-07 5회 중앙값) | Performance 88 · LCP 3.6s · CLS 0 — ⚠️ Next 16 전환 후 재측정 전이다(빌드가 First Load JS 표를 내지 않아 같은 방식의 비교 불가) |
 
 CI(GitHub Actions)는 main push·PR 마다 `verify` / `e2e` / `a11y` 3잡을 돌린다.
 `e2e:auth` 는 운영 Supabase 에 임시 계정을 만들므로 **CI 에 포함하지 않는다**.

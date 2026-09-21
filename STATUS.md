@@ -12,9 +12,11 @@
 > 최종 업데이트: 2026-09-21
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `34a5897` — 2026-09-17~21 작업 전량 main 반영 완료(미병합 브랜치 없음, §0-11)
-> 직전 검증 빌드 `bacadc1` 기준 운영 URL `pnpm e2e:auth` 5 passed
-> (골든 플로우 + 편집 무결성 QA-1/4/2). **`34a5897` 배포본 대상 재실행도 5 passed (2026-09-21).**
+> 운영 빌드: `4346c0b` — **Next.js 16.3.5 + React 19.3.0 전환 운영 배포 완료**(§0-12).
+> 그 직전 `34a5897` 까지 2026-09-17~21 보안·결제·편집 무결성 작업 전량 반영(§0-11).
+> **미병합 브랜치 없음.**
+> 운영 URL `pnpm e2e:auth` 5 passed (골든 플로우 + 편집 무결성 QA-1/4/2) —
+> `bacadc1`·`34a5897`·`4346c0b` 세 배포본에서 각각 실측.
 > 다음 세션 인계: [docs/NEXT-SESSION-PROMPT.md](docs/NEXT-SESSION-PROMPT.md) (붙여넣기 블록 그대로 사용)
 > **정본 로컬 경로**: `/Users/yohan/Developer/claude/100p_books` (Documents 사본은 node_modules 제거됨)
 > **성능 수치 정본**: §0-5 (2026-08-07, prod 5회 측정). §0-4 는 그 직전 상태, §M8·테스트 현황의
@@ -23,6 +25,63 @@
 ---
 
 ## 🆕 최근 작업 (2026-09-17 ~ 09-21)
+
+### 0-12. Next.js 16 + React 19 전환 (2026-09-21) — 운영 배포 완료
+
+**배경** — Next 14.2.35 는 업스트림 지원이 끝나 잔존 advisory 23건의 patched 범위가 **전부 `>=15.x`**
+였다. 14.x 안에서는 해결 경로가 없어 15 를 거치지 않고 **16.3.5 로 직행**했다(SECURITY.md).
+
+**전환 내용** (`4346c0b`) — codemod 2-hop(`upgrade 15` → `next-async-request-api` → `upgrade 16` →
+`types-react` preset-19) 후 수동 정리.
+
+| 영역 | 변경 |
+|---|---|
+| 의존성 | `next` 14.2.35 → **16.3.5** · `react`/`react-dom` 18.3.1 → **19.3.0** · `@types/react(-dom)` 19 · `eslint` **9.39.5** + `eslint-config-next` 16.3.5 (`@typescript-eslint` 직접 의존은 프리셋에 내장돼 제거) |
+| 비동기 요청 API | `createServerSupabase` 를 **async** 로 바꾸고(`await cookies()`, `@supabase/ssr` 어댑터 형태는 유지) 호출부 **41곳**에 `await` 추가. `withAdmin` 이 `ctx.params` 를 **바깥에서 await 해 넘기므로 관리자 라우트 21개는 무수정** |
+| 페이지 | `params`/`searchParams` await (13+3곳). 결제 success/fail 은 분기·props 동일 |
+| 캐시 무효화 | `revalidateTag(SITE_CONTENT_TAG, { expire: 0 })` — Next 16 은 **2번째 인자가 필수**이고 `{ expire: 0 }` 이 즉시 무효화다(CMS 즉시 반영 유지) |
+| ESLint | **flat config** `eslint.config.mjs` 신설 · `.eslintrc.json` 삭제. Next 16 이 `next lint` 를 제거했으므로 `pnpm lint` 가 `eslint` CLI 를 직접 부른다. 기존 규칙·검사 범위는 그대로 두고 **전환으로 새로 생긴 규칙은 warn** 으로 가시화만 한다 |
+| next.config | `experimental.serverComponentsExternalPackages` → 최상위 **`serverExternalPackages`** 이관 · **`images.minimumCacheTTL: 60` 명시**(Next 16 기본값이 60초 → 4시간으로 바뀌어 서명 URL 회전·콘텐츠 교체 반영 체감이 달라지는 것을 상쇄) · **`agentRules: false`**(dev 서버가 `AGENTS.md`·`CLAUDE.md` 를 자동 생성/수정하지 않게) · `eslint.ignoreDuringBuilds` 키 제거(Next 16 에서 설정 검증 오류) |
+| 기타 | `public/sw.js` `CACHE_NAME` v2 → **v3**(배포 스큐) · `tsconfig` `jsx: react-jsx` |
+
+**검증 — 전환 후 로컬 실측(기준선은 `34a5897`)**
+
+| 항목 | 결과 |
+|---|---|
+| `pnpm typecheck` | 0 에러 |
+| `pnpm lint` | **0 error / 41 warning** — 그중 38건이 `react-hooks` v7(React Compiler 기반) 신규 규칙. 방침상 warn 유지 |
+| `pnpm test` | 78 파일 / 1,371 passed / 1 skipped — **기준선과 동일** |
+| `pnpm test:pdf` | 4 케이스 baseline 일치(baseline 파일 무수정) |
+| `pnpm build` | **Turbopack 성공**(클린 재빌드 포함, `--webpack` 불요). 라우트 **121개의 렌더링 모드 변경 0** |
+| `pnpm e2e` · `pnpm test:a11y` | 12 · 25 |
+| `pnpm e2e:auth` | **5 passed** — 로컬과 운영 배포본 **양쪽** |
+
+**운영 검증 (배포 후)** — CI 3잡 success · Vercel success · 공개 경로 7종 200 ·
+CSP·`X-Frame-Options` 유지 · `x-powered-by` 없음 · `/api/health` 비인증 최소 응답 ·
+cron 무인증 401 · `/_next/image` 최적화 200 · 오픈 리다이렉트 차단 ·
+**Vercel 런타임 오류 0건 · 5xx 0건**(배포 후 40분 구간).
+
+**의도적으로 제외한 것 (후속 웨이브)**
+
+| 항목 | 이유 |
+|---|---|
+| `middleware.ts` → `proxy.ts` 전환 | 이번 웨이브는 동작을 바꾸지 않는 것이 방침이라 codemod 결과를 되돌렸다. **`middleware.ts` 를 그대로 쓰고 있으며 빌드에 deprecation 경고 1건이 나오는 것은 정상이다** |
+| `@supabase/ssr` 0.5.2 · `@supabase/supabase-js` 2.45.6 업그레이드 | 인증·쿠키 경로의 회귀 범위가 따로 커서 분리했다 |
+| React Compiler · Cache Components | 동작·성능 변화가 커서 측정과 함께 별도 판단. codemod 가 넣은 `instant = false` 47건도 되돌렸다 |
+| AVIF 재활성화 | `GHSA-2xp9-vwfh-vxw4` 자체는 16.3.5 에서 해소됐지만 인코딩 비용·품질 회귀를 따로 측정한 뒤 판단한다. `images.formats` 는 **webp 유지**(Next 16 기본값도 webp 단독) |
+
+**남은 후속**
+
+| 항목 | 상태 |
+|---|---|
+| Vercel Preview 런타임 검증 | **불가** — Preview 환경변수가 0종이라 PDF 네이티브 바이너리·토스 결제·카카오 콜백을 프리뷰에서 실증할 수 없다 |
+| Lighthouse 성능 비교 | Next 16 이 빌드 출력에 **First Load JS 표를 내지 않아** 기준선(§0-5)과 같은 방식의 비교가 불가능하다. 비교하려면 측정 방법을 먼저 새로 정해야 한다 |
+| `middleware` → `proxy` 전환 | 위 제외 항목 |
+| `@supabase/ssr`·`supabase-js` 업그레이드 | 위 제외 항목. 잔존 `@supabase/auth-js` low 1건도 여기서 해소된다(SECURITY.md) |
+| `react-hooks` v7 경고 38건 정리 | 규칙별로 수정하고 error 승격 여부를 판단 |
+| Dependabot 메이저 ignore 규칙 재검토 | `.github/dependabot.yml` 의 `next`/`react`/`react-dom`/`@types/react*`/`eslint*` 메이저 ignore 는 **14/18 기준으로 쓴 것**이라 16/19 기준으로 다시 본다 |
+
+---
 
 ### 0-11. 보안·결제 무결성·편집 무결성 일괄 (2026-09-17~21)
 
@@ -53,7 +112,7 @@ undo/redo 후 직렬화가 태그 없는 객체를 건너뛰어 **페이지·표
 **수정** — `lib/fabric/snapshot.ts`(`toObject(FABRIC_EXTRA_PROPS)` 기반 스냅샷, 정밀도 17자리로
 슬롯 왕복 오차 제거) · `serializeForSave` 불변식(chrome 이 아닌 객체에 `oType` 이 없으면 저장 중단) ·
 `HistoryRecorder` 가 로드·복원 중 이벤트를 무시하고 no-op push 로 dirty 를 만들지 않게(QA-4).
-QA-2/QA-3 은 저장 후 `router.refresh()` 직후 `push()` 를 하면 Next 14.2.35 action-queue 가 refresh 를
+QA-2/QA-3 은 저장 후 `router.refresh()` 직후 `push()` 를 하면 당시 Next 14.2.35 의 action-queue 가 refresh 를
 폐기해 `staleTimes` 30초 안의 왕복이 옛 RSC 를 재생하던 문제 → 이동을 `push → refresh` 순으로 바꾸고,
 서버 측 stale-write 방어로 `PATCH /api/pages/[id]`·`/api/cover` 에 **`baseVersion`(내용 해시) →
 불일치 시 409 `EDIT_CONFLICT`**, `updated_at` CAS 로 원자 판정을 넣었다.
@@ -130,8 +189,8 @@ e2e 12 · a11y 25 · build 성공. `e2e:auth` 5 는 `bacadc1`·`34a5897` 두 배
 
 #### C. GitHub 저장소 설정 변경 (2026-09-17)
 
-- Dependabot **alerts + security updates 활성화**. 보안 PR 이 열려 있다(`next` 15.5.24 등) —
-  **머지 정책은 Next 16 전환 과제에서 함께 다룬다**(프레임워크 메이저를 보안 PR 로 끌려가지 않기 위함).
+- Dependabot **alerts + security updates 활성화**. 당시 열려 있던 `next` 15.5.24 보안 PR 은
+  **§0-12 의 16.3.5 직행 전환으로 해소**됐다. 현재 열린 PR 과 ignore 규칙 재검토는 §0-12 "남은 후속" 참조.
 - `main` 브랜치 보호: CI 3잡 필수 체크, force-push·삭제 금지, 관리자 우회 허용(`enforce_admins=false`).
 
 #### D. 이번 작업에서 새로 발견돼 **아직 미해결**인 것 (백로그 — 런북에도 등재)
@@ -149,7 +208,7 @@ e2e 12 · a11y 25 · build 성공. `e2e:auth` 5 는 `bacadc1`·`34a5897` 두 배
 | 법정 고지·고객 문의 창구 | `/terms`·`/privacy`·`/refund` 는 있으나 전자상거래법 사업자 정보 고지와 문의 채널이 없다 — **사업자 정보 입력이 선행 조건(오너)** |
 | 관측성 | 에러 추적 SDK 미도입. 현재는 Vercel 로그 + `digest` 만 |
 | Preview 환경변수 0종 | 프리뷰 배포는 빌드만 통과하고 런타임 동작 불가 |
-| Next 16 전환 | 별도 계획 수립 완료(읽기 전용). 기준은 wave2 병합(`34a5897`)이 끝난 지금부터 착수 가능 |
+| ~~Next 16 전환~~ | ✅ **2026-09-21 완료·운영 배포**(`4346c0b`, §0-12). 남은 후속(Preview 런타임 검증·Lighthouse 비교 방법·`middleware`→`proxy`·`@supabase/ssr`·react-hooks 경고)은 §0-12 |
 
 ---
 
@@ -756,8 +815,9 @@ Core Web Vitals(LCP/CLS/INP-대용 TBT) 모두 통과. Speed Index/TTI 는 클�
 ## 현재 배포 상태
 
 ```
-운영 빌드:  main = 34a5897 (2026-09-21) — 미병합 브랜치 없음 (§0-11)
-Next.js:  14.2.35  ⚠️ 14.x 는 업스트림 보안 지원 종료. 잔존 advisory 는 SECURITY.md
+운영 빌드:  main = 4346c0b (2026-09-21) — 미병합 브랜치 없음 (§0-12)
+Next.js:  16.3.5 / React 19.3.0  (2026-09-21 전환·배포 — §0-12). next advisory 0건
+          middleware.ts 유지(proxy 전환은 후속) · Turbopack 빌드
 Supabase: vprifnztvlduhpuwgdau (Seoul / papascompany org)
 Vercel:   yohans-projects-de3234df / icn1 리전
 DB 마이그레이션: 0001 ~ 0031 운영 적용 (0029: 2026-07-31 / 0030: 2026-08-09 / 0031: 2026-08-11)
@@ -821,14 +881,15 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 2. **`0032` 운영 적용** — precheck → 적용 → postcheck (런북 §10).
    precheck 에서 악용 흔적이 나오면 **적용 전에** 템플릿 조치를 먼저 해야 한다.
 3. **QA-1 피해 조회** — 되돌리기 후 0객체로 저장된 내지·표지와 그중 결제된 건 (런북 §11).
-4. **`34a5897` 배포 후 운영 URL `pnpm e2e:auth` 재실행** — 직전 실측은 `bacadc1` 기준이다.
+
+> ✅ "배포본 대상 `pnpm e2e:auth` 재실행"은 해소됐다 — `4346c0b`(Next 16) 배포본에서 5 passed.
 
 ### 코드 백로그
 
 | # | 항목 | 메모 |
 |---|---|---|
-| 1 | **Next.js 16 마이그레이션** | 잔존 advisory 23건이 전부 `>=15.x` 에서만 패치된다. 전환 계획 수립 완료 — wave2 병합이 끝났으므로 지금 착수 가능 |
-| 2 | **Fabric.js 7.x 마이그레이션** | SVG Stored XSS 2건(`<7.2.0`, `<7.4.0`). 현재 앱에 사용자 SVG 로드 경로는 없다 |
+| 1 | ~~Next.js 16 마이그레이션~~ | ✅ **완료·운영 배포**(`4346c0b`, §0-12). 후속: `middleware`→`proxy`, `@supabase/ssr`·`supabase-js` 업그레이드, react-hooks v7 경고 38건, AVIF 재검토, Lighthouse 비교 방법 재정의, Dependabot 메이저 ignore 규칙 재검토 |
+| 2 | **Fabric.js 7.x 마이그레이션** | SVG Stored XSS 2건(`<7.2.0`, `<7.4.0`). 현재 앱에 사용자 SVG 로드 경로는 없다. fabric 의 선택적 `canvas` 백엔드가 `tar` advisory 12건(critical 1 포함)을 끌고 온다 |
 | 3 | 결제 키가 남은 pending 주문의 관리자 복구 도구 | §0-11 D |
 | 4 | 선물 미리보기 GET 의 `expired` 쓰기 부작용 제거 | claim 경로로 한정 (적대 리뷰 비차단 후속) |
 | 5 | 잠긴 포토북 내지 목록의 TopBar 제목 입력 비활성화 | UI 일관성 — 데이터 위험 없음 |
@@ -869,34 +930,38 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 | 패키지 | 선언 | 잠금(실제) | 비고 |
 |---|---|---|---|
-| next | `14.2.35` | 14.2.35 | ⚠️ **14.x 는 사실상 지원 종료** — 잔존 advisory 23건의 patched 범위가 **전부 `>=15.x`** 다(14.x 용 패치가 나오지 않는다). SECURITY.md 참조. Next 16 전환 계획 수립 완료, 기준은 wave2 병합 이후 |
-| react | `^18.3.1` | 18.3.x | Next 16 전환 시 19 와 함께 검토 |
+| next | `16.3.5` | 16.3.5 | 2026-09-21 전환(§0-12). **`pnpm audit --prod` 의 next advisory 0건** — 14.x 잔존 23건이 전부 해소됐다 |
+| react / react-dom | `19.3.0` | 19.3.0 | 고정. `@types/react(-dom)` 19.3.0 도 `pnpm.overrides` 로 고정 |
+| eslint | `9.39.5` | 9.39.5 | **flat config**(`eslint.config.mjs`). `eslint-config-next` 16.3.5 의 `core-web-vitals`·`typescript` 프리셋 사용. Next 16 이 `next lint` 를 제거해 `pnpm lint` 가 `eslint` CLI 를 직접 부른다 |
 | fabric | `^6.4.3` | **6.9.1** | 6.9.1 의 `toJSON()` 은 **인자를 무시한다** — 스냅샷은 `lib/fabric/snapshot.ts`(QA-1). 7.x 는 API 변경이 커서 별도 마이그레이션 |
 | @napi-rs/canvas | `^0.1.55` | 0.1.x | 빌드 정상 |
-| @supabase/ssr | `0.5.2` | 0.5.2 | 고정. Next 16 전환 웨이브에서 함께 올린다 |
+| @supabase/ssr | `0.5.2` | 0.5.2 | 고정. **Next 16 웨이브에서는 의도적으로 제외** — 후속 웨이브에서 `supabase-js` 2.45.6 과 함께 올린다(잔존 `@supabase/auth-js` low 1건) |
 | pdf-lib | `^1.17.1` | 1.17.1 | 최신 |
 | resend | `^6.12.3` | 6.x | - |
 | sharp | `^0.35.4` | **0.35.4** | 2026-09-17 승격(SEC-1). vips 8.18.6 / heif 1.23.2. `next` 가 따로 끌어오지 않는다 |
-| vitest | `^2.0.5` | 2.x | Dependabot 이 4.x PR 을 열어둔 상태 — 머지 정책은 Next 16 전환과 함께 |
+| vitest | `^2.0.5` | 2.x | Dependabot 이 메이저 PR 을 열어둔 상태 — 프레임워크 전환이 끝났으므로 머지 정책을 다시 본다(§0-12) |
 
 ---
 
 ## 테스트 현황
 
-**기준선 — `main`(`34a5897`) 에서 2026-09-21 실측**
+**기준선 — `main`(`4346c0b`, Next 16 전환 후) 에서 2026-09-21 실측**
 
 ```
-타입·린트:                pnpm typecheck 0 에러 · pnpm lint 0 경고
+타입·린트:                pnpm typecheck 0 에러 · pnpm lint 0 error / 41 warning
+                          (38건이 react-hooks v7 신규 규칙 — 전환 방침상 warn 유지)
 유닛 테스트 (Vitest):     78 파일 / 1,371 passed / 1 skipped (7.1s)
 E2E 스모크 (Playwright):  desktop+mobile chromium 12/12 통과
 접근성 (axe-core):       WCAG 2.1 AA 25 passed / 1 skipped · 위반 0
 PDF 회귀(페이지수+해시): pnpm test:pdf — 4 케이스 / 394ms (darwin-arm64)
 PDF 런타임 검증:          pnpm verify:pdf — 1페이지 스모크
-인증 골든 플로우:         pnpm e2e:auth — 5 passed (bacadc1 기준 운영 URL 실측, 1.8m)
+인증 골든 플로우:         pnpm e2e:auth — 5 passed (운영 URL 실측, 1.8m)
                           골든 플로우 2 + 편집 무결성 회귀 3(QA-1/QA-4/QA-2)
-                          34a5897 배포본 재실행도 5 passed (2026-09-21)
-빌드:                     pnpm build 성공
+                          bacadc1 · 34a5897 · 4346c0b 세 배포본에서 각각 통과
+빌드:                     pnpm build 성공 (Turbopack, 라우트 121개 렌더링 모드 변경 0)
 Lighthouse 모바일:        Performance 88 · LCP 3.6s · CLS 0 (2026-08-07, prod 5회 중앙값 — §0-5)
+                          ⚠️ Next 16 전환 후 재측정은 미실시 — 빌드가 First Load JS 표를
+                          더 이상 내지 않아 같은 방식의 비교가 불가능하다(§0-12)
 CI (GitHub Actions):     3잡 verify / e2e / a11y — main push·PR 마다. e2e:auth 는 운영 DB 를 쓰므로 미포함
 ```
 

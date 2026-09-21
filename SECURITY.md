@@ -1,11 +1,26 @@
 # 보안 패치 이력 및 관리 가이드
 
 > 프로젝트 보안 취약점 대응 기록. 신규 이슈 발견 시 이 파일을 업데이트한다.
-> 최종 갱신: **2026-09-21** (기준 커밋: main `34a5897` — 2026-09-17~21 작업 전량 반영, 미병합 브랜치 없음)
+> 최종 갱신: **2026-09-21** (기준 커밋: main `4346c0b` — Next.js 16.3.5 + React 19.3.0 전환 배포 완료,
+> 미병합 브랜치 없음)
 
 ---
 
 ## 적용된 패치 이력
+
+### 2026-09-21 — Next.js 14.2.35 → **16.3.5** (React 18.3.1 → 19.3.0), main `4346c0b`
+
+14.x 에는 패치가 나오지 않는 advisory 23건을 **메이저 전환으로 일괄 해소**했다.
+전환 내용·검증 수치는 [STATUS.md](STATUS.md) §0-12.
+
+| 항목 | 내용 |
+|---|---|
+| 해소 | `pnpm audit --prod` 의 **`next` advisory 23건 → 0건**. AVIF RCE(`GHSA-2xp9-vwfh-vxw4`, critical)와 Windows RCE(`GHSA-p293-qw3h-jr36`, critical)를 포함한다 |
+| 전체 영향 | prod 의존 취약점 **60건 → 36건**(critical 3 → 1, high 32 → 24, moderate 20 → 8, low 5 → 3) |
+| 보안 관련 설정 유지 | `poweredByHeader: false` · `remotePatterns` 축소 · `images.formats` **webp 유지**(AVIF 는 advisory 해소 후에도 비용·품질 측정 전까지 재활성화하지 않는다) · `images.minimumCacheTTL: 60` 명시 |
+| 새로 추가 | `agentRules: false` — `next dev` 가 저장소의 `AGENTS.md`·`CLAUDE.md` 를 자동 생성/수정하지 못하게 한다 |
+| 운영 검증 | 공개 경로 7종 200 · CSP·`X-Frame-Options` 유지 · `x-powered-by` 없음 · `/api/health` 비인증 최소 응답 · cron 무인증 401 · `/_next/image` 최적화 200 · 오픈 리다이렉트 차단 · Vercel 런타임 오류 0건·5xx 0건(배포 후 40분) |
+| 제외(후속) | `middleware.ts` → `proxy.ts` 전환(현행 유지, 빌드 deprecation 경고 1건은 정상) · `@supabase/ssr`·`supabase-js` 업그레이드 · React Compiler · Cache Components · AVIF 재활성화 |
 
 ### 2026-09-17 — 6렌즈 감사 확정분 (SEC-1 / SEC-3 / SEC-13 / SEC-14 / SEC-19 / SEC-4 / DEBT-3)
 
@@ -59,33 +74,42 @@
 
 ---
 
-## 잔존 취약점 (2026-09-21 `pnpm audit --prod` 실측)
+## 잔존 취약점 (2026-09-21 `pnpm audit --prod` 실측 — main `4346c0b`)
 
-main `34a5897` 기준 **60건 — low 5 / moderate 20 / high 32 / critical 3.**
-패키지별로는 `next` 23 · `tar` 12 · `brace-expansion` 6 · `postcss` 4 · `nanoid` 3 · `fabric` 2 등이다.
-(sharp 는 `2d77e6f` 의 0.35.4 승격으로 목록에서 빠졌다.)
+Next 16 전환 후 **36건 — low 3 / moderate 8 / high 24 / critical 1.**
+전환 직전(`34a5897`)은 60건(low 5 / moderate 20 / high 32 / critical 3)이었다.
+**`next` 23건이 전부 해소**됐고, 전체(dev 포함) `pnpm audit` 은 43건이다.
 
-### Next.js 14.2.35 — 14.x 에는 패치가 없다
-
-잔존 `next` advisory **23건 전부** patched 범위가 `>=15.x` 다. 즉 14.x 안에서는 해결할 수 없고
-**15.x/16.x 메이저 업그레이드가 유일한 경로**다.
-
-| 심각도 | advisory | 내용 | 패치 | 현재 앱 노출 |
+| 패키지 | 건수 | 유입 경로 | 패치 | 현재 앱 노출 |
 |---|---|---|---|---|
-| 🔴 CRITICAL | `GHSA-2xp9-vwfh-vxw4` | Image Optimization API 에서 **AVIF 사용 시 무인증 RCE** | `>=15.5.24` | **완화됨** — `f605028` 이 `next.config` `images.formats` 에서 avif 를 제외했다. Next 16 전환 후 재검토 |
-| 🔴 CRITICAL | `GHSA-p293-qw3h-jr36` | **Windows 호스팅 서버**에서 무인증 RCE | `>=15.5.24` | **미해당** — 운영은 Vercel(Linux) |
-| 🟠 HIGH | `GHSA-p9j2-gv94-2wf4` | rewrites 의 공격자 제어 destination 호스트명 → SSRF | `>=15.5.21` | rewrites 미사용 |
-| 🟠 HIGH | `GHSA-c4j6-fc7j-m34r` | WebSocket upgrade SSRF | `>=15.5.16` | — |
-| 🟠 HIGH | `GHSA-89xv-2m56-2m9x` | 커스텀 서버의 Server Actions SSRF | `>=15.5.21` | 커스텀 서버 미사용 |
-| 🟠 HIGH | `GHSA-8h8q-6873-q5fj` / `GHSA-q4gf-8mx6-v5v3` / `GHSA-m99w-x7hq-7vfj` | Server Components / Server Actions DoS | `>=15.5.16` / `>=15.5.21` | — |
-| 🟠 HIGH | `GHSA-36qx-fr4f-26g5` | Pages Router + i18n 의 Middleware/Proxy 우회 | `>=15.5.16` | App Router 전용이라 미해당 |
-| 🟡 MODERATE | `GHSA-wfc6-r584-vfw7` / `GHSA-vfv6-92ff-j949` | RSC 응답 캐시 포이즈닝 | `>=15.5.16` | — |
-| 🟡 MODERATE | `GHSA-ggv3-7p47-pfv8` | rewrites HTTP request smuggling | `>=15.5.13` | rewrites 미사용 |
-| 🟡 MODERATE | `GHSA-9g9p-9gw9-jx7f` / `GHSA-h64f-5h5j-jqjh` / `GHSA-3x4c-7xq6-9pq8` | Image Optimizer DoS · 디스크 캐시 증가 | `>=15.5.14` / `>=15.5.16` | `remotePatterns` 축소(`f605028`)로 표면 감소 |
-| 🟡 MODERATE | `GHSA-ffhc-5mcf-pf4q` / `GHSA-gx5p-jg67-6x7h` | CSP nonce · `beforeInteractive` XSS | `>=15.5.16` | — |
+| `tar` | **12** (critical 1 · high 8 · moderate 3) | `fabric@6.9.1 > canvas@2.11.2 > @mapbox/node-pre-gyp > tar@6.2.1` | `>=7.5.19` | 전부 **아카이브 추출** 취약점이다(경로 탈출·심링크·압축 DoS). 이 `tar` 는 fabric 의 **선택적 Node canvas 백엔드를 설치할 때** 쓰이고, 앱은 **fabric 을 서버에서 import 하지 않으며**(CLAUDE.md 금지 규약) PDF 렌더러는 `@napi-rs/canvas` 다 → **런타임 경로 없음**. 해소는 fabric 7.x 전환 |
+| `brace-expansion` | 6 (high) | `exceljs@4.4.0 > archiver > glob/minimatch` | `>=2.1.2` | glob 패턴 ReDoS/OOM. 앱은 `lib/admin/excel.ts` 의 **송장 Excel 생성**에서만 exceljs 를 쓰고 사용자 입력이 glob 패턴으로 들어가는 경로가 없다 |
+| `nanoid` | 3 (high) | 직접 의존 `nanoid@5.1.11` 1건 + `tailwindcss > postcss > nanoid@3` 2건 | `>=5.1.16` | "size 가 음수/0 일 때 무한 루프". 앱의 호출은 전부 **리터럴 양수**(`nanoid(8/10/12/16)`)라 사용자 입력이 size 로 들어가지 않는다. tailwind 경로는 빌드 타임 |
+| `ws` | 2 (high 1 · moderate 1) | `@supabase/ssr > supabase-js > @supabase/realtime-js > ws@8.20.0` | `>=8.21.0` | **앱은 Supabase Realtime 채널을 쓰지 않는다**(`.channel(` 사용처 0건) → 연결 자체가 생기지 않는다. supabase-js 업그레이드로 해소 |
+| `postcss` | 2 (high 1 · moderate 1) | `tailwindcss-animate > tailwindcss > postcss` | `>=8.5.23` | sourceMappingURL 경로 탈출 — **빌드 타임 도구 체인**이고 CSS 소스는 저장소 것뿐이다 |
+| `browserslist` | 2 (high) | `next@16.3.5 > styled-jsx > @babel/core` | `>=4.28.7` | 메모리 증가·`browserslist-stats.json` 프로토타입 오염 — **빌드 타임**, 커스텀 stats 미사용 |
+| `fabric` | 2 (high 1 · moderate 1) | 직접 의존 `fabric@6.9.1` | `>=7.2.0` / `>=7.4.0` | 아래 별도 절 — SVG 내보내기·로드 경로가 없어 **직접 노출 없음** |
+| `@supabase/auth-js` | 1 (low) | `supabase-js@2.45.6 > auth-js@2.65.1` | `>=2.70.0` | malformed 입력의 경로 라우팅. supabase-js 업그레이드(후속 웨이브)로 해소 |
+| `tmp` · `uuid` · `form-data` · `@tootallnate/once` · `postcss-selector-parser` · `baseline-browser-mapping` | 각 1 | exceljs / fabric(jsdom) / tailwind / next 전이 | 각 상위 버전 | 전부 전이 의존이고 앱 코드가 직접 호출하지 않는다 |
 
-> **Dependabot** 이 보안 PR(`next` 15.5.24 등)을 열어 두고 있다.
-> **머지 정책은 Next 16 전환 과제에서 함께 결정한다** — 프레임워크 메이저를 보안 PR 로 끌려가지 않기 위함이다.
+> **노출 판정의 근거**는 저장소 grep(호출처 유무)과 의존 경로다.
+> "런타임 경로 없음"은 **앱 코드가 그 패키지에 도달하지 않는다**는 뜻이지 패키지가
+> `node_modules` 에서 사라졌다는 뜻이 아니다. 해소 경로는 **fabric 7.x**(tar 12건 동반 해소)와
+> **`@supabase/ssr`·`supabase-js` 업그레이드**(ws 2 + auth-js 1) 두 갈래다.
+
+### Next.js — 16.3.5 에서 잔존 advisory 0건
+
+14.2.35 시절의 `next` advisory 23건은 patched 범위가 전부 `>=15.x` 여서 14.x 안에서는
+해결할 수 없었다. 2026-09-21 **16.3.5 직행 전환**(`4346c0b`)으로 전부 해소됐다.
+
+- `GHSA-2xp9-vwfh-vxw4` (critical — Image Optimization API 의 AVIF 무인증 RCE): **해소.**
+  다만 `images.formats` 는 계속 **webp 단독**이다 — AVIF 재활성화는 인코딩 비용·품질 회귀를
+  측정한 뒤 후속 웨이브에서 판단한다(Next 16 기본값도 webp 단독).
+- `GHSA-p293-qw3h-jr36` (critical — Windows 호스팅 RCE): 해소. 애초에 운영은 Vercel(Linux)이라 미해당이었다.
+- 나머지 SSRF·DoS·캐시 포이즈닝·CSP nonce 계열 21건도 16.3.5 에 포함된다.
+
+> `middleware.ts` 는 의도적으로 유지 중이다(빌드 deprecation 경고 1건은 정상).
+> Pages Router + i18n 우회 advisory(`GHSA-36qx-fr4f-26g5`)는 App Router 전용 앱이라 원래 미해당이었다.
 
 ### Fabric.js 6.9.1 → 7.x (현재 앱에서 직접 노출 없음)
 
@@ -96,6 +120,8 @@ main `34a5897` 기준 **60건 — low 5 / moderate 20 / high 32 / critical 3.**
 
 **현재 앱 상황**: 사용자가 SVG 를 Fabric 에 직접 로드하는 경로가 없고 SVG 내보내기도 쓰지 않는다 →
 **직접 노출 없음**. 7.x 는 API 변경이 커서 별도 에디터 마이그레이션 마일스톤으로 처리한다.
+다만 fabric 6.9.1 이 선택적 `canvas` 백엔드를 통해 **`tar` advisory 12건(critical 1 포함)을 함께
+끌고 온다** — 잔존 36건 중 가장 큰 덩어리이므로 7.x 전환의 동기에 이 점을 포함한다.
 
 ### 아직 조치하지 않은 것
 
@@ -113,6 +139,10 @@ main `34a5897` 기준 **60건 — low 5 / moderate 20 / high 32 / critical 3.**
 - **Upstash 미설정 → rate limit 전면 fail-open** (`lib/security/rate-limit.ts`,
   [docs/OPS-ENV-STATUS.md](docs/OPS-ENV-STATUS.md) §2).
 - **관측성 부재** — 에러 추적 SDK 가 없어 운영 예외를 Vercel 로그로만 본다.
+- **`@supabase/ssr` 0.5.2 · `supabase-js` 2.45.6 업그레이드** — Next 16 웨이브에서 의도적으로
+  제외했다. 잔존 `ws` 2건 + `@supabase/auth-js` 1건이 여기에 묶여 있다.
+- **Vercel Preview 런타임 검증 불가** — Preview 환경변수 0종이라 프리뷰에서는 PDF 네이티브
+  바이너리·토스 결제·카카오 콜백을 실증할 수 없다(Next 16 전환분도 운영 배포본으로만 검증했다).
 
 ---
 
@@ -131,6 +161,12 @@ npm audit
 Dependabot alerts 와 weekly npm 업데이트(minor/patch 그룹, 프레임워크 메이저는 ignore)가
 `.github/dependabot.yml` 에 설정돼 있고, CI 에 **비차단** audit 요약 단계가 있다.
 
+> ⚠️ `dependabot.yml` 의 `next`/`react`/`react-dom`/`@types/react*`/`eslint`/`eslint-config-next`
+> 메이저 ignore 는 **14/18 기준으로 쓴 것**이다. 2026-09-21 에 16/19 로 올라갔으므로 규칙을
+> 그대로 둘지 재검토가 필요하다(백로그 — [docs/LAUNCH-RUNBOOK.md](docs/LAUNCH-RUNBOOK.md)).
+> 현재 열려 있는 Dependabot PR 은 actions 메이저, `@napi-rs/canvas` 1.x, `lucide-react` 1.x,
+> `nanoid` 6, `typescript` 6, `postcss` 패치, npm-minor-patch 그룹 등이다.
+
 ### 판단 기준
 
 | 심각도 | 대응 기한 |
@@ -140,8 +176,9 @@ Dependabot alerts 와 weekly npm 업데이트(minor/patch 그룹, 프레임워�
 | MODERATE | 다음 배포 사이클에 포함 |
 | LOW | 분기별 점검 시 처리 |
 
-> 단, **패치 버전이 현재 메이저에 없으면** 기한이 아니라 완화책 + 전환 계획으로 관리한다
-> (지금의 Next 14 가 그 경우다).
+> 단, **패치 버전이 현재 메이저에 없으면** 기한이 아니라 완화책 + 전환 계획으로 관리한다.
+> Next 14 가 그 경우였고 2026-09-21 16.3.5 전환으로 해소됐다. 지금 같은 상태인 것은
+> **fabric 6.x**(패치가 7.x 에만 있다 — 본인 2건 + 전이 `tar` 12건)다.
 
 ---
 

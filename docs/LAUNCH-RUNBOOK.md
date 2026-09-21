@@ -14,7 +14,7 @@
 | 결제(토스)·인쇄(Storige)·DB(Supabase)·CRON 키 | ✅ 설정 완료 | — |
 | 인쇄용 한글 폰트 | ✅ **시딩 완료**(Pretendard, 2026-08-09) | — |
 | 책 사이즈 3종 | ✅ 활성 | — |
-| 전체 테스트/CI/Vercel 빌드 | ✅ green (main `34a5897`) | — |
+| 전체 테스트/CI/Vercel 빌드 | ✅ green (main `4346c0b` — Next.js 16.3.5 + React 19.3.0 전환 배포 완료) | — |
 | 마이그레이션 0030 · 0031 | ✅ **적용 완료**(2026-08-09 / 08-11) | — |
 | **QA-1 피해 조회** | 🔺 **§11 — 읽기 전용 SQL 3개, 먼저 할 것** | 아니오 (이미 발생한 피해 확인) |
 | **마이그레이션 0033 (결제 크레딧 선점)** | 🔺 **§9 — 코드가 먼저 배포됐다** | 아니오 (폴백 동작). 단 적용 전까지 **SEC-7 이중 사용 창**이 열려 있다 |
@@ -27,7 +27,8 @@
 
 **→ 이메일 가입 → 업로드 → 편집 → 주문 → 결제 → 인쇄검증 경로는 전부 동작한다.**
 
-> ⚠️ **§9·§10 의 마이그레이션과 짝이 되는 코드는 이미 배포됐다**(`34a5897`, 2026-09-21).
+> ⚠️ **§9·§10 의 마이그레이션과 짝이 되는 코드는 이미 배포됐다**(`34a5897`, 2026-09-21.
+> 그 위의 `4346c0b` Next 16 전환은 이 동작을 바꾸지 않는다).
 > 앱은 두 마이그레이션이 없어도 정상 동작한다(`0033` 은 기존 경로로 폴백). 다만
 > **`0033` 적용 전까지는 SEC-7 — 한 사용자가 서로 다른 두 주문을 동시에 결제 확정하면
 > 같은 포인트·할인코드가 두 번 쓰일 수 있는 창 — 이 열려 있다.** 되도록 빨리 적용할 것.
@@ -208,10 +209,11 @@ pnpm test:a11y
 pnpm e2e:auth
 ```
 
-**2026-09-21 기준선** (`main` = `34a5897`): typecheck 0 · lint 0 ·
+**2026-09-21 기준선** (`main` = `4346c0b`, Next 16 전환 후): typecheck 0 ·
+lint **0 error / 41 warning**(38건이 `react-hooks` v7 신규 규칙 — 전환 방침상 warn 유지) ·
 vitest **78 파일 / 1,371 passed / 1 skipped** · `test:pdf` 4 케이스 · e2e 12 · a11y 25 ·
-build 성공 · `e2e:auth` **5 passed**(골든 플로우 2 + 편집 무결성 3 — `bacadc1` 기준 운영 URL 실측,
-**`34a5897` 배포본 대상 재실행 5 passed — 2026-09-21**).
+build 성공(Turbopack) · `e2e:auth` **5 passed**(골든 플로우 2 + 편집 무결성 3 — 운영 URL 실측.
+`bacadc1`·`34a5897`·`4346c0b` 세 배포본에서 각각 통과).
 
 (`e2e:auth` 는 **운영 Supabase** 에 임시 계정·프로젝트를 만들어 업로드→편집→표지→주문서까지
 실제로 돌리고 `afterAll` 에서 정리한다. CI 에는 넣지 않는다.
@@ -408,8 +410,11 @@ select o.id as order_id, o.status, o.paid_at, o.project_id
   고객 문의 채널이 없다. **사업자 정보와 대표 연락처(또는 채널)를 주시면 코드 작업은 짧다.**
 - **탈퇴 회원의 주문된 제작 자료 보관 범위** — 현재는 거래기록 보존 목적으로 남긴다
   (미주문 프로젝트·사진·공유 링크는 탈퇴 시 파기). 보관 기간·범위는 오너 정책 결정 사항이다.
-- **Dependabot 보안 PR 머지 정책** — `next` 15.5.24 등이 열려 있다. 프레임워크 메이저를
-  보안 PR 로 끌려가지 않기 위해 **Next 16 전환 과제에서 함께 결정**하기로 보류 중이다.
+- **Dependabot PR 머지 정책** — `next` 15.5.24 보안 PR 은 **16.3.5 직행 전환으로 해소**됐다.
+  지금 열려 있는 것은 actions 메이저, `@napi-rs/canvas` 1.x, `lucide-react` 1.x, `nanoid` 6,
+  `typescript` 6, `postcss` 패치, npm-minor-patch 그룹 등이다. **머지 전에
+  `.github/dependabot.yml` 의 메이저 ignore 규칙(14/18 기준으로 작성됨)을 16/19 기준으로
+  재검토**해야 한다 — 아래 백로그 참조.
 - **출석 20일 보너스 과거 미지급분을 소급 지급할까?** 2026-09-21(`34a5897`) 수정 배포
   **이후부터는 정상 지급**된다. 그 이전에는 중복 판정 버그로 월 보너스(+1,000P)가 사실상
   지급되지 않았다(같은 달 10일 보너스 memo 와 겹쳤다). 수정 자체는 소급 이중 지급을 만들지
@@ -430,8 +435,15 @@ select o.id as order_id, o.status, o.paid_at, o.project_id
 | `photo-originals` SELECT 정책 잔존 | 0032 는 쓰기만 회수했다 |
 | `lib/pdf/photos.ts` 원본 재검증 부재 | 0032 로 바꿔치기 경로는 막았으나 PDF 조립 시 재검증은 없다(심층 방어) |
 | 관측성 | 에러 추적 SDK 미도입 — 운영 예외를 Vercel 로그 + `digest` 로만 본다 |
-| Preview 환경변수 0종 | 프리뷰 배포는 빌드만 통과하고 런타임 동작 불가. 필요하면 Production 값 복제 |
-| Next 16 전환 | 계획 수립 완료(읽기 전용). wave2 병합이 끝났으므로 지금 착수 가능 |
+| ~~Next 16 전환~~ | ✅ **2026-09-21 완료·운영 배포**(`4346c0b`). 아래 5개가 그 후속이다 |
+| Next 16 후속 ① `middleware` → `proxy` 전환 | 이번 웨이브에서 의도적으로 제외했다. **`middleware.ts` 유지 중이고 빌드 deprecation 경고 1건은 정상** |
+| Next 16 후속 ② `@supabase/ssr`·`supabase-js` 업그레이드 | 0.5.2 / 2.45.6 고정. 잔존 `ws` 2건 + `@supabase/auth-js` 1건이 여기 묶여 있다(SECURITY.md) |
+| Next 16 후속 ③ `react-hooks` v7 경고 38건 | 전환 방침상 warn 유지 중. 규칙별 수정·error 승격 판단 |
+| Next 16 후속 ④ AVIF 재활성화 판단 | `GHSA-2xp9-vwfh-vxw4` 는 16.3.5 에서 해소됐지만 `images.formats` 는 webp 유지. 인코딩 비용·품질 회귀 측정 후 결정 |
+| Next 16 후속 ⑤ Lighthouse 비교 방법 재정의 | Next 16 이 First Load JS 표를 내지 않아 기준선(2026-08-07 Performance 88 · LCP 3.6s)과 **같은 방식의 비교가 불가능**하다 |
+| Vercel Preview 런타임 검증 | Preview 환경변수 0종이라 PDF 네이티브 바이너리·토스 결제·카카오 콜백을 프리뷰에서 실증할 수 없다. 필요하면 Production 값 복제가 선행 |
+| Dependabot 메이저 ignore 규칙 재검토 | `.github/dependabot.yml` 의 `next`/`react`/`react-dom`/`@types/react*`/`eslint`/`eslint-config-next` 메이저 ignore 는 14/18 기준으로 쓴 것이다. 16/19 기준으로 다시 볼 것. 열린 PR: actions 메이저 · `@napi-rs/canvas` 1.x · `lucide-react` 1.x · `nanoid` 6 · `typescript` 6 · `postcss` 패치 · npm-minor-patch 그룹 |
+| fabric 7.x 전환 | SVG XSS 2건 + 선택적 `canvas` 백엔드가 끌고 오는 `tar` 12건(critical 1 포함)이 여기서 해소된다(SECURITY.md) |
 | 포인트 홀드/예약 설계 | `0033` reserve/release 로 구조적 해소 — **§9 적용 대기** |
 | 100% 할인 코드 | 100원 미만 주문은 `AMOUNT_BELOW_MINIMUM` 차단 — 무료 주문 경로 없음 |
 | 인증 E2E 의 CI 편입 | staging Supabase 신설이 선행 조건. 그 전까지 릴리스 전 로컬 1회 |
