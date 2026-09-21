@@ -8,13 +8,13 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 interface PageProps {
-  params: { projectId: string };
-  searchParams: {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{
     code?: string;
     message?: string;
     orderId?: string;
     ourOrderId?: string;
-  };
+  }>;
 }
 
 /**
@@ -22,7 +22,9 @@ interface PageProps {
  *   토스 failUrl 콜백. query 에 code/message (+ OrderForm 이 붙인 ourOrderId).
  *   대기 주문은 자동 취소하지 않는다 — 재시도 시 주문서 재사용, 명시적 취소 버튼, 24h 만료 cron (DEBT-6).
  */
-export default function OrderFailPage({ params, searchParams }: PageProps) {
+export default async function OrderFailPage(props: PageProps) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   return (
     <div className="container py-10">
       <div className="mx-auto max-w-xl rounded-2xl border bg-card p-8 text-center">

@@ -7,7 +7,7 @@ import { createServerSupabase } from "@/lib/db/server";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-type RouteCtx = { params: { id: string; tokenId: string } };
+type RouteCtx = { params: Promise<{ id: string; tokenId: string }> };
 
 const TokenIdSchema = z.string().uuid();
 
@@ -16,7 +16,8 @@ const TokenIdSchema = z.string().uuid();
  *   특정 공유 토큰 삭제 (소유자만).
  *   RLS 가 owner 검증을 보장하지만 라우트에서도 1차 검증.
  */
-export async function DELETE(_req: Request, { params }: RouteCtx) {
+export async function DELETE(_req: Request, props: RouteCtx) {
+  const params = await props.params;
   try {
     const user = await requireActiveUser();
 
@@ -25,7 +26,7 @@ export async function DELETE(_req: Request, { params }: RouteCtx) {
       return fail("INVALID_TOKEN_ID", "토큰 ID 형식이 올바르지 않습니다.", 400);
     }
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     // 프로젝트 소유 선검증
     const { data: project, error: projErr } = await supabase

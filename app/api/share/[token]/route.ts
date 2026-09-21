@@ -9,7 +9,7 @@ import { THUMBS_BUCKET } from "@/lib/image/constants";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-type RouteCtx = { params: { token: string } };
+type RouteCtx = { params: Promise<{ token: string }> };
 
 const TokenSchema = z.string().uuid();
 
@@ -59,7 +59,8 @@ interface ShareProject {
  *
  * 응답: { project, pages, coverJson, photos, expiresAt, viewCount }
  */
-export async function GET(_req: Request, { params }: RouteCtx) {
+export async function GET(_req: Request, props: RouteCtx) {
+  const params = await props.params;
   try {
     const tokenParse = TokenSchema.safeParse(params.token);
     if (!tokenParse.success) {

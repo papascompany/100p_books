@@ -31,7 +31,7 @@ const DT = new Intl.DateTimeFormat("ko-KR", {
 });
 
 interface PageProps {
-  params: { orderId: string };
+  params: Promise<{ orderId: string }>;
 }
 
 interface OrderDetailRow {
@@ -58,14 +58,15 @@ interface OrderDetailRow {
   } | null;
 }
 
-export default async function OrderDetailPage({ params }: PageProps) {
+export default async function OrderDetailPage(props: PageProps) {
+  const params = await props.params;
   try {
     await requireUser();
   } catch {
     redirect(`/login?next=/mypage/orders/${params.orderId}`);
   }
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   // reviews(id) inline join 으로 후기 작성 여부를 한 번의 RTT 로 조회.
   // 별도 select 1회 감소 → 평균 50~100ms 단축.
   const { data: row, error } = await supabase

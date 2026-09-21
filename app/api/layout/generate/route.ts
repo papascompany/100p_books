@@ -63,7 +63,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     // 1) 프로젝트 + 책사이즈 로드 + 소유권
     const { data: project, error: projErr } = await supabase

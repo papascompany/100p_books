@@ -10,7 +10,7 @@ import { createServerSupabase } from "@/lib/db/server";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-type RouteCtx = { params: { id: string } };
+type RouteCtx = { params: Promise<{ id: string }> };
 
 const ParamsSchema = z.object({ id: z.string().uuid() });
 
@@ -35,7 +35,8 @@ interface ToggleResult {
  *       1) requireActiveUser — 인증된 (탈퇴하지 않은) 호출자만
  *       2) 대상 후기가 public=true 또는 본인 후기 (비공개 타인 후기 좋아요 차단)
  */
-export async function POST(_req: Request, { params }: RouteCtx) {
+export async function POST(_req: Request, props: RouteCtx) {
+  const params = await props.params;
   try {
     const user = await requireActiveUser();
 
@@ -45,7 +46,7 @@ export async function POST(_req: Request, { params }: RouteCtx) {
     }
     const reviewId = parsedParams.data.id;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     // 후기 존재/공개 여부 검증 (RLS: public=true 행은 anon 도 SELECT 가능)
     const { data: review, error: selErr } = await supabase

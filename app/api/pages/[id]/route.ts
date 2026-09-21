@@ -24,7 +24,7 @@ export const runtime = "nodejs";
 const THUMB_SIGNED_TTL_SEC = 3600;
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 /**
@@ -35,13 +35,14 @@ interface Params {
  *   해당 페이지가 참조하는 photoId 들의 thumb signed URL 을 일괄 발급한다
  *   (signedUrl 만료 시 클라가 재요청하는 url-refresher 의 백엔드).
  */
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(_req: Request, props: Params) {
+  const params = await props.params;
   try {
     const user = await requireUser();
     const pageId = params.id;
     if (!pageId) return fail("INVALID_PARAM", "잘못된 페이지 ID 입니다.", 400);
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     const { data: row, error } = await supabase
       .from("pages")
@@ -155,7 +156,8 @@ interface PatchBody {
  *     에디터가 최신본을 다시 불러와 로컬 변경을 버리고("저장되지 않았어요" 안내) 재저장한 뒤에야
  *     PROJECT_LOCKED 를 받는다. 잠금을 먼저 알려 한 번에 읽기 전용으로 전환시킨다.
  */
-export async function PATCH(req: Request, { params }: Params) {
+export async function PATCH(req: Request, props: Params) {
+  const params = await props.params;
   try {
     const user = await requireActiveUser();
     const pageId = params.id;
@@ -183,7 +185,7 @@ export async function PATCH(req: Request, { params }: Params) {
     const incomingVersion =
       baseVersion !== null ? computeDocVersion(doc) : undefined;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
     const { data: row, error } = await supabase
       .from("pages")
       .select("id, project_id, page_no, fabric_json, updated_at")
@@ -360,13 +362,14 @@ export async function PATCH(req: Request, { params }: Params) {
  *
  * 응답: { ok, pageCount }
  */
-export async function DELETE(_req: Request, { params }: Params) {
+export async function DELETE(_req: Request, props: Params) {
+  const params = await props.params;
   try {
     const user = await requireActiveUser();
     const pageId = params.id;
     if (!pageId) return fail("INVALID_PARAM", "잘못된 페이지 ID 입니다.", 400);
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     const { data: row, error } = await supabase
       .from("pages")

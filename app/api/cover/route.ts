@@ -67,7 +67,7 @@ export async function GET(req: Request) {
     }
     const { projectId } = parsed.data;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     const { data: project, error: projErr } = await supabase
       .from("projects")
@@ -230,7 +230,7 @@ export async function PATCH(req: Request) {
     const incomingVersion =
       baseVersion !== null ? computeDocVersion(fabricJson) : undefined;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     const { data: project, error: projErr } = await supabase
       .from("projects")

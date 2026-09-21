@@ -8,11 +8,10 @@ import BookSizeForm from "../BookSizeForm";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export default async function EditBookSizePage({
-  params,
-}: {
-  params: { id: string };
+export default async function EditBookSizePage(props: {
+  params: Promise<{ id: string }>;
 }) {
+  const params = await props.params;
   const admin = createAdminSupabase();
   const { data, error } = await admin
     .from("book_sizes")

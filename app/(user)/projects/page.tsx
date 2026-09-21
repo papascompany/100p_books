@@ -27,7 +27,7 @@ export default async function ProjectsPage() {
     redirect("/login?next=/projects");
   }
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { data, error } = await supabase
     .from("projects")
     .select(

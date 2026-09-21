@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     }
   }
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   await supabase.auth.signOut().catch(() => {
     /* 이미 로그아웃 상태면 무시 */
   });

@@ -97,14 +97,14 @@ function patch(pageId: string, body: unknown) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-    { params: { id: pageId } },
+    { params: Promise.resolve({ id: pageId }) },
   );
 }
 
 function del(pageId: string) {
   return DELETE(
     new Request(`https://100pbooks.vercel.app/api/pages/${pageId}`, { method: "DELETE" }),
-    { params: { id: pageId } },
+    { params: Promise.resolve({ id: pageId }) },
   );
 }
 

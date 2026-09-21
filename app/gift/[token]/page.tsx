@@ -13,14 +13,13 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 interface PageProps {
-  params: { token: string };
+  params: Promise<{ token: string }>;
 }
 
 // ─── 메타데이터 ───────────────────────────────────────────────────────────
 
-export async function generateMetadata({
-  params,
-}: PageProps): Promise<Metadata> {
+export async function generateMetadata(props: PageProps): Promise<Metadata> {
+  const params = await props.params;
   return {
     title: "선물 도착",
     description: "누군가 당신에게 포토북을 선물했습니다.",
@@ -204,7 +203,8 @@ const DT = new Intl.DateTimeFormat("ko-KR", {
   day: "numeric",
 });
 
-export default async function GiftTokenPage({ params }: PageProps) {
+export default async function GiftTokenPage(props: PageProps) {
+  const params = await props.params;
   const result = await loadGift(params.token);
 
   // ── 에러 / 없음 ──────────────────────────────────────────────────────────
@@ -264,7 +264,7 @@ export default async function GiftTokenPage({ params }: PageProps) {
   let isLoggedIn = false;
   let currentUserId: string | null = null;
   try {
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
     const {
       data: { session },
     } = await supabase.auth.getSession();

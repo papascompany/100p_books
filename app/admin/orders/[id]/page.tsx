@@ -56,11 +56,10 @@ interface OrderRow {
   profiles: { id: string; email: string | null; display_name: string | null } | null;
 }
 
-export default async function AdminOrderDetailPage({
-  params,
-}: {
-  params: { id: string };
+export default async function AdminOrderDetailPage(props: {
+  params: Promise<{ id: string }>;
 }) {
+  const params = await props.params;
   const admin = createAdminSupabase();
   const { data, error } = await admin
     .from("orders")

@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 interface PageProps {
-  params: { projectId: string; pageId: string };
+  params: Promise<{ projectId: string; pageId: string }>;
 }
 
 const THUMB_SIGNED_TTL_SEC = 3600;
@@ -28,14 +28,15 @@ const THUMB_SIGNED_TTL_SEC = 3600;
  *   3. 해당 페이지의 PageDoc 이 참조하는 photoId 들의 thumb signed URL 일괄 발급.
  *   4. 결제 후 편집 잠금 여부 — 잠겨 있으면 에디터를 읽기 전용으로 열고 배너로 안내한다(안내용, 쓰기는 API 가 막는다).
  */
-export default async function EditorSinglePage({ params }: PageProps) {
+export default async function EditorSinglePage(props: PageProps) {
+  const params = await props.params;
   try {
     await requireUser();
   } catch {
     redirect(`/login?next=/editor/${params.projectId}/pages/${params.pageId}`);
   }
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const { data: page, error: pageErr } = await supabase
     .from("pages")

@@ -29,7 +29,7 @@ export async function POST(req: Request) {
       return fail("INVALID_BODY", "요청 본문이 올바르지 않습니다.", 400, parsed.error.flatten());
     }
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     let bookSizeId = parsed.data.bookSizeId;
     if (!bookSizeId) {

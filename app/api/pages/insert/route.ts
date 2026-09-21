@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     }
     const { projectId, afterPageNo, layoutMode, templateId } = parsed.data;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     // 소유권 + 책 사이즈
     const { data: project, error: projErr } = await supabase

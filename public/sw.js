@@ -12,9 +12,12 @@
  *  - /api/*           : 항상 네트워크 (캐시 없음)
  *
  * v2 — SWR 도입 (페이지 재방문 시 즉시 표시).
+ * v3 — Next 16 전환. 빌드 산출물(청크 해시·RSC payload)이 전부 바뀌므로 캐시 이름을 올려
+ *      activate 단계에서 구버전 캐시를 폐기한다. 올리지 않으면 기존 방문자가 14 시절
+ *      precache 한 셸과 새 서버 응답이 섞인다.
  */
 
-const CACHE_NAME = "100p-v2";
+const CACHE_NAME = "100p-v3";
 const STATIC_ASSETS = ["/", "/offline"];
 
 /**

@@ -51,7 +51,7 @@ export async function POST(req: Request) {
       return fail("DUPLICATE_PAGE_IDS", "중복된 page id 가 있습니다.", 400);
     }
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     // 소유권
     const { data: project, error: projErr } = await supabase

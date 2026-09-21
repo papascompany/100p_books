@@ -35,19 +35,33 @@ const nextConfig = {
   // `x-powered-by: Next.js` 응답 헤더 제거 (OPS-12) — 프레임워크 지문 최소화.
   poweredByHeader: false,
 
-  // ESLint 스타일 룰(react/no-unescaped-entities 등)로 production 빌드가
-  // 막히지 않게 함 — 타입 안전성은 tsc(typecheck)가 별도 보장하고,
-  // 코드 스타일은 `pnpm lint` / CI 에서 점검한다.
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // Next 16 은 `next build` 에서 ESLint 를 더 이상 실행하지 않으므로
+  // 예전의 `eslint.ignoreDuringBuilds` 키가 제거되었다(설정 시 검증 오류).
+  // 타입 안전성은 tsc(typecheck), 코드 스타일은 `pnpm lint` / CI 가 맡는다.
+
+  // `next dev` 가 AI 코딩 에이전트를 감지하면 프로젝트 루트에 AGENTS.md·CLAUDE.md 를
+  // 자동 생성/수정한다(기본 true). 우리 저장소는 두 파일을 직접 관리하므로 끈다.
+  agentRules: false,
+
+  // PDF / sharp / canvas / fontkit 는 native binary 의존 — 서버 번들에서 external 로 둔다.
+  // (Next 15 에서 experimental.serverComponentsExternalPackages → 최상위로 승격)
+  serverExternalPackages: [
+    "sharp",
+    "pdf-lib",
+    "@pdf-lib/fontkit",
+    "@napi-rs/canvas",
+  ],
 
   images: {
     // 모바일 최적화: WebP 자동 변환.
-    // image/avif 는 일시 제외 (SEC-2 완화) — Next.js 14.2.35 는 AVIF 최적화 경로 advisory
-    // GHSA-2xp9-vwfh-vxw4 (https://github.com/vercel/next.js/security/advisories/GHSA-2xp9-vwfh-vxw4)
-    // 의 패치가 없는 지원 종료 버전이다. Next 16 전환 후 advisory 해소를 확인하고 재검토한다.
+    // image/avif 는 계속 제외한다 (SEC-2 완화). advisory GHSA-2xp9-vwfh-vxw4
+    // (https://github.com/vercel/next.js/security/advisories/GHSA-2xp9-vwfh-vxw4) 자체는
+    // Next 16.3.5 에서 해소됐지만, AVIF 재활성화는 인코딩 비용·품질 회귀를 따로 측정한 뒤
+    // 후속 웨이브에서 판단한다. Next 16 기본값도 ["image/webp"] 이므로 현행 유지.
     formats: ["image/webp"],
+    // 최적화 결과 캐시 TTL(초). Next 16 기본값이 60 → 14400 으로 바뀌었으므로
+    // 기존 체감(서명 URL 회전·콘텐츠 교체 반영 속도)을 유지하려고 60 을 명시한다.
+    minimumCacheTTL: 60,
     // 디바이스별 최적 크기
     deviceSizes: [375, 640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 64, 128, 256, 384],
@@ -85,13 +99,6 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: "4mb",
     },
-    // PDF / sharp / canvas / fontkit 는 native binary 의존 — 클라 번들 제외
-    serverComponentsExternalPackages: [
-      "sharp",
-      "pdf-lib",
-      "@pdf-lib/fontkit",
-      "@napi-rs/canvas",
-    ],
   },
 };
 

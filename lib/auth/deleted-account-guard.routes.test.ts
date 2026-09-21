@@ -84,7 +84,7 @@ const CASES: Array<[name: string, call: () => Promise<Response>]> = [
     "POST /api/gifts/[token] (수령)",
     () =>
       giftAction(jsonRequest(`/api/gifts/${GIFT_TOKEN}`, { action: "claim" }), {
-        params: { token: GIFT_TOKEN },
+        params: Promise.resolve({ token: GIFT_TOKEN }),
       }),
   ],
   ["POST /api/attendance/check", () => attendanceCheck()],
@@ -121,7 +121,7 @@ describe("활성 계정은 가드를 통과한다", () => {
   it("POST /api/gifts/[token] → 가드 통과 후 service_role 단계로 진행", async () => {
     state.deletedAt = null;
     const res = await giftAction(jsonRequest(`/api/gifts/${GIFT_TOKEN}`, { action: "claim" }), {
-      params: { token: GIFT_TOKEN },
+      params: Promise.resolve({ token: GIFT_TOKEN }),
     });
     expect(res.status).not.toBe(410);
     expect(state.touched).toContain("admin");

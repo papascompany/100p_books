@@ -120,7 +120,7 @@ async function retry(id = "job-1") {
     new NextRequest(`https://100pbooks.vercel.app/api/admin/emails/${id}/retry`, {
       method: "POST",
     }),
-    { params: { id } },
+    { params: Promise.resolve({ id }) },
   );
   const body = (await res.json()) as { ok: boolean; error?: { code: string } };
   return { status: res.status, body };

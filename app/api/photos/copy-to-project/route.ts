@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     }
     const { photoIds, targetProjectId } = parsed.data;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     // 1) target project 소유권
     const { data: target, error: targetErr } = await supabase

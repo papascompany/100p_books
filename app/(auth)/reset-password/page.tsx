@@ -29,12 +29,13 @@ export const runtime = "nodejs";
  * getUser() 로 서버 검증한 값과 비교하므로 쿠키 위조만으로는 통과할 수 없다.
  */
 export default async function ResetPasswordPage() {
-  const marker = cookies().get(PASSWORD_RECOVERY_COOKIE)?.value ?? null;
+  const marker = (await cookies()).get(PASSWORD_RECOVERY_COOKIE)?.value ?? null;
 
   let userId: string | null = null;
   if (marker) {
     try {
-      const { data } = await createServerSupabase().auth.getUser();
+      const supabase = await createServerSupabase();
+      const { data } = await supabase.auth.getUser();
       userId = data.user?.id ?? null;
     } catch {
       userId = null;

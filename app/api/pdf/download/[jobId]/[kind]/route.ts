@@ -18,10 +18,8 @@ export const dynamic = "force-dynamic";
  *   - cover_pdf_key / interior_pdf_key 에 담긴 Storige fileId 로 바이트 스트리밍.
  *   - fileId 는 클라에 노출하지 않는다(항상 프록시 경유).
  */
-export async function GET(
-  _req: Request,
-  { params }: { params: { jobId: string; kind: string } },
-) {
+export async function GET(_req: Request, props: { params: Promise<{ jobId: string; kind: string }> }) {
+  const params = await props.params;
   const kind = params.kind;
   if (kind !== "cover" && kind !== "interior") {
     return new NextResponse("invalid kind", { status: 400 });

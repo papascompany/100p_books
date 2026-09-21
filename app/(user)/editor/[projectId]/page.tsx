@@ -11,21 +11,22 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 interface PageProps {
-  params: { projectId: string };
+  params: Promise<{ projectId: string }>;
 }
 
 /**
  * /editor/[projectId] — M2 단계의 "자동 편집 컨트롤 + 썸네일 프리뷰".
  * 실제 편집(Fabric.js)은 M3 에서 `/editor/[projectId]/pages/[pageId]` 로 구현.
  */
-export default async function EditorPage({ params }: PageProps) {
+export default async function EditorPage(props: PageProps) {
+  const params = await props.params;
   try {
     await requireUser();
   } catch {
     redirect(`/login?next=/editor/${params.projectId}`);
   }
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const { data: project, error: projErr } = await supabase
     .from("projects")

@@ -51,7 +51,7 @@ export async function GET(req: Request) {
     }
     const { type, q, limit } = parsed.data;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
     let query = supabase
       .from("resources")
       .select("id, type, name, storage_key, meta, created_at")

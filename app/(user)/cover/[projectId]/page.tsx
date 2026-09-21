@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 interface PageProps {
-  params: { projectId: string };
+  params: Promise<{ projectId: string }>;
 }
 
 const THUMB_SIGNED_TTL_SEC = 3600;
@@ -32,14 +32,15 @@ const THUMB_SIGNED_TTL_SEC = 3600;
  *
  * 사용자가 저장 시 PATCH /api/cover 로 cover_json 이 업데이트된다.
  */
-export default async function CoverPage({ params }: PageProps) {
+export default async function CoverPage(props: PageProps) {
+  const params = await props.params;
   try {
     await requireUser();
   } catch {
     redirect(`/login?next=/cover/${params.projectId}`);
   }
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const { data: project, error: projErr } = await supabase
     .from("projects")

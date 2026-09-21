@@ -124,13 +124,13 @@ function claim() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "claim" }),
     }),
-    { params: { token: TOKEN } },
+    { params: Promise.resolve({ token: TOKEN }) },
   );
 }
 
 function preview() {
   return GET(new Request(`https://100pbooks.vercel.app/api/gifts/${TOKEN}`), {
-    params: { token: TOKEN },
+    params: Promise.resolve({ token: TOKEN }),
   });
 }
 

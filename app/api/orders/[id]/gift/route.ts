@@ -11,7 +11,7 @@ import { enqueueEmail } from "@/lib/email/queue";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-type RouteCtx = { params: { id: string } };
+type RouteCtx = { params: Promise<{ id: string }> };
 
 const ParamsSchema = z.object({ id: z.string().uuid() });
 
@@ -49,7 +49,8 @@ function emailPrefix(email: string): string {
  *   4. gifts INSERT (admin) — sender_id, recipient_email, message, gift_token
  *   5. enqueueEmail("gift.received") — 수신자에게 알림
  */
-export async function POST(req: Request, { params }: RouteCtx) {
+export async function POST(req: Request, props: RouteCtx) {
+  const params = await props.params;
   try {
     const user = await requireActiveUser();
 
@@ -71,7 +72,7 @@ export async function POST(req: Request, { params }: RouteCtx) {
     }
     const { recipientEmail, message } = parsed.data;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     // 1) 주문 로드 (RLS: orders_select_own — 본인 주문만 SELECT 가능)
     const { data: order, error: orderErr } = await supabase

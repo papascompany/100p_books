@@ -542,7 +542,7 @@ const GUARDED_ROUTES: Array<[string, () => Promise<Response>]> = [
   ],
   [
     "POST /api/pages/[id]/preview",
-    () => pagePreviewPost(post(`/api/pages/${PAGE1}/preview`, {}), { params: { id: PAGE1 } }),
+    () => pagePreviewPost(post(`/api/pages/${PAGE1}/preview`, {}), { params: Promise.resolve({ id: PAGE1 }) }),
   ],
   [
     "POST /api/photos/abandon",
@@ -572,13 +572,13 @@ const GUARDED_ROUTES: Array<[string, () => Promise<Response>]> = [
   ["POST /api/projects", () => projectsCreate(post("/api/projects", { title: "새 책" }))],
   [
     "POST /api/projects/[id]/share",
-    () => shareCreate(post(`/api/projects/${P1}/share`, {}), { params: { id: P1 } }),
+    () => shareCreate(post(`/api/projects/${P1}/share`, {}), { params: Promise.resolve({ id: P1 }) }),
   ],
   [
     "DELETE /api/projects/[id]/share/[tokenId]",
     () =>
       shareTokenDelete(new Request(`https://100pbooks.vercel.app/api/projects/${P1}/share/${TOKEN_ID}`), {
-        params: { id: P1, tokenId: TOKEN_ID },
+        params: Promise.resolve({ id: P1, tokenId: TOKEN_ID }),
       }),
   ],
   [
@@ -606,7 +606,7 @@ describe("탈퇴(익명화) 계정 — 프로젝트 쓰기 라우트 410 (DEBT-3
     seed({ deletedAt: "2026-09-17T00:00:00Z" });
     const { status } = await read(
       await shareList(new Request(`https://100pbooks.vercel.app/api/projects/${P1}/share`), {
-        params: { id: P1 },
+        params: Promise.resolve({ id: P1 }),
       }),
     );
     expect(status).toBe(200);
@@ -618,7 +618,7 @@ describe("탈퇴(익명화) 계정 — 프로젝트 쓰기 라우트 410 (DEBT-3
     // fabric_json 이 비어 있어 렌더 전에 400 EMPTY_PAGE 로 끝난다
     const { status, json } = await read(
       await pagePreviewGet(new Request(`https://100pbooks.vercel.app/api/pages/${PAGE1}/preview`), {
-        params: { id: PAGE1 },
+        params: Promise.resolve({ id: PAGE1 }),
       }),
     );
     expect(status).toBe(400);

@@ -546,7 +546,8 @@ export default function PageEditor({
         }
       }
       // 저장 뒤 목적지가 최신 서버 렌더를 보여주게 하는 순서: push → refresh.
-      // (Next 14.2.35 shared/lib/router/action-queue.js dispatchAction 근거)
+      // (근거: Next 14.2.35 shared/lib/router/action-queue.js dispatchAction. Next 16 은
+      //  prefetch/캐시 체계를 개편했으므로 순서 의미는 E2E 로 재확인한다 — 순서 자체는 유지)
       //  - 예전 순서(refresh → push)는 대기 중인 REFRESH 가 뒤이은 NAVIGATE 에 의해
       //    discarded 되어 결과가 버려졌다 → staleTimes.dynamic=30 캐시가 그대로 재생(QA-2).
       //  - push 를 먼저 하면 REFRESH 는 NAVIGATE 뒤에 큐잉되어 이동 완료 후 실행되고,

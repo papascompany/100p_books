@@ -11,7 +11,7 @@ import { createServerSupabase } from "@/lib/db/server";
  * React cache()로 같은 요청 내 중복 호출을 1회로 줄임.
  */
 export const getSession = cache(async () => {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -50,7 +50,7 @@ function authError(
  * 🛂 cookie 갱신은 middleware 의 createServerClient 가 매 요청마다 수행.
  */
 export const requireUser = cache(async (): Promise<User> => {
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -100,7 +100,7 @@ export const ACCOUNT_DELETED_MESSAGE =
  */
 export const requireActiveUser = cache(async (): Promise<User> => {
   const user = await requireUser();
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const { data: profile, error } = await supabase
     .from("profiles")
@@ -131,7 +131,7 @@ export const requireActiveUser = cache(async (): Promise<User> => {
  */
 export async function requireAdmin(): Promise<User> {
   const user = await requireUser();
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const { data: profile, error } = await supabase
     .from("profiles")

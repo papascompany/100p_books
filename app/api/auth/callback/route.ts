@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {

@@ -142,7 +142,7 @@ type Body = {
 async function call(id = ORDER_ID) {
   const res = await POST(
     new Request(`https://100p.test/api/orders/${id}/cancel`, { method: "POST" }),
-    { params: { id } },
+    { params: Promise.resolve({ id }) },
   );
   return { status: res.status, body: (await res.json()) as Body };
 }

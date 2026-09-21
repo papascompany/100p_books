@@ -100,7 +100,7 @@ export async function POST(req: Request) {
     }
     const { projectId, qty, address, discountCode, usePoints } = parsed.data;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     // 1) 소유권
     const { data: project, error: projErr } = await supabase

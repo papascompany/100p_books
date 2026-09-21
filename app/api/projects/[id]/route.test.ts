@@ -149,7 +149,7 @@ vi.mock("@/lib/db/admin", () => ({
 
 import { DELETE, PATCH } from "./route";
 
-const ctx = { params: { id: PROJECT_ID } };
+const ctx = { params: Promise.resolve({ id: PROJECT_ID }) };
 
 type Body = { ok: boolean; data?: Record<string, unknown>; error?: { code: string; message: string } };
 

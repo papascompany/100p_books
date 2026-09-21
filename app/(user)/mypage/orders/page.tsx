@@ -53,7 +53,7 @@ export default async function MyOrdersPage() {
     redirect(`/login?next=/mypage/orders`);
   }
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const { data, error } = await supabase
     .from("orders")
     .select(

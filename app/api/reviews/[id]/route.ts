@@ -10,7 +10,7 @@ import { createServerSupabase } from "@/lib/db/server";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-type RouteCtx = { params: { id: string } };
+type RouteCtx = { params: Promise<{ id: string }> };
 
 const REVIEW_IMG_SIGNED_TTL_SEC = 3600;
 const REVIEW_MAX_IMAGES = 3;
@@ -20,7 +20,8 @@ const ParamsSchema = z.object({ id: z.string().uuid() });
 // =====================================================================
 // GET /api/reviews/[id]
 // =====================================================================
-export async function GET(_req: Request, { params }: RouteCtx) {
+export async function GET(_req: Request, props: RouteCtx) {
+  const params = await props.params;
   try {
     const parsedParams = ParamsSchema.safeParse(params);
     if (!parsedParams.success) {
@@ -31,7 +32,7 @@ export async function GET(_req: Request, { params }: RouteCtx) {
     const session = await getSession();
     const viewerId = session?.user?.id ?? null;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
     const { data: review, error } = await supabase
       .from("reviews")
       .select(
@@ -134,7 +135,8 @@ const PatchBodySchema = z
     { message: "수정할 필드가 없습니다." },
   );
 
-export async function PATCH(req: Request, { params }: RouteCtx) {
+export async function PATCH(req: Request, props: RouteCtx) {
+  const params = await props.params;
   try {
     const user = await requireActiveUser();
 
@@ -170,7 +172,7 @@ export async function PATCH(req: Request, { params }: RouteCtx) {
       }
     }
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     // 본인 소유 검증 — RLS 가 차단하지만 친절한 에러를 위해 선조회
     const { data: existing, error: selErr } = await supabase
@@ -215,7 +217,8 @@ export async function PATCH(req: Request, { params }: RouteCtx) {
 // =====================================================================
 // DELETE /api/reviews/[id]
 // =====================================================================
-export async function DELETE(_req: Request, { params }: RouteCtx) {
+export async function DELETE(_req: Request, props: RouteCtx) {
+  const params = await props.params;
   try {
     const user = await requireActiveUser();
 
@@ -225,7 +228,7 @@ export async function DELETE(_req: Request, { params }: RouteCtx) {
     }
     const reviewId = parsedParams.data.id;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     // 소유 + 첨부 키 조회 — 삭제 후 storage 객체도 제거
     const { data: review, error: selErr } = await supabase

@@ -18,16 +18,17 @@ const PatchSchema = z
     message: "수정할 필드가 없습니다.",
   });
 
-type RouteCtx = { params: { id: string } };
+type RouteCtx = { params: Promise<{ id: string }> };
 
 /**
  * GET /api/projects/[id]
  *   프로젝트 메타 + 사진 수.
  */
-export async function GET(_req: Request, { params }: RouteCtx) {
+export async function GET(_req: Request, props: RouteCtx) {
+  const params = await props.params;
   try {
     const user = await requireUser();
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     const { data: project, error } = await supabase
       .from("projects")
@@ -84,10 +85,11 @@ export async function GET(_req: Request, { params }: RouteCtx) {
  *   Storage 파일 삭제는 비동기 클린업 잡(orphan-photos cron)에 위임.
  *   RLS 가 2차 방어선.
  */
-export async function DELETE(_req: Request, { params }: RouteCtx) {
+export async function DELETE(_req: Request, props: RouteCtx) {
+  const params = await props.params;
   try {
     const user = await requireActiveUser();
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     // 소유권 확인
     const { data: project, error: selErr } = await supabase
@@ -153,7 +155,8 @@ function hasOrdersResponse(orderCount: number | null) {
  *   body: { title?, bookSizeId? }
  *   결제 이후(paid·in_production·shipped·delivered) 주문이 달린 포토북은 409 PROJECT_LOCKED.
  */
-export async function PATCH(req: Request, { params }: RouteCtx) {
+export async function PATCH(req: Request, props: RouteCtx) {
+  const params = await props.params;
   try {
     // 탈퇴 가드 — 탈퇴 처리 중인 계정의 편집(인쇄물 영향 변경 포함)을 막는다.
     const user = await requireActiveUser();
@@ -164,7 +167,7 @@ export async function PATCH(req: Request, { params }: RouteCtx) {
       return fail("INVALID_BODY", "요청 본문이 올바르지 않습니다.", 400, parsed.error.flatten());
     }
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     // 소유권 선검증 (RLS도 2차 방어)
     const { data: existing, error: selErr } = await supabase

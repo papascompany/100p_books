@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 interface PageProps {
-  params: { projectId: string };
+  params: Promise<{ projectId: string }>;
 }
 
 /**
@@ -23,7 +23,8 @@ interface PageProps {
  *   - 가격 계산 결과 prefetch 후 OrderForm 에 전달.
  *   - 미존재 시 안내 메시지 (표지/내지 편집 유도).
  */
-export default async function OrderPage({ params }: PageProps) {
+export default async function OrderPage(props: PageProps) {
+  const params = await props.params;
   let user;
   try {
     user = await requireUser();
@@ -31,7 +32,7 @@ export default async function OrderPage({ params }: PageProps) {
     redirect(`/login?next=/order/${params.projectId}`);
   }
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const { data: project, error: projErr } = await supabase
     .from("projects")

@@ -15,7 +15,7 @@ import { giftSenderOwnsOrder } from "./sender-guard";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-type RouteCtx = { params: { token: string } };
+type RouteCtx = { params: Promise<{ token: string }> };
 
 const TokenSchema = z.string().uuid();
 
@@ -249,7 +249,8 @@ async function loadGiftFull(
  * 로그인 필요 — 선물 미리보기 정보 반환.
  * 만료/없음/이미 수령 케이스는 status 값으로 표현 (UI에서 분기).
  */
-export async function GET(_req: Request, { params }: RouteCtx) {
+export async function GET(_req: Request, props: RouteCtx) {
+  const params = await props.params;
   try {
     await requireUser();
 
@@ -317,7 +318,8 @@ export async function GET(_req: Request, { params }: RouteCtx) {
  *       수신자 폴더로 복사해야 수신자가 직접 SELECT 할 수 있다.
  *     - copy 실패 시(원본 부재 등) best-effort 폴백: 원본 storage_key 를 그대로 참조.
  */
-export async function POST(req: Request, { params }: RouteCtx) {
+export async function POST(req: Request, props: RouteCtx) {
+  const params = await props.params;
   try {
     const user = await requireActiveUser();
 

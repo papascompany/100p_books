@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     }
     const { photoIds } = parsed.data;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     // 1) 휴지통 사진 + 소유권
     const { data: rows, error: selErr } = await supabase

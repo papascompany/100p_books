@@ -23,11 +23,10 @@ const TITLE: Record<string, { ko: string; subtitle: string }> = {
   },
 };
 
-export default function ResourceTypePage({
-  params,
-}: {
-  params: { type: string };
+export default async function ResourceTypePage(props: {
+  params: Promise<{ type: string }>;
 }) {
+  const params = await props.params;
   const type = params.type;
   if (!VALID.has(type)) notFound();
   const t = type as "font" | "clipart" | "background";

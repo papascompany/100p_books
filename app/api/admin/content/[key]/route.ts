@@ -117,7 +117,8 @@ export const PUT = withAdmin<{ key: string }>(async (req, ctx, user) => {
   }
 
   // getSiteContent unstable_cache 무효화 + 랜딩/레이아웃 재생성.
-  revalidateTag(SITE_CONTENT_TAG);
+  // Next 16: 2번째 인자 필수. 저장 직후 즉시 반영이 현재 동작이므로 { expire: 0 }.
+  revalidateTag(SITE_CONTENT_TAG, { expire: 0 });
   revalidatePath("/");
   revalidatePath("/", "layout");
 

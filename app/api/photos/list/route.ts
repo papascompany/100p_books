@@ -56,7 +56,7 @@ export async function GET(req: Request) {
     }
     const { scope, projectId } = parsed.data;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     let projectIds: string[];
     const projectMap = new Map<string, string>();

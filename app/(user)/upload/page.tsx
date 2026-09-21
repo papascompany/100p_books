@@ -17,7 +17,7 @@ export const runtime = "nodejs";
 const THUMB_SIGNED_TTL_SEC = 3600;
 
 interface PageProps {
-  searchParams: { projectId?: string };
+  searchParams: Promise<{ projectId?: string }>;
 }
 
 /**
@@ -25,7 +25,8 @@ interface PageProps {
  *   ?projectId=... 가 있으면 기존 프로젝트.
  *   없으면 빈 draft 프로젝트를 즉시 만들고 같은 경로로 redirect.
  */
-export default async function UploadPage({ searchParams }: PageProps) {
+export default async function UploadPage(props: PageProps) {
+  const searchParams = await props.searchParams;
   let user: User;
   try {
     user = await requireUser();
@@ -33,7 +34,7 @@ export default async function UploadPage({ searchParams }: PageProps) {
     redirect("/login?next=/upload");
   }
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   // book sizes (active)
   const { data: sizes } = await supabase

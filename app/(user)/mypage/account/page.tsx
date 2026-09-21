@@ -34,7 +34,7 @@ export default async function AccountPage() {
     redirect("/login?next=/mypage/account");
   }
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const [{ data: profile }, { count: orderCount }, { count: blockingCount }] =
     await Promise.all([
       supabase

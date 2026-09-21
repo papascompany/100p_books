@@ -102,7 +102,7 @@ export async function POST(req: Request) {
 
     // 2) 이메일 일치 — auth.user.email 우선, 없으면 profiles.email
     //    (재시도 시 profiles.email 은 이미 null 이지만 auth 쪽 email 은 soft delete 전까지 남아 있다)
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
     const { data: profile, error: profErr } = await supabase
       .from("profiles")
       .select("id, email, display_name, deleted_at")

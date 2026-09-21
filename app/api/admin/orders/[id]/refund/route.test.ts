@@ -186,7 +186,7 @@ vi.mock("@/lib/email/queue", () => ({
 
 import { GET, POST } from "./route";
 
-const ctx = { params: { id: ORDER_ID } };
+const ctx = { params: Promise.resolve({ id: ORDER_ID }) };
 
 function post(body: Record<string, unknown> = {}) {
   const req = new Request(`https://100pbooks.vercel.app/api/admin/orders/${ORDER_ID}/refund`, {

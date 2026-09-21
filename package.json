@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint app components lib hooks",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -42,10 +42,10 @@
     "heic2any": "^0.0.4",
     "lucide-react": "^0.441.0",
     "nanoid": "^5.0.7",
-    "next": "14.2.35",
+    "next": "16.3.5",
     "pdf-lib": "^1.17.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "resend": "^6.12.3",
     "server-only": "^0.0.1",
     "sharp": "^0.35.4",
@@ -59,13 +59,11 @@
     "@playwright/test": "^1.60.0",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^24.0.0",
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
-    "@typescript-eslint/eslint-plugin": "^7.18.0",
-    "@typescript-eslint/parser": "^7.18.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "autoprefixer": "^10.4.19",
-    "eslint": "^8.57.0",
-    "eslint-config-next": "14.2.35",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.3.5",
     "jsdom": "^25.0.0",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.7",
@@ -76,5 +74,11 @@
   "engines": {
     "node": "24.x",
     "pnpm": ">=9.0.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "19.3.0",
+      "@types/react-dom": "19.3.0"
+    }
   }
 }

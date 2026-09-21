@@ -36,7 +36,7 @@ export default async function TrashPage() {
     redirect("/login?next=/mypage/trash");
   }
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   const { data: projects } = await supabase
     .from("projects")

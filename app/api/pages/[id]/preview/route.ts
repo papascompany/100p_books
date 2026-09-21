@@ -44,7 +44,7 @@ const CACHE_HEADERS = {
 };
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 async function handle(
@@ -54,10 +54,10 @@ async function handle(
 ): Promise<Response> {
   try {
     const user = await authenticate();
-    const pageId = params.id;
+    const pageId = (await params).id;
     if (!pageId) return fail("INVALID_PARAM", "잘못된 페이지 ID 입니다.", 400);
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     // 1) page 로드
     const { data: page, error: pageErr } = await supabase

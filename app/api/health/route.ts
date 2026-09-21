@@ -58,7 +58,7 @@ export async function GET(req: Request) {
   let dbErrorMessage: string | undefined;
   if (env.supabase) {
     try {
-      const supabase = createServerSupabase();
+      const supabase = await createServerSupabase();
       const { error } = await supabase
         .from("profiles")
         .select("id", { count: "exact", head: true });

@@ -46,7 +46,7 @@ export async function GET(req: Request) {
     }
     const { projectId } = parsed.data;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     // 소유권
     const { data: project, error: projErr } = await supabase

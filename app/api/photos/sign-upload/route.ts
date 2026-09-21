@@ -71,7 +71,7 @@ export async function POST(req: Request) {
     }
 
     // 프로젝트 소유권 확인
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
     const { data: project, error: projErr } = await supabase
       .from("projects")
       .select("id, user_id")

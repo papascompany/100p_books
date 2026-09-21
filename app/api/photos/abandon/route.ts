@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     }
     const { projectId, storageKeys } = parsed.data;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
     const { data: project, error: projErr } = await supabase
       .from("projects")
       .select("id, user_id")

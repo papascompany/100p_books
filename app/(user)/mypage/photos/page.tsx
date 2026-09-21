@@ -44,7 +44,7 @@ export default async function PhotoLibraryPage() {
     redirect("/login?next=/mypage/photos");
   }
 
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
 
   // 본인 프로젝트 목록 (소유권 확인 + photo join 후 매핑용)
   const { data: projects } = await supabase

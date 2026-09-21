@@ -113,7 +113,7 @@ export async function POST(req: Request) {
     }
     const { orderId, paymentKey, amount, tossOrderId } = parsed.data;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
     const admin = createAdminSupabase();
 
     // 1) 소유권 + 상태 + amount 검증

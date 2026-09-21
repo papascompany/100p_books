@@ -7,13 +7,13 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 interface PageProps {
-  params: { projectId: string };
-  searchParams: {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{
     paymentKey?: string;
     orderId?: string; // toss orderId (토스가 successUrl 에 append)
     amount?: string;
     ourOrderId?: string; // 우리 내부 orders.id (OrderForm 이 successUrl 에 미리 첨부)
-  };
+  }>;
 }
 
 /**
@@ -24,7 +24,9 @@ interface PageProps {
  *
  *   (서버 confirm 도 가능하지만 인증 쿠키/토큰 새로고침 측면에서 클라 호출이 단순.)
  */
-export default function OrderSuccessPage({ params, searchParams }: PageProps) {
+export default async function OrderSuccessPage(props: PageProps) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const paymentKey = searchParams.paymentKey ?? "";
   const tossOrderId = searchParams.orderId ?? "";
   const amount = Number(searchParams.amount ?? "0");

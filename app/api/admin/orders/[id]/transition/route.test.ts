@@ -114,7 +114,7 @@ function transition(order: Row, to: string) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ to }),
   });
-  return POST(req as unknown as NextRequest, { params: { id: String(order.id) } });
+  return POST(req as unknown as NextRequest, { params: Promise.resolve({ id: String(order.id) }) });
 }
 
 async function codeOf(res: Response): Promise<string | undefined> {

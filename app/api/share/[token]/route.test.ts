@@ -130,7 +130,7 @@ function seed(ownerDeletedAt: string | null) {
 
 async function call() {
   const res = await GET(new Request(`https://100pbooks.vercel.app/api/share/${TOKEN}`), {
-    params: { token: TOKEN },
+    params: Promise.resolve({ token: TOKEN }),
   });
   const json = (await res.json()) as {
     ok: boolean;

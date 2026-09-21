@@ -2,12 +2,12 @@ import { z } from "zod";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { requireActiveUser, requireUser } from "@/lib/auth/session";
-import { createServerSupabase } from "@/lib/db/server";
+import { createServerSupabase, type ServerSupabase } from "@/lib/db/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-type RouteCtx = { params: { id: string } };
+type RouteCtx = { params: Promise<{ id: string }> };
 
 const CreateSchema = z
   .object({
@@ -27,7 +27,7 @@ function buildShareUrl(token: string): string {
  * 인증된 user 가 해당 project 의 owner 여야 한다.
  */
 async function assertProjectOwner(
-  supabase: ReturnType<typeof createServerSupabase>,
+  supabase: ServerSupabase,
   projectId: string,
   userId: string,
 ) {
@@ -49,10 +49,11 @@ async function assertProjectOwner(
  *   현재 프로젝트의 활성 공유 토큰 목록 (소유자만).
  *   응답: { tokens: Array<{ id, token, shareUrl, expiresAt, viewCount, createdAt }> }
  */
-export async function GET(_req: Request, { params }: RouteCtx) {
+export async function GET(_req: Request, props: RouteCtx) {
+  const params = await props.params;
   try {
     const user = await requireUser();
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     const owner = await assertProjectOwner(supabase, params.id, user.id);
     if (owner.err) return owner.err;
@@ -86,7 +87,8 @@ export async function GET(_req: Request, { params }: RouteCtx) {
  *   새 공유 토큰 발급. (소유자만)
  *   응답: { id, token, shareUrl, expiresAt }
  */
-export async function POST(req: Request, { params }: RouteCtx) {
+export async function POST(req: Request, props: RouteCtx) {
+  const params = await props.params;
   try {
     const user = await requireActiveUser();
 
@@ -101,7 +103,7 @@ export async function POST(req: Request, { params }: RouteCtx) {
       );
     }
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
     const owner = await assertProjectOwner(supabase, params.id, user.id);
     if (owner.err) return owner.err;
 

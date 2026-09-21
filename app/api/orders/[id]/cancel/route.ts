@@ -14,7 +14,7 @@ import { probeCancelVerdict, probeTossOrder } from "@/lib/orders/toss-order-prob
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-type RouteCtx = { params: { id: string } };
+type RouteCtx = { params: Promise<{ id: string }> };
 
 const ParamsSchema = z.object({ id: z.string().uuid() });
 
@@ -47,7 +47,8 @@ const ParamsSchema = z.object({ id: z.string().uuid() });
  *   토스 주문번호를 새로 발급하면 이 UPDATE 는 빗나가고, 최신 행으로 다시 판정해 응답한다.
  *   반대로 취소가 먼저 커밋되면 confirm 의 선점이 NOT_PENDING 으로 끝나 캡처가 일어나지 않는다.
  */
-export async function POST(_req: Request, { params }: RouteCtx) {
+export async function POST(_req: Request, props: RouteCtx) {
+  const params = await props.params;
   try {
     const user = await requireActiveUser();
 
@@ -58,7 +59,7 @@ export async function POST(_req: Request, { params }: RouteCtx) {
     const orderId = paramsParse.data.id;
 
     // 1) 주문 로드 (RLS: orders_select_own — 본인 주문만 SELECT 가능)
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
     const { data: order, error: orderErr } = await supabase
       .from("orders")
       .select("id, user_id, status, toss_payment_key, toss_order_id, points_used, discount_code_id")

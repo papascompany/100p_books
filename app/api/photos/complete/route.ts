@@ -109,7 +109,7 @@ export async function POST(req: Request) {
     const { projectId, photos } = parsed.data;
 
     // 1) 프로젝트 소유권
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
     const { data: project, error: projErr } = await supabase
       .from("projects")
       .select("id, user_id")

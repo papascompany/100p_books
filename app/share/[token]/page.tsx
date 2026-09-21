@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 interface PageProps {
-  params: { token: string };
+  params: Promise<{ token: string }>;
 }
 
 interface SharePhoto {
@@ -123,7 +123,8 @@ function EmptyPhotoCell() {
   );
 }
 
-export default async function SharePage({ params }: PageProps) {
+export default async function SharePage(props: PageProps) {
+  const params = await props.params;
   const { data, errorCode, errorMessage } = await fetchShareData(params.token);
 
   if (!data) {

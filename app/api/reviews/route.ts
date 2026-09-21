@@ -83,7 +83,7 @@ export async function GET(req: Request) {
     const session = await getSession();
     const viewerId = session?.user?.id ?? null;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     // public=true 만 조회 (RLS 가 추가로 강제하지만 명시)
     let query = supabase
@@ -251,7 +251,7 @@ export async function POST(req: Request) {
     const { orderId, rating, body: textBody, imageKeys, public: isPublic } =
       parsed.data;
 
-    const supabase = createServerSupabase();
+    const supabase = await createServerSupabase();
 
     // 1) 주문 존재 + 소유 + 후기 작성 가능 상태 검증
     const { data: order, error: orderErr } = await supabase

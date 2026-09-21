@@ -23,10 +23,8 @@ export const dynamic = "force-dynamic";
  *
  * fileId·signedUrl 은 클라에 노출하지 않는다 (항상 이 프록시를 경유).
  */
-export async function GET(
-  _req: Request,
-  { params }: { params: { id: string; kind: string } },
-) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string; kind: string }> }) {
+  const params = await props.params;
   const kind = params.kind;
   if (kind !== "cover" && kind !== "interior") {
     return new NextResponse("invalid kind", { status: 400 });

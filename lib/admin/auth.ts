@@ -21,10 +21,17 @@ import { requireAdmin } from "@/lib/auth/session";
  * });
  * ```
  *
- * Next.js App Router 의 컨텍스트(`{ params }`)는 두 번째 인자로 그대로 전달한다.
+ * Next.js 16 의 라우트 핸들러는 컨텍스트의 `params` 를 Promise 로 넘긴다(`AdminRouteCtx`).
+ * 이 래퍼가 바깥에서 한 번 await 해서, 내부 handler 에는 종전처럼 평문 `{ params }`(`AdminCtx`)를 넘긴다
+ * — 그래서 관리자 라우트들은 `ctx.params.id` 를 그대로 쓸 수 있다.
  */
 export type AdminCtx<P extends Record<string, string> = Record<string, string>> = {
   params: P;
+};
+
+/** Next.js 가 라우트 핸들러에 실제로 넘기는 컨텍스트 (params 가 Promise). */
+export type AdminRouteCtx<P extends Record<string, string> = Record<string, string>> = {
+  params: Promise<P>;
 };
 
 export function withAdmin<P extends Record<string, string> = Record<string, string>>(
@@ -36,11 +43,13 @@ export function withAdmin<P extends Record<string, string> = Record<string, stri
 ) {
   return async function adminHandler(
     req: NextRequest,
-    ctx: AdminCtx<P>,
+    ctx: AdminRouteCtx<P>,
   ): Promise<NextResponse | Response> {
     try {
       const user = await requireAdmin();
-      return await handler(req, ctx, user);
+      // 권한 검사 이후에 params 를 푼다 (403 응답 경로는 종전과 동일).
+      const params = await ctx.params;
+      return await handler(req, { params }, user);
     } catch (err) {
       // failFromError 가 NextResponse<ApiFail> 를 반환
       return failFromError(err) as NextResponse<ApiFail>;
