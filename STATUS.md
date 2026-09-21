@@ -1,20 +1,155 @@
 # 100p Books — 개발 현황 및 다음 단계
 
-> **🚀 서비스 개시 가능 상태 (2026-08-09).** 코드 작업은 끝났고, 남은 운영 액션(키 발급·
-> 콘솔 클릭·SQL)은 전부 [docs/LAUNCH-RUNBOOK.md](docs/LAUNCH-RUNBOOK.md) 한 곳에 있다.
+> **🚀 서비스 개시 가능 상태.** 남은 운영 액션(키 발급·콘솔 클릭·SQL)은 전부
+> [docs/LAUNCH-RUNBOOK.md](docs/LAUNCH-RUNBOOK.md) 한 곳에 있다.
 > 실시간 상태는 관리자 대시보드(`/admin`)의 "서비스 런치 체크" 카드.
 >
-> ✅ 오픈 전 필수였던 보안 마이그레이션 `0031` 은 **2026-08-11 적용·검증 완료**
-> (anon 포인트 RPC 차단 실측, 앱 경로 정상 — §0-8).
+> ⚠️ **운영 미적용 마이그레이션 2건** — `0032`(클라이언트 직접 쓰기 봉쇄, profiles 권한 상승 차단)과
+> `0033`(결제 크레딧 선점). 적용 절차는 런북 §9·§10.
+> **코드는 이미 배포됐고 `0033` 미적용 동안은 폴백 경로로 동작한다** — 그동안
+> SEC-7(주문 간 동시 결제로 같은 포인트·할인 이중 사용) 창이 남아 있다.
 >
-> 최종 업데이트: 2026-09-07
+> 최종 업데이트: 2026-09-21
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `30ec859` — CI green(verify·e2e·a11y) · Vercel prod success
+> 운영 빌드: `34a5897` — 2026-09-17~21 작업 전량 main 반영 완료(미병합 브랜치 없음, §0-11)
+> 직전 검증 빌드 `bacadc1` 기준 운영 URL `pnpm e2e:auth` 5 passed
+> (골든 플로우 + 편집 무결성 QA-1/4/2). **`34a5897` 배포본 대상 재실행도 5 passed (2026-09-21).**
 > 다음 세션 인계: [docs/NEXT-SESSION-PROMPT.md](docs/NEXT-SESSION-PROMPT.md) (붙여넣기 블록 그대로 사용)
 > **정본 로컬 경로**: `/Users/yohan/Developer/claude/100p_books` (Documents 사본은 node_modules 제거됨)
 > **성능 수치 정본**: §0-5 (2026-08-07, prod 5회 측정). §0-4 는 그 직전 상태, §M8·테스트 현황의
 > "Performance 97 · LCP 1.5s" 는 2026-05-13 옛 측정치이니 baseline 으로 쓰지 말 것.
+
+---
+
+## 🆕 최근 작업 (2026-09-17 ~ 09-21)
+
+### 0-11. 보안·결제 무결성·편집 무결성 일괄 (2026-09-17~21)
+
+6렌즈 전수 감사(이슈 레지스터 기준)에서 확정된 항목을 샤드로 나눠 병렬 구현하고, 샤드마다
+적대적 리뷰 + 뮤테이션 검출을 거친 뒤 통합했다.
+**2026-09-21 기준 전량 `main` 에 반영됐다 — 미병합 브랜치는 없다.**
+통합 브랜치 `integ/wave2` 는 `bacadc1` 위로 rebase 해 ff 병합했으므로 **rebase 이전 SHA
+(`552f6e1`·`c6deee9`·`f4af049` 등)는 더 이상 존재하지 않는다.**
+
+#### A. 1차 반영 — `bacadc1` 까지 (CI 3잡 success · Vercel prod success)
+
+| 커밋 | 내용 |
+|---|---|
+| `2d77e6f` | **SEC-1 업로드 이미지 안전** — `/api/photos/complete` 가 취약한 sharp 0.33.5 로 사용자 바이트를 **포맷 검사 전에** 전부 디코드했다(GHSA-rgj7-g3m4-5g8c `<0.35.4`, GHSA-f88m-g3jw-g9cj `<0.35.0`). sharp `^0.35.4` 승격 + `lib/image/sniff.ts` 매직바이트 사전 판정(JPEG/PNG/WebP/HEIC 만 통과, AVIF 거부) + `lib/image/sharp-safe.ts` 로 불필요한 libvips 로더 차단·`limitInputPixels` 명시. 관리자 리소스 업로드에도 동일 적용 |
+| `55020ab` | **SEC-3 오픈 리다이렉트 / DEBT-3 탈퇴 / SEC-13** — `startsWith("/") && !startsWith("//")` 만 보던 판정이 `/\evil.example`·`/%09/evil.example` 를 통과시켰다. `lib/auth/safe-redirect.ts` 단일 헬퍼(서버·클라 공용 순수 함수, 표 기반 175건 + 퍼징). 탈퇴는 주문 이력이 있으면 auth hard delete 가 FK 로 실패하는데 200 을 반환했고 `requireUser` 가 `deleted_at` 을 보지 않아 탈퇴 후 로그인·주문이 가능했다 → soft delete + global signOut + 단계 멱등화, 미주문 콘텐츠 파기, 돈·정체성 변경 라우트에 `requireActiveUser` |
+| `f605028` | **OPS-1 메일 cron / GAP-5 에러 경계 / SEC-14 cron 인증 / SEC-19 health / SEC-4·OPS-12** — process-emails 가 `0 9 * * *` × 배치 10건 = **하루 10통 상한**이었다. `*/5` 로 복원하고 워커가 시간 예산 안에서 배치를 소진. 렌더 예외 시 흰 화면이던 것에 error boundary 6종 + 공용 `ErrorFallback`. 위조 가능한 `x-vercel-cron` 신뢰를 `lib/security/cron-auth.ts` 로 일원화(배포 환경은 Bearer `CRON_SECRET` 만, **미설정이면 fail-closed**). `/api/health` 비인증 응답은 최소 상태만. `poweredByHeader:false`, `remotePatterns` 축소, `images.formats` 에서 avif 일시 제외. Dependabot 설정 + CI 비차단 audit 요약 |
+| `833c20a` | `.claude/` 워크트리 사본이 루트 vitest 에 수집돼 결과가 오염되던 것 제외(tsconfig·vitest.config) |
+| `205deba` | **메일 후속** — 즉시 발송이 워커와 같은 payload·Idempotency-Key 를 쓰게 통일(중복 발송 차단), 실패 백오프 5분→30분→2시간, 함수 강제 종료로 `sending` 에 갇힌 잡 reaper. 런치 체크에 "Cron 실행 (`CRON_SECRET` 필수)" 차단 항목 추가 |
+| `0f2b77d` | **QA-1/2/3/4 편집 무결성 (critical)** — 아래 별도 항목 |
+| `bacadc1` | **편집 무결성 회귀 E2E** — `e2e/editor-integrity.spec.ts`. 판정을 버튼 라벨이 아니라 **PATCH 본문·서버 GET** 으로. 운영 Supabase 를 쓰므로 CI 기본 파이프라인에는 넣지 않는다 |
+
+**QA-1 (`0f2b77d`) 원인** — fabric **6.9.1** 의 `canvas.toJSON()` 은 **인자를 무시한다**
+(`index.mjs:2939`). 그래서 히스토리 스냅샷에서 `oType`·`objectId`·`photoId`·슬롯 태그가 빠졌고,
+undo/redo 후 직렬화가 태그 없는 객체를 건너뛰어 **페이지·표지가 0객체로 자동저장**됐다
+(화면에는 보이고 라벨은 "저장됨"). 노출 구간은 undo 가 실제로 동작하기 시작한 `9250ddf`
+(2026-08-08) 이후다.
+
+**수정** — `lib/fabric/snapshot.ts`(`toObject(FABRIC_EXTRA_PROPS)` 기반 스냅샷, 정밀도 17자리로
+슬롯 왕복 오차 제거) · `serializeForSave` 불변식(chrome 이 아닌 객체에 `oType` 이 없으면 저장 중단) ·
+`HistoryRecorder` 가 로드·복원 중 이벤트를 무시하고 no-op push 로 dirty 를 만들지 않게(QA-4).
+QA-2/QA-3 은 저장 후 `router.refresh()` 직후 `push()` 를 하면 Next 14.2.35 action-queue 가 refresh 를
+폐기해 `staleTimes` 30초 안의 왕복이 옛 RSC 를 재생하던 문제 → 이동을 `push → refresh` 순으로 바꾸고,
+서버 측 stale-write 방어로 `PATCH /api/pages/[id]`·`/api/cover` 에 **`baseVersion`(내용 해시) →
+불일치 시 409 `EDIT_CONFLICT`**, `updated_at` CAS 로 원자 판정을 넣었다.
+
+**검증** — 각 커밋 게이트 전부 통과(typecheck 0 · lint 0 · vitest · test:pdf · build · e2e 12 · a11y 25),
+`bacadc1` 에서 **운영 URL `pnpm e2e:auth` 5 passed**(골든 플로우 + QA-1/4/2, 1.8m), 테스트 데이터 정리 확인.
+
+> ⚠️ **운영 피해 조회가 필요하다.** QA-1 은 실제 사용자 문서를 0객체로 덮어썼을 수 있다.
+> 읽기 전용 조회 SQL 은 런북 §11 에 있다.
+
+#### B. 2차 반영 — `bacadc1` → `34a5897` (결제·주문·RLS·편집 잠금)
+
+통합 브랜치를 `bacadc1` 위로 rebase 해 ff 병합했다. 아래가 **현재 main 에 있는 SHA** 다.
+
+| 커밋 | 내용 |
+|---|---|
+| `31eaabf` | `requireActiveUser` 를 콘텐츠 쓰기 라우트 전반으로 확대. **`lib/orders/edit-lock.ts`** — paid·in_production·shipped·delivered 주문이 있는 프로젝트의 인쇄물 영향 쓰기를 409 `PROJECT_LOCKED` 로 거부(판정표 `Record<OrderStatus>`, 모르는 상태는 fail-closed, **소유권 검증 뒤에만** 판정해 남의 결제 여부 비노출). 탈퇴 회원 공유 링크는 404 |
+| `88163d0` | **DEBT-1/DEBT-7/SEC-7/SEC-8 결제 무결성** — 확정 부수효과(포인트 차감·할인 기록·프로젝트 상태·PDF 잡·퍼널·메일)를 `lib/orders/finalize-paid.ts` 단일 멱등 함수로 모으고 confirm·웹훅이 함께 호출(웹훅 paid 전이가 부수효과를 건너뛰던 문제 해소). 포인트·할인은 **캡처 전 선점**(0033 reserve/release RPC, service_role 전용, 0033 미적용이면 기존 경로 폴백). 토스 confirm Idempotency-Key + 결제 상태 5종 분류로 CANCELED 결제를 멱등 재생으로 paid 확정하던 경로 차단. 신규 마이그레이션 `0033_payment_credit_reservation.sql` |
+| `488cccb` | **DEBT-6/8/9 주문 수명주기** — 본인 pending 주문 취소(토스 orderId probe 로 결제 기록 없음을 확인한 뒤에만), `expire-pending-orders` cron(매시, 24h), `reap-pdf-jobs` cron(10분), 주문이 연결된 프로젝트 DELETE 는 자식 삭제 **전에** 409 `HAS_ORDERS` |
+| `061273a` | **관리자 전액 환불** — `POST /v1/payments/{paymentKey}/cancel` 전액 취소만 연동(`lib/payments/toss-cancel.ts`), 환불 가능 판정 순수 함수(부분취소·가상계좌 차단), 토스 취소 → 조건부 `refunded` 전이 → `restoreOrderCredits` → 감사 로그 → 고객 메일 |
+| `be00e1b` | **0032 클라이언트 직접 쓰기 봉쇄** — 아래 별도 항목 |
+| `b47834c` | 0033 `reserve` 금액 비교를 `is distinct from` 으로(NULL 이면 금액 검사를 건너뛰고 `ok:true` 를 돌려주던 것, PGlite 로 재현) |
+| `aed8404` | 0032 에 **사진 버킷 사용자 storage 쓰기 정책 제거** 추가 — 0004 의 `photo_originals_user_insert/update/delete`·`photo_thumbs_user_delete` 는 로그인 사용자가 anon 키 + JWT(x-upsert)로 본인 폴더 원본을 직접 덮어쓸 수 있게 했다. 검증된 원본을 바꿔치기하면 `lib/pdf/photos.ts` 가 **재검증 없이** PDF 로 가져간다. anon 의 photos DELETE 잔여 grant 도 회수 |
+| `513ba21` | **샤드 간 정합** — 대기 주문 정책 통일(결제 실패 화면의 자동 취소 제거 → 재시도 + 명시적 취소, `orders/create` 가 기존 pending 재사용, 24h cron 이 정리), 취소↔확정 경합(결제 키가 바인딩된 pending 은 "캡처됐을 수 있는 주문"이라 사용자 취소·자동 만료 대상에서 제외, confirm 이 캡처 후 cancelled 를 발견하면 전액 취소 + 크레딧 복원 후 409 `ORDER_CANCELLED`), 크레딧 복원 누락 보강, CAS 조건 보강 |
+| `34a5897` | **편집 잠금 완결 + 409 읽기 전용 전환 + 방어 보강** — 아래 별도 항목 |
+
+**0032 (`be00e1b`+`aed8404`) 원인** — 로그인 사용자는 공개 anon 키 + 자기 JWT 로 PostgREST 를
+직접 호출할 수 있다. 0002 의 `profiles_update_self` 는 `using/with check (auth.uid() = id)` 뿐이고
+**컬럼 제한이 없어** 자기 `profiles.role` 을 `'admin'` 으로 바꾸거나(`is_admin()` 이 이 값을 읽는다)
+`deleted_at` 을 되돌려 탈퇴 가드를 풀 수 있는 구조였다. 같은 부류의 "소유자 전체 쓰기" 정책을
+public 전체에서 전수 점검해, 앱이 사용자 세션으로 쓰지 않는 표면(gifts·attendances·review_likes·
+photos INSERT/UPDATE·사진 버킷 storage 쓰기)을 회수하고, reviews 는 명령별 정책 + 컬럼 grant +
+`WITH CHECK` 로 라우트 검증을 DB 에서 강제했다. `profiles` 민감 컬럼은 **SECURITY INVOKER**
+BEFORE UPDATE 트리거로 막는다(DEFINER 면 `current_user` 가 소유자라 절대 발동하지 않는다).
+
+**INT-ui (`34a5897`)** — 샤드들이 남긴 UI·방어 구멍을 닫는 마지막 통합 커밋이다.
+
+- **편집 잠금(DEBT-2) 완결**: `pages/[id]` PATCH·DELETE, `cover` PATCH 에 `requireActiveUser` +
+  `assertProjectsEditable`. 판정 순서는 **소유권 → 잠금 → `baseVersion`** 으로 고정했다
+  (남의 결제 여부가 409/403 차이로 새지 않게). 주문 조회 실패는 **503 fail-closed**.
+  cover/editor/page/upload 서버 페이지는 진입 시 잠금을 미리 판정한다.
+- **409 읽기 전용 전환**: 클라이언트가 `PROJECT_LOCKED` 를 받으면 안내 1회 후 읽기 전용으로
+  바뀐다(자동저장 중단, dirty·이탈 경고 해제, 도구 숨김, FabricStage `selection`/`skipTargetFind` 가드).
+  실패 토스트가 반복되지 않는다.
+- **저장 불능·유실 보강**: `loadDoc` 실패를 동기 래치로 잡아 `whenIdle` 대기 저장이 먼저 나가지
+  못하게 하고, `CoverEditor.handleStageReady` 가 첫 렌더 props 대신 현재 props 를 쓰며,
+  blocked 상태에서 "저장하지 않고 이동" 탈출구를 준다.
+- **방어 보강**: `gifts/[token]` 수령 시 `gift.sender_id = order.user_id = project.user_id`
+  3중 일치 검증(불일치는 토큰 없음과 동일한 404 — 0032 이전에 생겼을 수 있는 부정 gift 대비) ·
+  `photos/purge` storage 키 소유(prefix) 검증 + 행 삭제 후 참조 재조회로 선물 폴백 공유 키 보호
+  (DB→Storage 순서로 교정) · reviews POST 소유·배송완료 회귀 테스트 · 탈퇴 안내 문구 정합 ·
+  휴지통/복원 토스트가 서버 응답(`updated`/`restored`·`skippedLocked`)을 표시.
+- 🔧 **출석 20일 월 보너스(+1,000P) 미지급 버그 수정** — 아래 별도 항목.
+
+**출석 20일 보너스 수정 (`34a5897`)** — `attendance-reset` cron 이 중복 지급을 막으려고
+`point_ledger.reason='attendance_bonus'` + `memo LIKE '%YYYY-MM%'` 로 조회했는데, 같은 달
+**10일 달성 보너스**(+500P)가 같은 reason 에 `"YYYY-MM 10일 달성 보너스"` memo 로 기록된다.
+20일 이상 출석한 사용자는 거의 전부 10일 보너스를 이미 받았으므로 "이미 지급됨"으로 분류돼
+**월 보너스가 사실상 지급되지 않았다.** 적립 memo 와 조회 조건을 `monthly-bonus.ts` 헬퍼
+하나로 묶고 조회를 **memo 정확 일치**로 바꿨다. 과거 cron 이 남긴 20일 보너스도 같은 문구라
+그대로 중복으로 잡히므로 **소급 이중 지급은 없다.**
+
+> ⚠️ **운영 안내** — 수정 배포 이후부터 20일 보너스가 정상 지급된다.
+> **과거 미지급분의 소급 지급 여부는 오너 결정 사항**이다(런북 §오너 결정).
+
+**마이그레이션 실행 검증 (로컬 PGlite = PostgreSQL 18.3)** — `0001~0031` + `0033` + `0032` 를
+순차 적용·재적용하고 동작까지 확인: **295 PASS / FAIL 0**. 확인한 것에는 사용자 직접 업로드
+`42501` 거부 · service_role 업로드 허용 · anon photos DELETE `42501` · 적용 순서 독립성
+(`0032→0033` 과 `0033→0032` 의 최종 카탈로그 동일) · precheck/postcheck 기대값이 포함된다.
+
+**기준선 (`34a5897`, 2026-09-21 실측)** — typecheck 0 · lint 0 ·
+**vitest 78 파일 / 1,371 passed / 1 skipped** · `test:pdf` 4 케이스 OK(394ms) ·
+e2e 12 · a11y 25 · build 성공. `e2e:auth` 5 는 `bacadc1`·`34a5897` 두 배포본 모두 운영 URL 실측 통과.
+
+#### C. GitHub 저장소 설정 변경 (2026-09-17)
+
+- Dependabot **alerts + security updates 활성화**. 보안 PR 이 열려 있다(`next` 15.5.24 등) —
+  **머지 정책은 Next 16 전환 과제에서 함께 다룬다**(프레임워크 메이저를 보안 PR 로 끌려가지 않기 위함).
+- `main` 브랜치 보호: CI 3잡 필수 체크, force-push·삭제 금지, 관리자 우회 허용(`enforce_admins=false`).
+
+#### D. 이번 작업에서 새로 발견돼 **아직 미해결**인 것 (백로그 — 런북에도 등재)
+
+| 항목 | 현재 상태 |
+|---|---|
+| **`0032`·`0033` 운영 미적용** | 코드는 이미 배포됐다. `0033` 미적용 동안 결제는 폴백 경로(캡처 후 차감)로 동작하므로 **SEC-7(주문 간 동시 confirm 으로 같은 포인트·할인 이중 사용) 창이 남아 있다.** `0032` 미적용 동안은 `profiles.role` 권한 상승 표면이 열려 있다. 적용 절차는 런북 §9·§10 |
+| 결제 키가 남은 오래된 pending 주문 | `513ba21` 이후 결제 키가 바인딩된 pending 은 사용자 취소·만료 cron 대상에서 제외되고 관리자 취소도 토스가 DONE 이면 409 `PAYMENT_CAPTURED_OR_IN_PROGRESS` 다. **확정 또는 환불로 수렴시킬 관리자 도구가 없다** |
+| 잠긴 포토북의 TopBar 제목 입력 | 내지 목록 화면에서 편집 잠금이 걸린 프로젝트인데도 TopBar 제목 입력만 비활성화되지 않는다. **데이터 위험은 없다**(서버가 409 로 거부) — UI 일관성 문제 |
+| 선물 미리보기 GET 의 쓰기 부작용 | 소유 불일치를 판정하면 `gifts.status='expired'` 로 **쓰기**를 한다. 읽기 요청이 상태를 바꾸는 구조라 **claim 경로로 한정**하는 것이 권고안 |
+| `thumb_key` 고아 객체 회수 미검증 | 썸네일 키의 고아 객체를 `orphan-photos` cron 이 실제로 회수하는지 확인되지 않았다 |
+| `photo-originals` SELECT 정책 잔존 | 0032 는 쓰기 정책만 회수했다. 읽기는 유지 |
+| `lib/pdf/photos.ts` 원본 재검증 부재 | storage 에서 받은 원본을 sniff·sharp 재검증 없이 PDF 로 가져간다. 0032 로 바꿔치기 경로는 막혔지만 심층 방어는 없다 |
+| 출석 20일 보너스 **과거 미지급분** | 버그 자체는 `34a5897` 에서 수정됐다(소급 이중 지급 없음). **과거 미지급분의 소급 지급 여부는 오너 결정** |
+| 법정 고지·고객 문의 창구 | `/terms`·`/privacy`·`/refund` 는 있으나 전자상거래법 사업자 정보 고지와 문의 채널이 없다 — **사업자 정보 입력이 선행 조건(오너)** |
+| 관측성 | 에러 추적 SDK 미도입. 현재는 Vercel 로그 + `digest` 만 |
+| Preview 환경변수 0종 | 프리뷰 배포는 빌드만 통과하고 런타임 동작 불가 |
+| Next 16 전환 | 별도 계획 수립 완료(읽기 전용). 기준은 wave2 병합(`34a5897`)이 끝난 지금부터 착수 가능 |
 
 ---
 
@@ -478,6 +613,19 @@
   출석/선물 멱등, 리뷰 PII 제거, RLS 보강 등. 모든 커밋 **Vercel 클린 빌드 SUCCESS**.
 
 ### Supabase 마이그레이션 운영 적용 현황 (대시보드 수동 — MCP는 타 계정이라 불가)
+
+> **요약 (2026-09-21)**: `0001~0031` 운영 적용 완료. **`0032`·`0033` 은 미적용** —
+> 적용 절차는 [docs/LAUNCH-RUNBOOK.md](docs/LAUNCH-RUNBOOK.md) §9(0033)·§10(0032).
+> 두 파일 모두 로컬 PGlite(PostgreSQL 18.3) 하네스에서 적용·재적용·동작 검증 295 PASS / FAIL 0.
+
+- `0032_lock_client_writes.sql` — 클라이언트 직접 쓰기 봉쇄(profiles 권한 상승 차단 포함).
+  ⏳ **미적용.** precheck → 적용 → postcheck 순서를 지킬 것(런북 §10).
+  미적용 동안 `profiles.role` 권한 상승 표면이 열려 있다.
+- `0033_payment_credit_reservation.sql` — 결제 크레딧 선점 RPC.
+  ⏳ **미적용.** ⚠️ **짝이 되는 코드는 이미 배포됐다**(`88163d0`) — 앱은 기존 경로로 폴백하므로
+  장애는 없지만, 그동안 **SEC-7(주문 간 동시 confirm 이중 사용) 창이 남아 있다**(런북 §9).
+- `0031_tighten_public_grants.sql` — **적용 완료(2026-08-11, 검증됨)** — §0-8.
+- `0030_funnel_book_completed_once.sql` — **적용 완료(2026-08-09)**.
 - `0026_storige_pdf_storage.sql` — **적용 완료**(사용자 확인).
 - `0027_reviews_storage_rls.sql` — reviews 버킷 anon SELECT 차단. **적용 완료(2026-07-04)** — 사용자 확인.
 - `0028_concurrency_unique_indexes.sql` — gift/출석보너스 멱등 부분유니크 인덱스.
@@ -535,7 +683,7 @@
 | M7 관리자 콘솔 | ✅ 완료 | - | 책 사이즈 CRUD, 리소스, 주문, Excel |
 | M16 성장 기능 | ✅ 완료 | 2026-05-13 | 공유/선물/할인/추천/후기/출석/포인트/카카오 OAuth |
 | M17 모바일 PWA | ✅ 완료 | - | manifest, SW v2 (SWR), 카메라 업로드 |
-| M8 QA & 폴리싱 | 🟡 일부 완료 | 2026-05-13 | PDF 런타임·E2E·Lighthouse 측정 완료, WCAG 미측정 |
+| M8 QA & 폴리싱 | ✅ 완료 | 2026-08-03 | PDF 런타임·E2E·Lighthouse 측정 + **WCAG 2.1 AA 감사 완료**(axe-core 25/25, 위반 0) |
 | M-홈리뉴얼 | ✅ 완료 | 2026-05-14 | §3 특징 / §4 사이즈 카드를 사진 배경 + fade-up 진입 |
 | M-내비최적화 | ✅ 완료 | 2026-05-14 | staleTimes / loading 8개 / RPC 단일화 / SW SWR / legal 정적 |
 | M5-패치 | ✅ 완료 | 2026-05-13 | PDF borderRadius+shadow 2-pass 분리 |
@@ -608,10 +756,15 @@ Core Web Vitals(LCP/CLS/INP-대용 TBT) 모두 통과. Speed Index/TTI 는 클�
 ## 현재 배포 상태
 
 ```
-Next.js:  14.2.35 (2026-05-10 보안 패치 완료)
+운영 빌드:  main = 34a5897 (2026-09-21) — 미병합 브랜치 없음 (§0-11)
+Next.js:  14.2.35  ⚠️ 14.x 는 업스트림 보안 지원 종료. 잔존 advisory 는 SECURITY.md
 Supabase: vprifnztvlduhpuwgdau (Seoul / papascompany org)
 Vercel:   yohans-projects-de3234df / icn1 리전
-DB 마이그레이션: 0001 ~ 0029 운영 적용 (0023·0024: 2026-05-14 / 0026: Storige / 0027·0028: 2026-07-04 / 0029: 2026-07-31)
+DB 마이그레이션: 0001 ~ 0031 운영 적용 (0029: 2026-07-31 / 0030: 2026-08-09 / 0031: 2026-08-11)
+                 ⏳ 0032 · 0033 미적용 — 런북 §9·§10
+Cron (6종, 전부 활성): process-emails */5 · attendance-reset 0 15 · storige-retention 0 18 ·
+                    orphan-photos 0 20 · expire-pending-orders 30 * · reap-pdf-jobs */10 (UTC)
+                    전부 Bearer CRON_SECRET 필요(미설정이면 fail-closed)
 정적 라우트:    /terms, /privacy, /refund, /offline, /robots.txt, /sitemap.xml, /_not-found
 PWA Service Worker: v2 (Stale-While-Revalidate 공개 페이지)
 Router Cache:   staleTimes { dynamic: 30s, static: 180s }
@@ -619,7 +772,10 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ---
 
-## 운영 활성화를 위한 수동 작업 (코드 외)
+## 운영 활성화를 위한 수동 작업 (코드 외) — 기록용
+
+> **현재 해야 할 운영 액션의 정본은 [docs/LAUNCH-RUNBOOK.md](docs/LAUNCH-RUNBOOK.md) 다.**
+> 아래는 과거 완료분을 포함한 기록이다.
 
 ### 1순위 — 없으면 서비스 불가
 
@@ -652,65 +808,47 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ---
 
-## 다음 개발 우선순위 (권고) — 2026-08-06 갱신
+## 다음 개발 우선순위 — 2026-09-21 갱신
 
-### 🔴 운영 활성화 (코드 외 — 사용자 콘솔 작업)
+> **운영 액션(키 발급·콘솔 클릭·SQL)과 백로그의 유일한 정본은
+> [docs/LAUNCH-RUNBOOK.md](docs/LAUNCH-RUNBOOK.md) 다.** 여기에 목록을 다시 만들지 말 것
+> (사용자 지시, 2026-08-09). 이 절에는 **코드 작업**만 남긴다.
 
-**운영 env 실측 (2026-08-06, `vercel env ls`)** — Production 11종 설정됨:
-`NEXT_PUBLIC_SUPABASE_URL/ANON_KEY` · `SUPABASE_SERVICE_ROLE_KEY` · `NEXT_PUBLIC_APP_URL` ·
-`TOSS_SECRET_KEY`/`TOSS_CLIENT_KEY`/`NEXT_PUBLIC_TOSS_CLIENT_KEY` ·
-`STORIGE_API_URL`/`STORIGE_API_KEY`/`STORIGE_WORKER_API_KEY` · `CRON_SECRET`
+### 지금 우선순위가 가장 높은 것
 
-**미설정 3종 — 코드는 대비돼 있으나 기능이 꺼져 있다:**
+1. **`0033` 운영 적용** — 런북 §9. **코드가 이미 배포돼 있으므로 적용 전까지 SEC-7
+   (주문 간 동시 confirm 으로 같은 포인트·할인 이중 사용) 창이 열려 있다.**
+2. **`0032` 운영 적용** — precheck → 적용 → postcheck (런북 §10).
+   precheck 에서 악용 흔적이 나오면 **적용 전에** 템플릿 조치를 먼저 해야 한다.
+3. **QA-1 피해 조회** — 되돌리기 후 0객체로 저장된 내지·표지와 그중 결제된 건 (런북 §11).
+4. **`34a5897` 배포 후 운영 URL `pnpm e2e:auth` 재실행** — 직전 실측은 `bacadc1` 기준이다.
 
-| 미설정 env | 실제 동작 | 근거 |
+### 코드 백로그
+
+| # | 항목 | 메모 |
 |---|---|---|
-| ~~`TOSS_WEBHOOK_SECRET`~~ | **해소(2026-08-07)** — 토스가 커스텀 헤더를 못 보내 이 키로는 해결이 불가능했다. 헤더 게이트를 제거하고 재조회 검증 + rate limit 으로 대체(§0-5, [docs/OPS-ENV-STATUS.md](docs/OPS-ENV-STATUS.md)) | `app/api/payments/webhook/route.ts` |
-| `UPSTASH_REDIS_REST_URL`/`TOKEN` | rate limit **전면 fail-open**(가입 라우트 포함) | `lib/security/rate-limit.ts:13,21-23` |
-| `RESEND_API_KEY`/`EMAIL_FROM` | 메일 job **cancelled 처리 → 발송 0** | `lib/email/worker.ts:168-172` |
+| 1 | **Next.js 16 마이그레이션** | 잔존 advisory 23건이 전부 `>=15.x` 에서만 패치된다. 전환 계획 수립 완료 — wave2 병합이 끝났으므로 지금 착수 가능 |
+| 2 | **Fabric.js 7.x 마이그레이션** | SVG Stored XSS 2건(`<7.2.0`, `<7.4.0`). 현재 앱에 사용자 SVG 로드 경로는 없다 |
+| 3 | 결제 키가 남은 pending 주문의 관리자 복구 도구 | §0-11 D |
+| 4 | 선물 미리보기 GET 의 `expired` 쓰기 부작용 제거 | claim 경로로 한정 (적대 리뷰 비차단 후속) |
+| 5 | 잠긴 포토북 내지 목록의 TopBar 제목 입력 비활성화 | UI 일관성 — 데이터 위험 없음 |
+| 6 | `thumb_key` 고아 객체 cron 회수 경로 검증 | `orphan-photos` 실동작 미확인 |
+| 7 | `lib/pdf/photos.ts` 원본 재검증(sniff/sharp) | 심층 방어 |
+| 8 | 에러 추적 SDK 도입 | 현재는 Vercel 로그 + `digest` 만 |
+| 9 | PDF 100페이지 부하 검증 | 현재 1페이지 + photo+shadow 케이스만 |
+| 10 | 인증 E2E 의 CI 편입 | staging Supabase 신설이 선행 조건 |
+| 11 | PDF SSE 진행률 Redis 전환 | 멀티 인스턴스 라우팅 안정화 |
+| 12 | PDF CMYK / ICC 프로파일 | 인쇄소 요구 시 |
+| 13 | 인쇄소 자동 발주 연동 | `in_production` 진입 시 |
 
-1. ~~**Supabase 운영 DB 마이그레이션 적용**~~ ✅ **0001~0029 전부 완료**(0029: 2026-07-31)
-2. ~~**`TOSS_WEBHOOK_SECRET` 등록**~~ ✅ **불필요로 판명(2026-08-07)** — 등록해도 401 로 거부된다.
-   코드 수정으로 해소했고, 남은 것은 **토스 콘솔에 웹훅 URL 등록**뿐이다(헤더 설정 없음)
-3. **Kakao OAuth 콘솔 등록** — REST API Key + Client Secret → Supabase Provider Enable
-4. **Resend API Key + EMAIL_FROM** — 가입/주문 메일 실 발송(현재 발송 0)
-5. **(선택) Upstash Redis 구독 + env** — Rate limit 활성화 (미설정 시 fail-open, 보안 권장)
-6. **(로컬) `STORIGE_API_KEY`/`STORIGE_WORKER_API_KEY`** — `.env.local` 에 없어 Storige 연동 로컬 실증 불가
-
-### 🔧 로컬 개발 환경 — CLI 재인증 (운영 자동화용, 선택)
+### 로컬 개발 환경 — CLI 재인증 (선택)
 
 | 항목 | 증상 | 조치 |
 |---|---|---|
-| ~~Vercel CLI 토큰 만료~~ | 해소됨(2026-08-06 실측) | 조치 불필요 |
 | Supabase CLI 타 계정 로그인 | `Storywork` 조직만 표시, 100p 안 보임 | `supabase logout && supabase login` (papascompany 계정) |
 
-> 두 항목 모두 **운영에는 영향 없음** (배포=GitHub auto-deploy, 마이그레이션=SQL Editor 수동).
-> CLI 자동화가 필요할 때만 재인증.
-
-### 🟡 품질 보강
-
-5. ~~**WCAG 2.1 AA 접근성 감사**~~ ✅ **완료 (2026-08-03)** — axe-core 자동 감사(`pnpm test:a11y`),
-   위반 5종 수정 후 25/25 통과. 잔여: 키보드 only 회귀 시나리오, 로그인 이후 화면(에디터·주문·마이페이지)은
-   인증 픽스처가 필요해 7번과 함께 진행.
-6. ~~**Lighthouse Speed Index / TTI 개선**~~ ✅ **1차 완료 (2026-08-05)** — 실측 결과 병목은
-   JS 가 아니라 2MB 폰트였다(운영 TBT 80ms / TTI 12.4s). 폰트 core/ext 분할 + 홈 번들 48kB 감소로
-   로컬 기준 TTI·LCP -54%, 전송량 -60%. 잔여: 배포 후 운영 재측정, 홈 원격 이미지(Unsplash 16장)
-   최적화, ext 폰트가 필요한 페이지의 체감 확인.
-7. **인증된 사용자 E2E 시나리오 확장** — 현재 스모크는 익명/가드만. 업로드 → 에디터 → 주문 골든 플로우.
-   **선행 조건(사용자 액션)**: E2E 전용 테스트 계정 + CI 시크릿(`E2E_EMAIL`/`E2E_PASSWORD`) 등록,
-   또는 service_role 로 테스트 유저를 만드는 시드 스크립트 승인. 이게 정해지면 착수 가능.
-8. **PDF 100페이지 부하 검증** — Vercel Pro 플랜 가입 후 실측 (현재 1페이지 + photo+shadow 케이스만)
-9. ~~**PDF 회귀 테스트 CI 통합**~~ ✅ **완료 (2026-08-03)** — `pnpm test:pdf` + CI 잡.
-   darwin-arm64·linux-x64 baseline 모두 등록 완료 — 로컬·CI 양쪽에서 픽셀 회귀가 실제로 비교된다.
-10. **mypage 의 photo count RPC 운영 적용 후 실측** — 0024 마이그레이션 활성화 후 실제 단축 측정
-
-### 🟢 장기 / 인프라
-
-11. **Next.js 15/16 마이그레이션** — SECURITY.md 의 잔존 6건 CVE 완전 해소
-12. **Fabric.js 7.x 마이그레이션** — SVG Stored XSS CVE 사전 차단 (현재 직접 노출 경로 없음)
-13. **PDF SSE 진행률 Redis 전환** — 멀티 인스턴스에서 진행률 라우팅 안정화
-14. **PDF CMYK / ICC 프로파일** — 인쇄소 요구 시 sharp ICC pipeline 또는 ghostscript
-15. **인쇄소 자동 발주 연동** — 주문 상태 `in_production` 진입 시 자동 발주 API
+> 운영에는 영향 없음(배포=GitHub auto-deploy, 마이그레이션=SQL Editor 수동).
+> Vercel CLI 토큰은 2026-08-06 실측 정상 — 과거 "만료" 기록은 stale.
 
 ---
 
@@ -727,30 +865,43 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ## 기술 스택 버전 현황
 
-| 패키지 | 버전 | 최신 stable | 비고 |
+> 버전은 `package.json` 의 선언 범위와 `pnpm-lock.yaml` 의 실제 잠금 버전이다(2026-09-21 확인).
+
+| 패키지 | 선언 | 잠금(실제) | 비고 |
 |---|---|---|---|
-| next | 14.2.35 | 16.2.6 | 14.x 보안 패치 완료, 15/16 마이그레이션 계획 |
-| react | 18.3.1 | 19.x | 안정적 |
-| fabric | 6.4.3 | 7.3.1 | 7.x API 변경 큼, 별도 마이그레이션 |
-| @napi-rs/canvas | 0.1.55 | 최신 | 빌드 정상 |
-| @supabase/ssr | 0.5.2 | 최신 | - |
-| pdf-lib | 1.17.1 | 1.17.1 | 최신 |
-| resend | 6.12.3 | 최신 | - |
-| sharp | 0.33.5 | 최신 | - |
+| next | `14.2.35` | 14.2.35 | ⚠️ **14.x 는 사실상 지원 종료** — 잔존 advisory 23건의 patched 범위가 **전부 `>=15.x`** 다(14.x 용 패치가 나오지 않는다). SECURITY.md 참조. Next 16 전환 계획 수립 완료, 기준은 wave2 병합 이후 |
+| react | `^18.3.1` | 18.3.x | Next 16 전환 시 19 와 함께 검토 |
+| fabric | `^6.4.3` | **6.9.1** | 6.9.1 의 `toJSON()` 은 **인자를 무시한다** — 스냅샷은 `lib/fabric/snapshot.ts`(QA-1). 7.x 는 API 변경이 커서 별도 마이그레이션 |
+| @napi-rs/canvas | `^0.1.55` | 0.1.x | 빌드 정상 |
+| @supabase/ssr | `0.5.2` | 0.5.2 | 고정. Next 16 전환 웨이브에서 함께 올린다 |
+| pdf-lib | `^1.17.1` | 1.17.1 | 최신 |
+| resend | `^6.12.3` | 6.x | - |
+| sharp | `^0.35.4` | **0.35.4** | 2026-09-17 승격(SEC-1). vips 8.18.6 / heif 1.23.2. `next` 가 따로 끌어오지 않는다 |
+| vitest | `^2.0.5` | 2.x | Dependabot 이 4.x PR 을 열어둔 상태 — 머지 정책은 Next 16 전환과 함께 |
 
 ---
 
 ## 테스트 현황
 
+**기준선 — `main`(`34a5897`) 에서 2026-09-21 실측**
+
 ```
-유닛 테스트 (Vitest):     16 파일 / 170 tests / 1 skipped (2026-08-03)
-E2E 스모크 (Playwright):  desktop+mobile chromium 12/12 통과 (22.5s)
-접근성 (axe-core):       WCAG 2.1 AA 25/25 통과 · 위반 0 (2026-08-03)
-PDF 회귀(페이지수+해시): ✅ pnpm test:pdf — 4 케이스 / ~300ms
-PDF 런타임 검증:          pnpm verify:pdf — 40KB / 353ms / PDF 1.7
-Lighthouse 모바일:        Performance 81 · LCP 5.2s · TTI 5.2s · CLS 0 (2026-08-05, 3회 중앙값)
-CI (GitHub Actions):     ✅ typecheck·lint·test·pdf·build + e2e + a11y (2026-08-03 신설)
+타입·린트:                pnpm typecheck 0 에러 · pnpm lint 0 경고
+유닛 테스트 (Vitest):     78 파일 / 1,371 passed / 1 skipped (7.1s)
+E2E 스모크 (Playwright):  desktop+mobile chromium 12/12 통과
+접근성 (axe-core):       WCAG 2.1 AA 25 passed / 1 skipped · 위반 0
+PDF 회귀(페이지수+해시): pnpm test:pdf — 4 케이스 / 394ms (darwin-arm64)
+PDF 런타임 검증:          pnpm verify:pdf — 1페이지 스모크
+인증 골든 플로우:         pnpm e2e:auth — 5 passed (bacadc1 기준 운영 URL 실측, 1.8m)
+                          골든 플로우 2 + 편집 무결성 회귀 3(QA-1/QA-4/QA-2)
+                          34a5897 배포본 재실행도 5 passed (2026-09-21)
+빌드:                     pnpm build 성공
+Lighthouse 모바일:        Performance 88 · LCP 3.6s · CLS 0 (2026-08-07, prod 5회 중앙값 — §0-5)
+CI (GitHub Actions):     3잡 verify / e2e / a11y — main push·PR 마다. e2e:auth 는 운영 DB 를 쓰므로 미포함
 ```
+
+> ⚠️ `e2e:auth` 는 **운영 Supabase** 에 임시 계정·프로젝트를 만든다(`afterAll` 정리 포함).
+> CI 에 넣지 말 것. `service_role` 키가 없으면 자동 skip.
 
 테스트 실행:
 ```bash
@@ -761,6 +912,7 @@ pnpm test:pdf:update        # ⚠️ 렌더 변경이 의도된 경우에만 bas
 pnpm test:a11y              # axe-core WCAG 2.1 AA 감사
 pnpm verify:pdf             # PDF 파이프라인 런타임 1페이지 검증
 pnpm e2e                    # Playwright 스모크 (자동 dev 서버)
+pnpm e2e:auth               # 인증 골든 플로우 + 편집 무결성 (운영 Supabase)
 PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e   # 운영 대상 스모크
 ```
 

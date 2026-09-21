@@ -1,6 +1,8 @@
-# 운영 환경변수 현황과 조치 (2026-08-08 실측)
+# 운영 환경변수 현황과 조치
 
-`vercel env ls production` 기준 Production 11종 설정됨:
+> 최종 갱신: **2026-09-21** (env 실측은 2026-08-08 `vercel env ls production` 기준 — 이후 변경 없음)
+
+Production 11종 설정됨:
 `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` /
 `NEXT_PUBLIC_APP_URL` / `TOSS_SECRET_KEY` / `TOSS_CLIENT_KEY` / `NEXT_PUBLIC_TOSS_CLIENT_KEY` /
 `STORIGE_API_URL` / `STORIGE_API_KEY` / `STORIGE_WORKER_API_KEY` / `CRON_SECRET`.
@@ -9,8 +11,10 @@
 | env | 현재 상태 | 실제 동작 |
 |---|---|---|
 | ~~`TOSS_WEBHOOK_SECRET`~~ | **삭제됨(2026-08-07)** | 코드가 더 이상 읽지 않는다 — 아래 §1 |
-| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | 미설정 | rate limit 5종 전면 fail-open |
-| `RESEND_API_KEY` / `EMAIL_FROM` | 미설정 | 발송 0 — 단 **큐는 보존**된다(키 등록 시 밀린 메일까지 자동 발송) |
+| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | 미설정 | rate limit 5종 전면 fail-open — §2 |
+| `RESEND_API_KEY` / `EMAIL_FROM` | 미설정 | 발송 0 — 단 **큐는 보존**된다(키 등록 시 밀린 메일까지 자동 발송) — §3 |
+| `CRON_SECRET` | ✅ 설정됨 | **지우면 모든 cron 이 401 로 막힌다** — §4 |
+| `NEXT_PUBLIC_KAKAO_ENABLED` | 미설정 | 로그인 화면의 카카오 버튼 숨김(프로바이더도 미설정) |
 
 ---
 
@@ -34,13 +38,14 @@
 결제 이벤트에는 서명 헤더가 없고, 진위 검증 수단으로 문서가 제시하는 것은
 가상계좌(`DEPOSIT_CALLBACK`)의 **본문** `secret` 필드뿐이다.
 
-우리 코드는 `x-webhook-secret` / `x-toss-webhook-secret` 헤더를 요구한다
-([app/api/payments/webhook/route.ts:70-85](../app/api/payments/webhook/route.ts#L70)). 따라서:
+**2026-08-07 이전** 우리 코드는 `x-webhook-secret` / `x-toss-webhook-secret` 헤더를 요구했다
+(`app/api/payments/webhook/route.ts`). 따라서 당시에는:
 
-- **미설정(현재)** → production 분기에서 500 `WEBHOOK_NOT_CONFIGURED`
+- **미설정** → production 분기에서 500 `WEBHOOK_NOT_CONFIGURED`
 - **설정하면** → 토스가 그 헤더를 못 보내므로 401 `WEBHOOK_UNAUTHORIZED`
 
-**어느 쪽으로 두어도 토스 웹훅은 통과하지 못한다.** env 등록은 조치가 아니다.
+**어느 쪽으로 두어도 토스 웹훅은 통과하지 못했다.** env 등록은 조치가 아니었다.
+그래서 헤더 게이트를 제거했다(아래 §적용한 조치) — 지금 코드에는 이 헤더 판정이 없다.
 
 ### 지금 실제로 잃고 있는 것
 
@@ -52,8 +57,12 @@
 - confirm 이 네트워크 실패로 중단된 결제의 마지막 보정 수단이 없어짐
 
 다만 **대체 경로가 존재한다**: 관리자 콘솔의 수동 상태 전이
-([app/api/admin/orders/[id]/transition/route.ts:143](../app/api/admin/orders/%5Bid%5D/transition/route.ts#L143))가 동일하게
-`restoreOrderCredits` 를 호출한다. 즉 데이터 유실이 아니라 **운영 수작업 + 누락 위험**이다.
+(`app/api/admin/orders/[id]/transition/route.ts`)가 동일하게 `restoreOrderCredits` 를 호출한다.
+즉 데이터 유실이 아니라 **운영 수작업 + 누락 위험**이다.
+
+> 2026-09-21(`34a5897`)부터 **`/admin` 주문 상세의 "전액 환불" 버튼**이 토스 취소 API 를 직접
+> 호출한다(`app/api/admin/orders/[id]/refund/route.ts`). 토스 콘솔을 거치지 않고 앱에서 환불하면
+> 상태 전이·크레딧 복원·감사 로그·고객 메일이 한 번에 처리되므로 웹훅 의존이 더 줄어든다.
 
 ### 적용한 조치 (A안, `ee261d8`)
 
@@ -71,8 +80,8 @@ rate limit 프리셋 `payment-webhook`(분당 60회)으로 막는다.
 
 ## 2. Rate limit (Upstash) — fail-open
 
-`lib/security/rate-limit.ts:21-23` 에서 URL/TOKEN 이 없으면 `ENABLED=false` 가 되고,
-`enforceRateLimit` 이 항상 `success:true, disabled:true` 를 돌려준다(`:92-100`).
+`lib/security/rate-limit.ts:23` 에서 URL/TOKEN 이 없으면 `ENABLED=false` 가 되고,
+`enforceRateLimit` 이 항상 `success:true, disabled:true` 를 돌려준다(`:94-98`).
 현재 무력화된 프리셋 5종:
 
 | 프리셋 | 의도한 한도 | 무력화 시 위험 |
@@ -100,20 +109,27 @@ rate limit 프리셋 `payment-webhook`(분당 60회)으로 막는다.
 (`{ deferred: true, queued: N }`). 잡은 `pending` 으로 남아 있다가 키를 등록하는 순간
 다음 cron(5분)에 `scheduled_at` 순서대로 발송된다 — **밀린 주문 확인·배송 알림도 함께 나간다.**
 
+> **cron 주기 정정 (2026-09-17, `f605028`)** — 그전까지 `vercel.json` 의 `process-emails` 스케줄이
+> Hobby 플랜 우회 설정인 `"0 9 * * *"` 로 남아 있었다. 배치 10건 × 하루 1회 = **하루 10통 상한**이
+> 실제 동작이었다(팀은 Pro 플랜). `*/5 * * * *` 로 복원했고, 워커가 시간 예산 안에서 배치를 반복
+> 소진한다. 후속(`205deba`)으로 즉시 발송과 워커가 같은 Resend `Idempotency-Key` 를 쓰고,
+> 실패 백오프(5분 → 30분 → 2시간)와 `sending` 고착 복구(10분 초과 시 `failed` 로 되돌림)가 들어갔다.
+
 > 2026-08-08 이전 구현은 키가 없으면 잡을 `cancelled` 로 종결시켰다. 그 시기에 생성된
 > 잡은 되살아나지 않으므로, 필요하면 관리자 콘솔의 `POST /api/admin/emails/[id]/retry`
 > 로 개별 재시도해야 한다. 이후 생성분은 자동으로 복구된다.
 
 발송되지 않고 있는 메일 6종:
 
-| 트리거 | 위치 |
+| 트리거 | 위치 (`enqueueEmail` 호출 지점) |
 |---|---|
-| 주문 결제 완료 | `app/api/payments/confirm/route.ts:396` |
-| 약관 동의(가입 안내) | `app/api/auth/agree/route.ts:53` |
-| 주문 상태 변경(발송·배송 등) | `app/api/admin/orders/[id]/transition/route.ts:217` |
-| 선물 수령 | `app/api/gifts/[token]/route.ts:613` |
-| 선물 발송 알림 | `app/api/orders/[id]/gift/route.ts:191` |
-| 회원 탈퇴 확인 | `app/api/account/delete/route.ts:148` |
+| 주문 결제 완료 | `lib/orders/finalize-paid.ts` (confirm·웹훅이 공유하는 확정 함수) |
+| 약관 동의(가입 안내) | `app/api/auth/agree/route.ts` |
+| 주문 상태 변경(발송·배송 등) | `app/api/admin/orders/[id]/transition/route.ts` |
+| 선물 수령 | `app/api/gifts/[token]/route.ts` |
+| 선물 발송 알림 | `app/api/orders/[id]/gift/route.ts` |
+| 회원 탈퇴 확인 | `app/api/account/delete/route.ts` |
+| 관리자 전액 환불 | `app/api/admin/orders/[id]/refund/route.ts` |
 
 영향 판정: **선물하기는 링크(`shareUrl`)를 API 응답으로 돌려주므로 기능 자체는 동작**하고,
 나머지는 고객 알림 누락이다. 가장 체감이 큰 것은 주문 완료·배송 알림이다.
@@ -131,6 +147,34 @@ rate limit 프리셋 `payment-webhook`(분당 60회)으로 막는다.
 
 ---
 
+## 4. Cron 인증 — `CRON_SECRET` 은 필수다 (fail-closed)
+
+`lib/security/cron-auth.ts` 가 `app/api/cron/**` 의 공용 가드다(2026-09-17 `f605028`, SEC-14).
+그전에는 **위조 가능한 `x-vercel-cron` 헤더를 신뢰**했고 같은 판정이 4곳에 복제돼 있었다.
+
+규칙:
+
+1. `CRON_SECRET` 이 있으면 환경과 무관하게 `Authorization: Bearer <CRON_SECRET>` 일치만 통과한다
+   (SHA-256 다이제스트끼리 `timingSafeEqual`). Vercel 이 cron 호출에 이 헤더를 자동으로 붙인다.
+2. `CRON_SECRET` 이 없는데 배포 런타임이면 **무조건 거부**한다 — env 가 빠진 배포가 곧
+   "누구나 GET 한 번으로 삭제 cron 실행"이 되지 않게 하기 위함이다.
+3. `CRON_SECRET` 이 없는 로컬 `next dev` 에서만 `x-vercel-cron: 1` 수동 호출을 허용한다.
+
+> ⚠️ **운영에서 `CRON_SECRET` 을 지우면 메일 발송·출석 리셋·Storige 보존 정리·고아 사진 정리가
+> 전부 멈춘다.** `/admin` "서비스 런치 체크" 카드가 이 상태를 차단 항목으로 표시한다.
+
+`/api/health` 도 같은 Bearer 토큰으로 상세 응답(`db`·`env`·`warning`)을 연다.
+비인증 응답은 `{ ok, status, service, ts }` 뿐이다(SEC-19).
+
+수동 호출 예:
+
+```bash
+curl -s "https://100pbooks.vercel.app/api/cron/process-emails" \
+  -H "Authorization: Bearer <CRON_SECRET>"
+```
+
+---
+
 ## 요약 — 지금 필요한 결정
 
 | 항목 | 상태 | 남은 일 |
@@ -139,6 +183,11 @@ rate limit 프리셋 `payment-webhook`(분당 60회)으로 막는다.
 | Resend 키·도메인 | ⏳ 미설정 | 키 등록만 하면 **밀린 메일까지 자동 발송** (코드 0) |
 | Upstash 구독 | ⏳ 미설정 | 구독 + 연결 시 자동 활성화 (코드 0, 비용 발생) |
 | Preview 환경변수 | ⏳ 0종 | 프리뷰에서 런타임 검증이 필요하면 Production 값 복제 |
+| `CRON_SECRET` | ✅ 설정됨 | **유지할 것** — 지우면 모든 cron 정지 |
 
-세 가지 모두 **코드 변경 없이 env·콘솔 설정만으로 켜진다.** 지금 열어도 결제·주문·인쇄
+env 항목은 모두 **코드 변경 없이 env·콘솔 설정만으로 켜진다.** 지금 열어도 결제·주문·인쇄
 경로는 동작하며, 켜지지 않은 것은 고객 알림 메일과 남용 방지 한도다.
+
+> **DB 쪽에는 별도 대기 항목이 있다** — 마이그레이션 `0032`·`0033` 이 운영에 미적용이다.
+> 이건 env 가 아니라 SQL 적용 작업이며 절차는
+> [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md) §9·§10 에 있다.

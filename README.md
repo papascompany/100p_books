@@ -9,6 +9,10 @@
 [![Fabric.js 6](https://img.shields.io/badge/Fabric.js-6.x-FE6E3A)](http://fabricjs.com/)
 [![License](https://img.shields.io/badge/license-Private-lightgrey)](#)
 
+> 최종 갱신: **2026-09-21** · 운영 빌드 `34a5897` (미병합 브랜치 없음)
+> 현황은 [STATUS.md](STATUS.md), 남은 운영 액션은 [docs/LAUNCH-RUNBOOK.md](docs/LAUNCH-RUNBOOK.md),
+> 보안 상태는 [SECURITY.md](SECURITY.md).
+
 ---
 
 ## ✨ 핵심 기능
@@ -37,11 +41,11 @@
 | 프레임워크 | **Next.js 14 (App Router)** + TypeScript 5.5 |
 | 스타일 | **Tailwind CSS** + shadcn/ui + Pretendard / Playfair Display |
 | 상태 | Zustand |
-| 에디터 | **Fabric.js 6.x** (직렬화·제스처·히스토리·스냅·폰트 동적 로드) |
+| 에디터 | **Fabric.js 6.9.x** (직렬화·제스처·히스토리·스냅·폰트 동적 로드) |
 | DB / Auth / Storage | **Supabase** (Postgres + RLS + Storage 4 버킷) |
 | 결제 | **TossPayments** SDK |
 | PDF | **`@napi-rs/canvas` + `pdf-lib` + `@pdf-lib/fontkit`** (자체 렌더러, Fabric 서버 의존 X) |
-| 이미지 | sharp (서버) + heic2any/exifr (클라) |
+| 이미지 | sharp 0.35.x (서버 — 디코드 전 매직바이트 판정 `lib/image/sniff.ts`) + heic2any/exifr (클라) |
 | 송장 | exceljs |
 | 이메일 | Resend SDK |
 | 테스트 | Vitest 2 + jsdom (유닛) · **Playwright 1.60** (E2E desktop+mobile) |
@@ -216,16 +220,25 @@ pnpm build        # production 빌드
 
 ## 📊 빌드/품질 현황
 
+> 2026-09-21 실측 (main = `34a5897`)
+
 | 검증 | 결과 |
 |---|---|
 | `pnpm typecheck` | ✅ 에러 0건 |
-| `pnpm test` | ✅ 15 파일 / 153 통과 / 1 skip |
-| `pnpm build` | ✅ 31 라우트 (정적 7 · 동적 24) production 성공 |
-| `pnpm verify:pdf` | ✅ 2 페이지 (text+rect / photo+borderRadius+shadow) · 67KB / 834ms · PDF 1.7 |
-| `pnpm e2e` (chromium desktop+mobile) | ✅ 12/12 통과 (5.7s) |
-| Lighthouse 모바일 (운영) | ✅ Performance 97 · LCP 1.5s · CLS 0 |
+| `pnpm lint` | ✅ 경고 0건 |
+| `pnpm test` | ✅ 78 파일 / 1,371 통과 / 1 skip |
+| `pnpm build` | ✅ production 성공 |
+| `pnpm test:pdf` | ✅ 4 케이스 (구조 2 + 픽셀 해시 4) / 394ms |
+| `pnpm verify:pdf` | ✅ PDF 파이프라인 런타임 1페이지 검증 |
+| `pnpm e2e` (chromium desktop+mobile) | ✅ 12/12 통과 |
+| `pnpm test:a11y` (axe-core WCAG 2.1 AA) | ✅ 25 통과 / 1 skip · 위반 0 |
+| `pnpm e2e:auth` (⚠️ 운영 Supabase) | ✅ 5 통과 — 골든 플로우 2 + 편집 무결성 회귀 3 (`34a5897` 배포본 대상 2026-09-21 실측) |
+| Lighthouse 모바일 (운영, 2026-08-07 5회 중앙값) | Performance 88 · LCP 3.6s · CLS 0 |
 
-상세: [STATUS.md](STATUS.md) · [QA_REPORT.md](QA_REPORT.md)
+CI(GitHub Actions)는 main push·PR 마다 `verify` / `e2e` / `a11y` 3잡을 돌린다.
+`e2e:auth` 는 운영 Supabase 에 임시 계정을 만들므로 **CI 에 포함하지 않는다**.
+
+상세: [STATUS.md](STATUS.md) · [SECURITY.md](SECURITY.md) · [QA_REPORT.md](QA_REPORT.md)
 
 ---
 
@@ -300,7 +313,9 @@ vercel env add NEXT_PUBLIC_APP_URL production
 1. https://developers.kakao.com/ 에서 앱 생성
 2. Redirect URI: `https://<프로젝트-ref>.supabase.co/auth/v1/callback`
 3. Supabase Auth Providers → Kakao 에 client id/secret 입력
-4. `app/(auth)/login/LoginForm.tsx` 의 카카오 버튼 주석 해제
+4. Vercel env 에 `NEXT_PUBLIC_KAKAO_ENABLED=1` 등록 후 재배포 → 버튼 노출
+   (프로바이더 미설정 상태에서 죽은 버튼이 보이지 않도록 게이트로 숨겨 둔 것이다 —
+   소스 주석 해제가 아니다. 상세: [docs/LAUNCH-RUNBOOK.md](docs/LAUNCH-RUNBOOK.md) §5)
 
 ### 6. 배포
 - GitHub 연동: `main` 푸시 시 자동 배포
@@ -310,7 +325,13 @@ vercel env add NEXT_PUBLIC_APP_URL production
 
 ### 7. 도메인 연결 / 헬스체크
 - Vercel Domains 에서 사용자 도메인을 추가하고 `NEXT_PUBLIC_APP_URL` 갱신
-- 헬스체크: `GET /api/health` — `{ ok, db, env }` 반환. 실패 시 503
+- 헬스체크: `GET /api/health`
+  - **비인증**: `{ ok, status: "ok"|"degraded", service, ts }` 만 반환한다.
+    어떤 env 가 비었는지·DB 오류 원문은 정찰 정보라 공개하지 않는다(상태 코드 200/503 은 그대로라
+    외부 업타임 모니터는 영향 없음).
+  - **`Authorization: Bearer <CRON_SECRET>`** 또는 로컬 `next dev`: `db`·`env`·`warning` 까지 포함.
+- cron 엔드포인트(`/api/cron/*`)도 같은 Bearer 토큰을 쓰며 **`CRON_SECRET` 이 없으면 fail-closed** 다
+  (`x-vercel-cron` 헤더는 위조 가능해 인증 수단이 아니다).
 
 ### 8. 배포 후 모니터링
 - Vercel Analytics / BotID
@@ -328,7 +349,11 @@ vercel env add NEXT_PUBLIC_APP_URL production
 | `/refund` | 교환·환불 정책 (제작 시작 전 100% 환불, 이후 불량/사고만 교환) |
 | `/mypage/account` | 계정 관리 + 회원 탈퇴 (이메일 재입력 + 익명화 RPC) |
 
-회원 탈퇴 시 `profiles` 는 hard delete 하지 않고 `anonymize_account()` RPC 로 익명화하며, `auth.users` 는 service_role admin client 로 삭제합니다 (전자상거래법 5년 보존 의무 준수).
+회원 탈퇴 시 `profiles` 는 hard delete 하지 않고 `anonymize_account()` RPC 로 익명화합니다 (전자상거래법 5년 보존 의무 준수).
+`auth.users` 는 **soft delete + global signOut** 으로 처리합니다 — 주문 이력이 있으면 FK 제약으로 hard delete 가
+실패하는데도 200 을 반환하던 문제가 있어 2026-09-17(`55020ab`)에 바꿨습니다. 탈퇴 계정은 `deleted_at` 으로
+표시되고 `requireActiveUser` 가 로그인·주문·콘텐츠 쓰기를 차단합니다. 주문되지 않은 프로젝트·사진·공유 링크는
+탈퇴 시 파기하고, 주문된 제작 자료는 거래기록 보존 목적으로 남깁니다.
 
 ---
 
