@@ -826,7 +826,8 @@ Cron (6종, 전부 활성): process-emails */5 · attendance-reset 0 15 · stori
                     orphan-photos 0 20 · expire-pending-orders 30 * · reap-pdf-jobs */10 (UTC)
                     전부 Bearer CRON_SECRET 필요(미설정이면 fail-closed)
 정적 라우트:    /terms, /privacy, /refund, /offline, /robots.txt, /sitemap.xml, /_not-found
-PWA Service Worker: v2 (Stale-While-Revalidate 공개 페이지)
+PWA Service Worker: CACHE_NAME v3 (Stale-While-Revalidate 공개 페이지 — 전략은 그대로,
+                    Next 16 배포 스큐 대비로 캐시 이름만 v2 → v3, §0-12)
 Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 ```
 

@@ -78,11 +78,12 @@
 
 Next 16 전환 후 **36건 — low 3 / moderate 8 / high 24 / critical 1.**
 전환 직전(`34a5897`)은 60건(low 5 / moderate 20 / high 32 / critical 3)이었다.
-**`next` 23건이 전부 해소**됐고, 전체(dev 포함) `pnpm audit` 은 43건이다.
+**`next` 23건이 전부 해소**됐고, 전체(dev 포함) `pnpm audit` 은 43건이다
+(low 3 / moderate 13 / high 25 / critical 2 — 늘어난 critical 1건은 dev 전용 경로).
 
 | 패키지 | 건수 | 유입 경로 | 패치 | 현재 앱 노출 |
 |---|---|---|---|---|
-| `tar` | **12** (critical 1 · high 8 · moderate 3) | `fabric@6.9.1 > canvas@2.11.2 > @mapbox/node-pre-gyp > tar@6.2.1` | `>=7.5.19` | 전부 **아카이브 추출** 취약점이다(경로 탈출·심링크·압축 DoS). 이 `tar` 는 fabric 의 **선택적 Node canvas 백엔드를 설치할 때** 쓰이고, 앱은 **fabric 을 서버에서 import 하지 않으며**(CLAUDE.md 금지 규약) PDF 렌더러는 `@napi-rs/canvas` 다 → **런타임 경로 없음**. 해소는 fabric 7.x 전환 |
+| `tar` | **12** (critical 1 · high 8 · moderate 3) | `fabric@6.9.1 > canvas@2.11.2`(fabric 의 **optionalDependencies**) `> @mapbox/node-pre-gyp > tar@6.2.1` | `>=7.5.19` | 전부 **아카이브 추출** 취약점이다(경로 탈출·심링크·압축 DoS). `tar` 는 node-pre-gyp 가 **설치 시점에** 네이티브 바이너리를 풀 때 쓰고, 앱은 **fabric 을 서버에서 import 하지 않으며**(CLAUDE.md 금지 규약) PDF 렌더러는 `@napi-rs/canvas` 다 → **앱 런타임 경로 없음**. 해소는 fabric 7.x 전환 |
 | `brace-expansion` | 6 (high) | `exceljs@4.4.0 > archiver > glob/minimatch` | `>=2.1.2` | glob 패턴 ReDoS/OOM. 앱은 `lib/admin/excel.ts` 의 **송장 Excel 생성**에서만 exceljs 를 쓰고 사용자 입력이 glob 패턴으로 들어가는 경로가 없다 |
 | `nanoid` | 3 (high) | 직접 의존 `nanoid@5.1.11` 1건 + `tailwindcss > postcss > nanoid@3` 2건 | `>=5.1.16` | "size 가 음수/0 일 때 무한 루프". 앱의 호출은 전부 **리터럴 양수**(`nanoid(8/10/12/16)`)라 사용자 입력이 size 로 들어가지 않는다. tailwind 경로는 빌드 타임 |
 | `ws` | 2 (high 1 · moderate 1) | `@supabase/ssr > supabase-js > @supabase/realtime-js > ws@8.20.0` | `>=8.21.0` | **앱은 Supabase Realtime 채널을 쓰지 않는다**(`.channel(` 사용처 0건) → 연결 자체가 생기지 않는다. supabase-js 업그레이드로 해소 |
