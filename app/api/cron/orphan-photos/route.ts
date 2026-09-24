@@ -225,6 +225,14 @@ export async function GET(req: Request) {
       plan.thumbs.toDelete,
     );
 
+    // 되돌릴 수 없는 삭제라 매 실행 요약을 런타임 로그에 남긴다 — cron 응답 본문은 로그에 없고
+    // Vercel 로그 보존이 짧아, 이 한 줄이 "언제 몇 개를 지웠나"의 유일한 사후 근거다.
+    console.info(
+      `[cron/orphan-photos] 삭제 ${ORIGINALS_BUCKET}=${deletedOriginals}/${plan.originals.orphans}` +
+        ` ${THUMBS_BUCKET}=${deletedThumbs}/${plan.thumbs.orphans}` +
+        ` scanned=${scanned} truncated=${truncated}`,
+    );
+
     return ok({
       dryRun: false,
       scanned,
