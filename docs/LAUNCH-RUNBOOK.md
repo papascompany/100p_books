@@ -14,7 +14,7 @@
 | 결제(토스)·인쇄(Storige)·DB(Supabase)·CRON 키 | ✅ 설정 완료 | — |
 | 인쇄용 한글 폰트 | ✅ **시딩 완료**(Pretendard, 2026-08-09) | — |
 | 책 사이즈 3종 | ✅ 활성 | — |
-| 전체 테스트/CI/Vercel 빌드 | ✅ green (main `4346c0b` — Next.js 16.3.5 + React 19.3.0 전환 배포 완료) | — |
+| 전체 테스트/CI/Vercel 빌드 | ✅ green (main `2d403ae` — Next.js 16.3.5 + React 19.3.0, 리뷰 후속 3건 반영) | — |
 | 마이그레이션 0030 · 0031 | ✅ **적용 완료**(2026-08-09 / 08-11) | — |
 | **QA-1 피해 조회** | 🔺 **§11 — 읽기 전용 SQL 3개, 먼저 할 것** | 아니오 (이미 발생한 피해 확인) |
 | **마이그레이션 0033 (결제 크레딧 선점)** | 🔺 **§9 — 코드가 먼저 배포됐다** | 아니오 (폴백 동작). 단 적용 전까지 **SEC-7 이중 사용 창**이 열려 있다 |
@@ -211,7 +211,7 @@ pnpm e2e:auth
 
 **2026-09-21 기준선** (`main` = `4346c0b`, Next 16 전환 후): typecheck 0 ·
 lint **0 error / 41 warning**(38건이 `react-hooks` v7 신규 규칙 — 전환 방침상 warn 유지) ·
-vitest **78 파일 / 1,371 passed / 1 skipped** · `test:pdf` 4 케이스 · e2e 12 · a11y 25 ·
+vitest **78 파일 / 1,371 passed / 1 skipped**(`2d403ae` 에서는 82 파일 / 1,427) · `test:pdf` 4 케이스 · e2e 12 · a11y 25 ·
 build 성공(Turbopack) · `e2e:auth` **5 passed**(골든 플로우 2 + 편집 무결성 3 — 운영 URL 실측.
 `bacadc1`·`34a5897`·`4346c0b` 세 배포본에서 각각 통과).
 
@@ -376,6 +376,26 @@ select o.id as order_id, o.status, o.paid_at, o.project_id
 
 ---
 
+## §12. 고아 사진 정리 cron 점검 (읽기 전용 dryRun)
+
+`/api/cron/orphan-photos` 는 매일 20:00 UTC 에 24시간 지난 **참조 없는** 사진 객체를 지운다.
+`c931801`(09-21)부터 썸네일 버킷(`photo-thumbs`)도 회수 대상이고, 판정은 `photos.storage_key` /
+`photos.thumb_key` 실제 참조로만 한다. 09-21~23 자동 실행은 성공(200, 삭제 실패 0건)했지만 그 시점엔
+**삭제 건수를 로그에 남기지 않았다** — `2d403ae` 부터는 매 실행 `[cron/orphan-photos] 삭제 …` 한 줄이
+Vercel 런타임 로그에 남는다.
+
+남은 규모 확인(삭제하지 않는다). `CRON_SECRET` 은 Vercel → Settings → Environment Variables 에서 확인:
+
+```bash
+read -rs CRON_SECRET && curl -s -H "Authorization: Bearer $CRON_SECRET" "https://100pbooks.vercel.app/api/cron/orphan-photos?dryRun=1" | python3 -m json.tool
+```
+
+`read -rs` 뒤 값을 붙여넣고 엔터(화면에 표시되지 않음). 응답의 `buckets["photo-originals" | "photo-thumbs"]`
+에서 `orphans`·`wouldDelete` 를 본다. `truncated: true` 면 한 번에 다 못 본 것이라 다음 실행이 이어받는다.
+401 `UNAUTHORIZED` 는 값이 틀렸거나 자리표시자를 그대로 보낸 경우다.
+
+---
+
 ## 운영 규칙 (오픈 후 지켜야 할 것)
 
 - **환불은 `/admin` 주문 상세의 "전액 환불" 버튼을 쓴다.**
@@ -431,7 +451,7 @@ select o.id as order_id, o.status, o.paid_at, o.project_id
 | **결제 키가 남은 오래된 pending 주문** | 사용자 취소·만료 cron 대상에서 제외되고 관리자 취소도 토스가 DONE 이면 409 다. 확정 또는 환불로 수렴시킬 **관리자 도구가 없다** — 현재는 토스 콘솔 + `/admin` 수동 전이 |
 | 선물 미리보기 GET 의 쓰기 부작용 | 소유 불일치 판정 시 `gifts.status='expired'` 로 쓰기를 한다. 읽기 요청이 상태를 바꾸는 구조라 **claim 경로로 한정** 권고 (적대 리뷰 비차단 후속) |
 | 잠긴 포토북의 TopBar 제목 입력 | 내지 목록 화면에서 잠금인데도 제목 입력만 비활성화되지 않는다. **데이터 위험 없음**(서버가 409 로 거부) — UI 일관성 |
-| `thumb_key` 고아 객체 회수 미검증 | 썸네일 키 고아 객체를 `orphan-photos` cron 이 실제로 회수하는지 확인되지 않았다 |
+| ~~`thumb_key` 고아 객체 회수 미검증~~ | ✅ `c931801` — 두 버킷 각각 스캔, 실제 참조로만 판정(추측 삭제로 살아 있는 썸네일을 지울 수 있던 결함도 함께 수정). 삭제 건수 로그는 `2d403ae` |
 | `photo-originals` SELECT 정책 잔존 | 0032 는 쓰기만 회수했다 |
 | `lib/pdf/photos.ts` 원본 재검증 부재 | 0032 로 바꿔치기 경로는 막았으나 PDF 조립 시 재검증은 없다(심층 방어) |
 | 관측성 | 에러 추적 SDK 미도입 — 운영 예외를 Vercel 로그 + `digest` 로만 본다 |

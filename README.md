@@ -229,7 +229,7 @@ pnpm build        # production 빌드 (Turbopack)
 |---|---|
 | `pnpm typecheck` | ✅ 에러 0건 |
 | `pnpm lint` | ✅ 0 error / 41 warning (38건이 `react-hooks` v7 신규 규칙 — 전환 방침상 warn 유지) |
-| `pnpm test` | ✅ 78 파일 / 1,371 통과 / 1 skip (전환 전후 동일) |
+| `pnpm test` | ✅ 82 파일 / 1,427 통과 / 1 skip (`2d403ae`, 2026-09-24) |
 | `pnpm build` | ✅ production 성공 (Turbopack · 라우트 121개 렌더링 모드 변경 0) |
 | `pnpm test:pdf` | ✅ 4 케이스 (구조 2 + 픽셀 해시 4) / 394ms |
 | `pnpm verify:pdf` | ✅ PDF 파이프라인 런타임 1페이지 검증 |

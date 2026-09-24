@@ -12,7 +12,7 @@
 > 최종 업데이트: 2026-09-21
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `4346c0b` — **Next.js 16.3.5 + React 19.3.0 전환 운영 배포 완료**(§0-12).
+> 운영 빌드: `2d403ae` — Next.js 16.3.5 + React 19.3.0(§0-12) 위에 리뷰 후속 3건(§0-13).
 > 그 직전 `34a5897` 까지 2026-09-17~21 보안·결제·편집 무결성 작업 전량 반영(§0-11).
 > **미병합 브랜치 없음.**
 > 운영 URL `pnpm e2e:auth` 5 passed (골든 플로우 + 편집 무결성 QA-1/4/2) —
@@ -24,7 +24,22 @@
 
 ---
 
-## 🆕 최근 작업 (2026-09-17 ~ 09-21)
+## 🆕 최근 작업 (2026-09-17 ~ 09-24)
+
+### 0-13. 적대 리뷰 후속 3건 (2026-09-21~24) — 운영 배포 완료
+
+| 커밋 | 내용 |
+|---|---|
+| `a41e195` | 잠긴(결제 완료) 포토북의 **내지 목록 제목 입력 비활성화** — 표지와 잠금 UX 통일. 읽기 전용 배너 3벌을 `components/editor/ReadOnlyNotice.tsx` 로, 잠금 문구·판정을 `lib/editor/lock-ui.ts` 로 단일화. 잠금 상태에선 PATCH 자체를 보내지 않는다 |
+| `c931801` | **선물 미리보기 GET 의 쓰기 부작용 제거**(소유 불일치 시 `gifts.status='expired'` 쓰기 → 404 + 로그만, 쓰기는 수령 POST 에만). **고아 썸네일 추측 삭제 차단** — cron 이 원본만 스캔하고 썸네일은 "원본 키 → `.webp`" 로 추측 삭제해, 선물 폴백으로 공유된 **살아 있는 썸네일을 지울 수 있었다**. 이제 두 버킷을 각각 스캔하고 `storage_key`/`thumb_key` 실제 참조로만 판정(`orphan-select.ts`) |
+| `2d403ae` | `orphan-photos` 가 **실제 삭제 건수를 런타임 로그에 남긴다**. 이전엔 삭제 실패만 로그에 남아 사후에 삭제 규모를 알 수 없었다 |
+
+**운영 관찰** — `c931801` 배포(09-21) 뒤 `orphan-photos` cron 이 09-21·22·23 20:00 UTC 에
+자동 실행됐다. 09-23 실행은 200 · 삭제 실패 경고 0건이지만 **삭제 건수는 로그에 없었다**(`2d403ae` 이전).
+남은 고아 규모는 `?dryRun=1`(Bearer `CRON_SECRET`)로 확인할 수 있다 — 런북 §12.
+
+검증: typecheck 0 · lint 0 error/41 warning · vitest 82파일 1,427 pass/1 skip · test:pdf 4 ·
+build(Turbopack) · e2e 12 · a11y 25 · 운영 URL `e2e:auth` 5 passed(`c931801`) · 런타임 오류·5xx 0건.
 
 ### 0-12. Next.js 16 + React 19 전환 (2026-09-21) — 운영 배포 완료
 
@@ -815,7 +830,7 @@ Core Web Vitals(LCP/CLS/INP-대용 TBT) 모두 통과. Speed Index/TTI 는 클�
 ## 현재 배포 상태
 
 ```
-운영 빌드:  main = 4346c0b (2026-09-21) — 미병합 브랜치 없음 (§0-12)
+운영 빌드:  main = 2d403ae (2026-09-24) — 미병합 브랜치 없음 (§0-12·§0-13)
 Next.js:  16.3.5 / React 19.3.0  (2026-09-21 전환·배포 — §0-12). next advisory 0건
           middleware.ts 유지(proxy 전환은 후속) · Turbopack 빌드
 Supabase: vprifnztvlduhpuwgdau (Seoul / papascompany org)
@@ -946,12 +961,12 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ## 테스트 현황
 
-**기준선 — `main`(`4346c0b`, Next 16 전환 후) 에서 2026-09-21 실측**
+**기준선 — `main`(`2d403ae`) 에서 2026-09-24 실측** (Next 16 전환 직후 `4346c0b` 는 78 파일 / 1,371)
 
 ```
 타입·린트:                pnpm typecheck 0 에러 · pnpm lint 0 error / 41 warning
                           (38건이 react-hooks v7 신규 규칙 — 전환 방침상 warn 유지)
-유닛 테스트 (Vitest):     78 파일 / 1,371 passed / 1 skipped (7.1s)
+유닛 테스트 (Vitest):     82 파일 / 1,427 passed / 1 skipped
 E2E 스모크 (Playwright):  desktop+mobile chromium 12/12 통과
 접근성 (axe-core):       WCAG 2.1 AA 25 passed / 1 skipped · 위반 0
 PDF 회귀(페이지수+해시): pnpm test:pdf — 4 케이스 / 394ms (darwin-arm64)

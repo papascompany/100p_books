@@ -46,8 +46,8 @@ Next 16 전환 경위는 STATUS.md §0-12.
   렌더 변경이 **의도된** 경우에만 `pnpm test:pdf:update` 로 갱신하고 diff 를 리뷰에 포함한다.
 - `e2e:auth` 를 제외한 위 전부는 `.github/workflows/ci.yml`(3잡: verify / e2e / a11y)에서
   **main push 와 PR 마다** 자동 실행된다. 피처 브랜치 단독 push 로는 돌지 않는다.
-- 현재 기준선(main `4346c0b`, 2026-09-21): typecheck 0 · lint **0 error / 41 warning**
-  (38건이 `react-hooks` v7 신규 규칙 — 전환 방침상 warn 유지) · vitest 78파일 1,371 pass / 1 skip ·
+- 현재 기준선(main `2d403ae`, 2026-09-24): typecheck 0 · lint **0 error / 41 warning**
+  (38건이 `react-hooks` v7 신규 규칙 — 전환 방침상 warn 유지) · vitest 82파일 1,427 pass / 1 skip ·
   test:pdf 4 · e2e 12 · a11y 25 · build 성공.
 - Fabric 스냅샷은 `lib/fabric/snapshot.ts` 가 정본이다 — fabric 6.9.x 의 `canvas.toJSON()` 은
   **인자를 무시**하므로 `toJSON(props)` 로 커스텀 속성을 담을 수 없다(QA-1 원인).

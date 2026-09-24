@@ -2,7 +2,7 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 **2026-09-21** · `main` = `4346c0b` = `origin/main` · CI 3잡 green · Vercel prod success
+> 갱신 **2026-09-24** · `main` = `2d403ae` = `origin/main` · CI 3잡 green · Vercel prod success
 > **미병합 브랜치 없음** — `integ/wave2` 는 `bacadc1` 위로 rebase 해 ff 병합했다
 > (rebase 이전 SHA 는 더 이상 존재하지 않는다).
 > 🆕 **`4346c0b` = Next.js 16.3.5 + React 19.3.0 전환**(운영 배포 완료, STATUS.md §0-12).
@@ -31,7 +31,8 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
 - **정본 로컬**: `/Users/yohan/Developer/claude/100p_books` (branch `main`).
   Documents 사본은 node_modules 제거됨 — 쓰지 말 것.
 - 레포 `papascompany/100p_books` (PUBLIC). main push → **Vercel auto-deploy** 정상.
-- **브랜치 상태 (2026-09-21)** — `main` = `4346c0b` = `origin/main`. **미병합 브랜치 없음.**
+- **브랜치 상태 (2026-09-24)** — `main` = `2d403ae` = `origin/main`. **미병합 브랜치·worktree 없음.**
+  `4346c0b`(Next 16) 이후 리뷰 후속 `a41e195`·`c931801`·`2d403ae` 가 올라가 있다(STATUS §0-13).
   `4346c0b` 은 **Next 16.3.5 + React 19.3.0 전환**이고 그 부모가 `34a5897` 이다.
   `integ/wave2` 를 `bacadc1` 위로 rebase 해 ff 병합했으므로 **rebase 이전 SHA
   (`552f6e1`·`c6deee9`·`5161cc9`·`67c8f2f`·`692c888`·`3d4b24e`·`69df5d2`·`f4af049`)는 존재하지 않는다.**
@@ -100,7 +101,7 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
 |---|---|---|
 | 타입 | `pnpm typecheck` | 0 에러 |
 | 린트 | `pnpm lint` | **0 error / 41 warning** — 38건이 `react-hooks` v7 신규 규칙. **전환 방침상 warn 유지**이므로 "경고 0" 을 기준선으로 쓰지 말 것 |
-| 유닛 | `pnpm test` | **78 파일 / 1,371 passed / 1 skipped** (7.1s — 전환 전후 동일) |
+| 유닛 | `pnpm test` | **82 파일 / 1,427 passed / 1 skipped** (`2d403ae`, 2026-09-24) |
 | PDF 회귀 | `pnpm test:pdf` | 4 케이스 OK (394ms, darwin-arm64 — baseline 무수정) |
 | 접근성 | `pnpm test:a11y` | 25 passed / 1 skipped (WCAG 2.1 AA 위반 0) |
 | E2E 스모크 | `pnpm e2e` | 12 passed |
