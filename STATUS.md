@@ -26,6 +26,14 @@
 
 ## 🆕 최근 작업 (2026-09-17 ~ 09-24)
 
+### 0-14. ⚠️ `0033` 적용 시도 → 운영 DB 미반영 (2026-09-24 보고, 09-26 재확인)
+
+오너가 "0033 적용했다"고 보고했지만 `scripts/verify-0033.ts`(읽기 전용) 결과 운영 `vprifnztvlduhpuwgdau` 에
+**반영되지 않았다**: `reserve/release_order_credits` = `PGRST202`(함수 없음), `orders.finalize_started_at` = `42703`
+(컬럼 없음 — 캐시 문제 아님). MCP 로 볼 수 있는 storige·bookmoa·printy 에도 흔적 없음.
+유력 원인: SQL Editor 의 **파괴적 작업 확인창**(0033 에 퍼널 중복 정리 `DELETE` 포함)을 닫음 · 일부만 선택한 채 Run ·
+실행 오류로 전체 롤백 · 다른 계정/프로젝트(CLI 계정 조직의 cardcraft-ai·sharesnap 은 확인 불가). 절차·확인은 런북 §9.
+
 ### 0-13. 적대 리뷰 후속 3건 (2026-09-21~24) — 운영 배포 완료
 
 | 커밋 | 내용 |
@@ -714,7 +722,11 @@ e2e 12 · a11y 25 · build 성공. `e2e:auth` 5 는 `bacadc1`·`34a5897` 두 배
   (2026-09-11 시점 기록) 당시 node v22.22.2 에서 `pnpm lint`·`pnpm build` 모두 정상 동작했다(0 경고 / 빌드 성공).
   이후 런타임은 **Node 24.x 로 고정**됐다 — `.nvmrc`·`engines`·CI 모두 24.
   push 전 로컬 전체 검증이 가능하며, GitHub Actions CI 가 clean 환경에서 한 번 더 검증한다.
-- Supabase MCP/CLI는 다른 계정("storige's Org") → 운영 DB `vprifnztvlduhpuwgdau` 직접 SQL 불가 → 대시보드 수동.
+- Supabase MCP/CLI는 운영 조직 멤버가 아니다 → 운영 DB `vprifnztvlduhpuwgdau` 직접 SQL 불가 → 대시보드 수동.
+- Supabase 계정 대응(2026-09-24 실측): 운영 프로젝트 `vprifnztvlduhpuwgdau`(100p_books)는 조직 `rpgjrckrcrxhrbrimjbv` 소속.
+  이 세션 도구 중 그 조직 멤버는 없다 — CLI 로그인 = 조직 `storige.dev`(`rmmjkjvklogfmzmnrozp`: cardcraft-ai·sharesnap),
+  MCP = `storige's Org`(`fvoavmovrkjkhysnbrbo`: storige·bookmoa·printy), `get_organization(rpgjrckrcrxhrbrimjbv)` = 권한 없음.
+  소유 계정 이메일은 미확인(문서상 "papascompany"). 확인: 대시보드 `/dashboard/project/vprifnztvlduhpuwgdau` → Organization → Team.
 
 ### 보류 (착수 대기)
 - **데모 모드**: 인증/RLS 무훼손 + `/login` "데모 둘러보기" 원클릭 로그인(`/api/auth/demo-login`, 전용 데모계정,
@@ -733,11 +745,12 @@ e2e 12 · a11y 25 · build 성공. `e2e:auth` 5 는 `bacadc1`·`34a5897` 두 배
 | **Vercel (CLI 토큰)** | `papas-yohan` | `vercel env ls` 정상 | ✅ 정상 (2026-08-06 재확인 — 과거 '만료' 기록은 stale) |
 | **Supabase (project)** | `100p_books` | ref `vprifnztvlduhpuwgdau` (Seoul) | ✅ 링크됨 |
 | **Supabase (org)** | `rpgjrckrcrxhrbrimjbv` | linked-project.json | ✅ 정상 |
-| **Supabase (CLI 로그인)** | `Storywork` 조직 (타 계정) | `supabase orgs list` | ⚠️ **다른 계정 — 100p 조직 미표시** |
+| **Supabase (CLI 로그인)** | `storige.dev` 조직 (타 계정, 2026-09-24 실측 — 예전 기록 "Storywork" 는 stale) | `supabase orgs list` | ⚠️ **다른 계정 — 100p 조직 미표시** |
+| **Supabase (MCP)** | `storige's Org` (타 계정) | `list_organizations` | ⚠️ 100p 조직 권한 없음 |
 
 ### 계정 연동 주의사항
 - ~~Vercel CLI 토큰 만료~~ → **2026-08-06 실측 정상**(`vercel env ls` 동작, papas-yohan 로그인). 이 항목은 해소됨.
-- **Supabase CLI 가 타 계정(Storywork)으로 로그인**: `100p_books`(rpgjrckrcrxhrbrimjbv) 조직이 안 보임.
+- **Supabase CLI 가 타 계정(`storige.dev`)으로 로그인**: `100p_books`(rpgjrckrcrxhrbrimjbv) 조직이 안 보임.
   → `supabase db push` 직접 적용 불가. 마이그레이션은 SQL Editor 수동 실행으로 진행 중 (0023/0024 완료).
   papascompany 계정 운영 자동화 원하면 `supabase logout && supabase login` 재인증 필요.
 
@@ -922,7 +935,7 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 | 항목 | 증상 | 조치 |
 |---|---|---|
-| Supabase CLI 타 계정 로그인 | `Storywork` 조직만 표시, 100p 안 보임 | `supabase logout && supabase login` (papascompany 계정) |
+| Supabase CLI 타 계정 로그인 | `storige.dev` 조직만 표시, 100p 안 보임 | `supabase logout && supabase login` (100p 조직 멤버 계정 — 이메일 미확인) |
 
 > 운영에는 영향 없음(배포=GitHub auto-deploy, 마이그레이션=SQL Editor 수동).
 > Vercel CLI 토큰은 2026-08-06 실측 정상 — 과거 "만료" 기록은 stale.

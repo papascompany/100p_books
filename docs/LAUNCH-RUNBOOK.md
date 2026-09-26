@@ -17,7 +17,7 @@
 | 전체 테스트/CI/Vercel 빌드 | ✅ green (main `2d403ae` — Next.js 16.3.5 + React 19.3.0, 리뷰 후속 3건 반영) | — |
 | 마이그레이션 0030 · 0031 | ✅ **적용 완료**(2026-08-09 / 08-11) | — |
 | **QA-1 피해 조회** | 🔺 **§11 — 읽기 전용 SQL 3개, 먼저 할 것** | 아니오 (이미 발생한 피해 확인) |
-| **마이그레이션 0033 (결제 크레딧 선점)** | 🔺 **§9 — 코드가 먼저 배포됐다** | 아니오 (폴백 동작). 단 적용 전까지 **SEC-7 이중 사용 창**이 열려 있다 |
+| **마이그레이션 0033 (결제 크레딧 선점)** | 🔺 **§9 — 09-24 적용 시도했으나 운영 DB 미반영(09-26 재확인)** | 아니오 (폴백 동작). 단 적용 전까지 **SEC-7 이중 사용 창**이 열려 있다 |
 | **마이그레이션 0032 (직접 쓰기 봉쇄·권한 상승 차단)** | ⬜ **§10 — precheck → 적용 → postcheck** | 아니오 (단, `profiles.role` 권한 상승 표면이 열린 채로 남는다) |
 | 토스 웹훅 URL 등록 | ⬜ §1-b (1분) | 아니오 (취소/환불 자동 반영만 누락) |
 | 이메일(Resend) | ⬜ §3 | 아니오 (메일은 큐에 보존 — 키 등록 시 밀린 것까지 발송) |
@@ -227,6 +227,20 @@ build 성공(Turbopack) · `e2e:auth` **5 passed**(골든 플로우 2 + 편집 �
 서로 다른 두 주문을 동시에 confirm 하면 **같은 포인트·할인코드가 두 번 쓰일 수 있다**(SEC-7).
 `0033` 은 캡처 **전에** 선점하고 승인 실패·금액 불일치 시 해제하는 `reserve`/`release` RPC를 만든다
 (service_role 전용).
+
+> ⚠️ **2026-09-24 적용 시도가 운영에 반영되지 않았다**(09-26 재확인, STATUS §0-14). 다시 적용할 때 확인할 것:
+> ① 주소에 `/project/vprifnztvlduhpuwgdau/` ② 에디터에 **선택 영역 없이** Run ③ "destructive operation" **확인창에서 확인**
+> (퍼널 중복 정리 `DELETE` 때문에 뜬다) ④ 결과 패널에 오류가 없는지. 적용 후 **한 줄 확인**(기대 `2 / true / true`):
+>
+> ```sql
+> select (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+>          where n.nspname = 'public' and p.proname in ('reserve_order_credits','release_order_credits')) as fn_count,
+>        exists(select 1 from information_schema.columns where table_schema = 'public'
+>                and table_name = 'orders' and column_name = 'finalize_started_at') as has_finalize_col,
+>        exists(select 1 from pg_indexes where indexname = 'uq_funnel_order_paid_once') as has_index;
+> ```
+>
+> 바깥 검증(개발 머신): `pnpm exec tsx scripts/verify-0033.ts` — 적용됐으면 service 호출이 `NOT_FOUND`, anon 은 오류.
 
 **적용 시점 — 지금 바로.** 짝이 되는 코드는 **이미 배포됐다**(`88163d0`, main `34a5897`).
 미적용이어도 코드는 기존 경로(캡처 후 차감)로 폴백하므로 **장애는 없지만**,

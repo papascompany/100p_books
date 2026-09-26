@@ -2,7 +2,8 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 **2026-09-24** · `main` = `2d403ae` = `origin/main` · CI 3잡 green · Vercel prod success
+> 갱신 **2026-09-26** · `main` = `origin/main`(최신 커밋은 `git log -1`) · CI 3잡 green · Vercel prod success
+> ⚠️ **`0033` 은 09-24 적용 시도했으나 운영 DB 에 반영되지 않았다**(STATUS §0-14, 런북 §9) — 다음 세션 첫 확인 대상.
 > **미병합 브랜치 없음** — `integ/wave2` 는 `bacadc1` 위로 rebase 해 ff 병합했다
 > (rebase 이전 SHA 는 더 이상 존재하지 않는다).
 > 🆕 **`4346c0b` = Next.js 16.3.5 + React 19.3.0 전환**(운영 배포 완료, STATUS.md §0-12).
@@ -31,7 +32,7 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
 - **정본 로컬**: `/Users/yohan/Developer/claude/100p_books` (branch `main`).
   Documents 사본은 node_modules 제거됨 — 쓰지 말 것.
 - 레포 `papascompany/100p_books` (PUBLIC). main push → **Vercel auto-deploy** 정상.
-- **브랜치 상태 (2026-09-24)** — `main` = `2d403ae` = `origin/main`. **미병합 브랜치·worktree 없음.**
+- **브랜치 상태 (2026-09-26)** — `main` = `origin/main`. **미병합 브랜치·worktree 없음.**
   `4346c0b`(Next 16) 이후 리뷰 후속 `a41e195`·`c931801`·`2d403ae` 가 올라가 있다(STATUS §0-13).
   `4346c0b` 은 **Next 16.3.5 + React 19.3.0 전환**이고 그 부모가 `34a5897` 이다.
   `integ/wave2` 를 `bacadc1` 위로 rebase 해 ff 병합했으므로 **rebase 이전 SHA
@@ -57,7 +58,9 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
   ```
 - **커밋은 사용자가 요청할 때만.** 커밋 메시지 끝에 `Co-Authored-By: Claude ...`.
   zsh glob 때문에 `git add` 시 `[id]` 포함 경로는 **따옴표**로 감쌀 것.
-- **Supabase 운영 DB(`vprifnztvlduhpuwgdau`)는 MCP/CLI 불가**(연결된 MCP는 타 계정 "storige's Org").
+- **Supabase 운영 DB(`vprifnztvlduhpuwgdau`, 조직 `rpgjrckrcrxhrbrimjbv`)는 MCP/CLI 불가** — CLI 는 `storige.dev`,
+  MCP 는 `storige's Org` 계정이라 그 조직 멤버가 아니다(2026-09-24 실측). 운영 DB 상태는
+  `pnpm exec tsx scripts/verify-0033.ts`(읽기 전용, service_role 로 RPC 존재·권한 확인)처럼 앱 경로로 간접 확인한다.
   마이그레이션은 사용자가 대시보드 SQL Editor에 수동 적용한다.
   ⚠️ 함정: SQL Editor가 다른 프로젝트에 연결돼 있으면 `42P01 relation does not exist` —
   상단이 `100p_books / PRODUCTION`인지 **먼저 확인시킬 것**.
@@ -311,6 +314,12 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
     경고 0 을 목표로 일괄 수정하는 것은 별도 웨이브에서 규칙별로 판단한다.
 
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
+
+**2026-09-26 기준 오너 대기 항목(순서대로)**
+1. `0033` 재적용(런북 §9 상단 체크리스트 4개) → 한 줄 확인 쿼리 `2/true/true` → `scripts/verify-0033.ts` 로 바깥 검증.
+2. `0032` precheck → (흔적 있으면 멈추고 보고) → 적용 → postcheck(런북 §10) → 운영 URL `pnpm e2e:auth`.
+3. QA-1 피해 조회(§11, 읽기 전용) · 고아 사진 dryRun(§12, `CRON_SECRET` 필요 — 자리표시자 그대로 보내면 401).
+4. 100p Supabase 조직 멤버 계정 확인(대시보드 → Organization → Team) — CLI 재로그인하면 운영 DB 직접 확인 가능.
 
 **여기에 목록을 다시 만들지 말 것.** 키 발급·콘솔 클릭·SQL 등 남은 운영 액션과 백로그는
 전부 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md)에 있고, 실시간 상태는
