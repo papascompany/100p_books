@@ -301,13 +301,15 @@ select p.proname,
 
 **절차 — 순서를 지킬 것**
 
-1. **precheck** — 먼저 **`docs/sql/0032-precheck-summary.sql`** 을 한 번 실행해 한 행 건수 요약을 본다
+1. **precheck** — 먼저 **`docs/sql/0032-precheck-summary.sql`** 을 한 번 실행해 요약표(33행: 점검·값·기대)를 본다
    (SQL Editor 는 여러 문장을 한 번에 돌리면 **마지막 결과만** 보여 주므로 29개 쿼리를 하나씩 돌리는 대신).
    각 칸 주석의 기대와 다른 칸만 `docs/sql/0032-precheck.sql` 의 해당 섹션을 **따로 선택해** 실행한다.
    전부 SELECT 라 데이터를 바꾸지 않는다.
    - `[11](c)` 는 2026-06-23(`52e80a6`) 이전 사진 행이 **구 기록 방식**(클라 파일 크기를 `size_bytes` 에 기록)
      때문에 크기 불일치로 나온다(09-28 운영 53행). 요약의 `c11c_suspicious = 0` 이고 `c11c_newest` 가
      06-23 이전이면 오탐이다.
+   - `[1-c]` 의 `is_admin()` 관리자 전용 정책 4개(book_sizes·resources·site_content·discount_codes, 운영 21행)는
+     범위 밖 표면이 아니다 — `is_admin()` 이 읽는 `profiles.role` 을 0032 가 잠그므로 함께 안전해진다(`c1_admin_only`).
    - `[1]`~`[2]`: 지금 실제로 열려 있는 쓰기 표면 전수(0032 범위 밖에 더 열린 게 있는지도 본다).
    - `[3]`~`[11]`: **악용 흔적** — 권한 상승(`profiles.role='admin'`) · 탈퇴 가드 우회 ·
      선물 IDOR · 출석 편취 · `likes_count` 불일치 · `photos` 키 바꿔치기 ·
