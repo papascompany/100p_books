@@ -297,6 +297,9 @@ function TextEditor({
  * 이벤트 핸들러에서 제자리 갱신한 뒤 update() 로 캔버스·패널을 다시 그린다.
  * `target.x = v` 를 연달아 쓰는 것과 같은 의미(Object.assign = 순서대로 [[Set]])이며,
  * prop 직접 변경을 금지하는 react-hooks/immutability 규칙에 의도를 드러내기 위한 래퍼다.
+ *
+ * 주의: 이 래퍼는 규칙 위반을 고친 것이 아니라 컴파일러 분석에서 가리는 **의도적 우회**다
+ * (eslint.config.mjs 의 react-hooks 억제 목록에 등록). Fabric 객체 외의 값에 쓰지 않는다.
  */
 function assignFabricProps<T extends object>(obj: T, patch: Partial<T>): void {
   Object.assign(obj, patch);

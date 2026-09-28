@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/use-toast";
 import type { BookSize } from "@/lib/db/types";
+import { reorderById } from "@/lib/editor/reorder-pages";
 import type { PageDoc } from "@/lib/layout/types";
 import { cn } from "@/lib/utils";
 
@@ -284,14 +285,9 @@ export default function PreviewGrid({
       setDraggingId(null);
       setOverIndex(null);
       overIndexRef.current = null;
-      if (id == null || idx == null) return;
       const current = orderedPagesRef.current;
-      const fromIdx = current.findIndex((p) => p.id === id);
-      if (fromIdx === idx || fromIdx < 0) return;
-      const next = [...current];
-      const [moved] = next.splice(fromIdx, 1);
-      if (!moved) return;
-      next.splice(idx, 0, moved);
+      const next = reorderById(current, id, idx);
+      if (!next) return;
       // 낙관적 업데이트
       setOrderedPages(next);
       try {

@@ -47,6 +47,9 @@ export default defineConfig([
       // 후속 웨이브(refactor/react-hooks-warnings)에서 위반 38건을 모두 해소해 error 로 올렸다
       // — 재발 방지. 억제가 불가피한 곳은 해당 줄에 사유를 적은 eslint-disable-next-line 만 쓴다
       // (현재 3건: CoverEditor 레이아웃 타이밍 · FileGridItem blob URL 수명 · 휴지통 서버 컴포넌트 Date.now).
+      // 의도적 우회 1건(disable 주석이 아니라 grep 에 안 잡히므로 여기 명시): SelectionPanel 의
+      // assignFabricProps(Object.assign 래퍼) — Fabric 외부 가변 객체 대입을 immutability 분석에서
+      // 가린다. 이 예외는 Fabric 객체 한정이며, React state/props 에 같은 래퍼 패턴을 쓰지 않는다.
       // 참고: 이 규칙들은 await 경계를 보지 않고(await 뒤 setState 도 동기로 판정), catch 없는
       // try/finally 가 있는 함수는 컴파일러가 분석을 건너뛴다 — effect 에서 부르는 fetch 는
       // state 반영을 promise 콜백(.then/.catch/.finally)에 두는 패턴을 쓴다.
