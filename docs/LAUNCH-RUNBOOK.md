@@ -492,7 +492,9 @@ read -rs CRON_SECRET && curl -s -H "Authorization: Bearer $CRON_SECRET" "https:/
 | Next 16 후속 ④ AVIF 재활성화 판단 | `GHSA-2xp9-vwfh-vxw4` 는 16.3.5 에서 해소됐지만 `images.formats` 는 webp 유지. 인코딩 비용·품질 회귀 측정 후 결정 |
 | Next 16 후속 ⑤ Lighthouse 비교 방법 재정의 | Next 16 이 First Load JS 표를 내지 않아 기준선(2026-08-07 Performance 88 · LCP 3.6s)과 **같은 방식의 비교가 불가능**하다 |
 | Vercel Preview 런타임 검증 | Preview 환경변수 0종이라 PDF 네이티브 바이너리·토스 결제·카카오 콜백을 프리뷰에서 실증할 수 없다. 필요하면 Production 값 복제가 선행 |
-| Dependabot 메이저 ignore 규칙 재검토 | `.github/dependabot.yml` 의 `next`/`react`/`react-dom`/`@types/react*`/`eslint`/`eslint-config-next` 메이저 ignore 는 14/18 기준으로 쓴 것이다. 16/19 기준으로 다시 볼 것. 열린 PR: actions 메이저 · `@napi-rs/canvas` 1.x · `lucide-react` 1.x · `nanoid` 6 · `typescript` 6 · `postcss` 패치 · npm-minor-patch 그룹 |
+| Dependabot 메이저 ignore 규칙 재검토 | `.github/dependabot.yml` 의 `next`/`react`/`react-dom`/`@types/react*`/`eslint`/`eslint-config-next` 메이저 ignore 는 14/18 기준으로 쓴 것이다. 16/19 기준으로 다시 볼 것. 2026-09-28 PR 정리 완료(minor/patch·actions v7·nanoid 6·lucide 1·TS 6·vitest 4 반영) — 남은 PR 은 `@napi-rs/canvas` 1.x 하나 |
+| `@napi-rs/canvas` 1.x (PR #14 보류) | 1.0.9 에서 `photo-shadow` PDF 회귀 해시가 바뀐다 — 그림자가 퍼지지 않고 아래로 짙고 날카롭게 찍혀 에디터(브라우저 canvas) 미리보기와 인쇄물이 달라진다. shadowBlur 해석 변경 원인 조사·보정 후에만 올릴 것(`pnpm test:pdf` 가 막는다) |
+| `@supabase/supabase-js` 2.117 · `@supabase/ssr` 0.12 | 수동 `Database` 타입(lib/db/types.ts)이 새 제네릭 제약(Relationships·Views·Functions, interface Row → index signature)과 맞지 않아 타입 오류 756건. `supabase gen types` 생성 타입으로 전환하는 별도 작업 |
 | fabric 7.x 전환 | SVG XSS 2건 + 선택적 `canvas` 백엔드가 끌고 오는 `tar` 12건(critical 1 포함)이 여기서 해소된다(SECURITY.md) |
 | 포인트 홀드/예약 설계 | `0033` reserve/release 로 구조적 해소 — ✅ 2026-09-28 운영 적용 |
 | 100% 할인 코드 | 100원 미만 주문은 `AMOUNT_BELOW_MINIMUM` 차단 — 무료 주문 경로 없음 |
