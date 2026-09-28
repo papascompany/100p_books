@@ -2,13 +2,14 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 **2026-09-26** · `main` = `origin/main`(최신 커밋은 `git log -1`) · CI 3잡 green · Vercel prod success
-> ⚠️ **`0033` 은 09-24 적용 시도했으나 운영 DB 에 반영되지 않았다**(STATUS §0-14, 런북 §9) — 다음 세션 첫 확인 대상.
+> 갱신 **2026-09-28** · `main` = `origin/main`(최신 커밋은 `git log -1`) · CI 3잡 green · Vercel prod success
+> ✅ **`0033` 은 2026-09-28 운영 적용 확인**(STATUS §0-14 — 09-24 1차 시도는 미반영이었다).
+> ⏳ **`0032` precheck 진행 중** — `[11](c)` 53행은 구 기록 방식 오탐으로 판단, 요약 쿼리
+> `docs/sql/0032-precheck-summary.sql` 결과로 확정 후 적용(런북 §10).
 > **미병합 브랜치 없음** — `integ/wave2` 는 `bacadc1` 위로 rebase 해 ff 병합했다
 > (rebase 이전 SHA 는 더 이상 존재하지 않는다).
 > 🆕 **`4346c0b` = Next.js 16.3.5 + React 19.3.0 전환**(운영 배포 완료, STATUS.md §0-12).
-> ⚠️ **운영 미적용 마이그레이션 2건: `0032`·`0033`** — 코드가 먼저 배포됐으므로
-> `0033` 적용 전까지 SEC-7(주문 간 동시 결제 이중 사용) 창이 열려 있다.
+> ⚠️ **운영 미적용 마이그레이션 1건: `0032`** — 적용 전까지 `profiles.role` 권한 상승 표면이 열려 있다.
 > 남은 운영 액션은 전부 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md),
 > 실시간 상태는 `/admin` "서비스 런치 체크" 카드. **"다음 추천" 목록을 새로 만들지 말 것 —
 > 운영 액션·백로그의 유일한 정본은 런북이다** (사용자 지시, 2026-08-09).
@@ -64,7 +65,7 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
   마이그레이션은 사용자가 대시보드 SQL Editor에 수동 적용한다.
   ⚠️ 함정: SQL Editor가 다른 프로젝트에 연결돼 있으면 `42P01 relation does not exist` —
   상단이 `100p_books / PRODUCTION`인지 **먼저 확인시킬 것**.
-  **`0001~0031` 적용 완료 · `0032`·`0033` 미적용**(런북 §9·§10).
+  **`0001~0031` · `0033` 적용 완료 · `0032` 미적용**(런북 §10).
 
 **운영 환경변수 (Production 11종, `vercel env ls`)**
 
@@ -269,8 +270,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 15. **`0033` reserve/release 는 service_role 전용이고, 미적용 폴백 경로가 살아 있다.**
     `reserve_order_credits` / `release_order_credits` 가 없으면 코드가 기존(캡처 후 차감) 경로로
     폴백한다. **테스트가 두 경로를 모두 덮고 있으니 "죽은 코드"로 보고 지우지 말 것.**
-    **2026-09-21 현재 운영 DB 에는 0033 이 적용돼 있지 않다** — 즉 지금 운영은 폴백 경로로
-    돌고 있고 SEC-7 창이 열려 있다. 적용 절차·확인 SQL 은 런북 §9.
+    **2026-09-28 운영 적용 확인** — 운영은 선점 경로로 돈다. 폴백은 적용 전 DB·로컬 테스트용으로 남아 있다.
 
 18. **출석 보너스 memo 는 `monthly-bonus.ts` 헬퍼가 정본이다.**
     20일 월 보너스(+1,000P)의 적립 memo 와 중복 판정 조회를 같은 함수로 묶었고, 조회는
@@ -315,9 +315,9 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
 
-**2026-09-26 기준 오너 대기 항목(순서대로)**
-1. `0033` 재적용(런북 §9 상단 체크리스트 4개) → 한 줄 확인 쿼리 `2/true/true` → `scripts/verify-0033.ts` 로 바깥 검증.
-2. `0032` precheck → (흔적 있으면 멈추고 보고) → 적용 → postcheck(런북 §10) → 운영 URL `pnpm e2e:auth`.
+**2026-09-28 기준 오너 대기 항목(순서대로)**
+1. ~~`0033` 재적용~~ — ✅ 09-28 적용 확인(`verify-0033.ts`: service `NOT_FOUND`, anon `42501`).
+2. `0032` precheck(**요약 쿼리 `docs/sql/0032-precheck-summary.sql` 한 번 → 기대와 다른 칸만 원문 섹션**) → (흔적 있으면 멈추고 보고) → 적용 → postcheck(런북 §10) → 운영 URL `pnpm e2e:auth`.
 3. QA-1 피해 조회(§11, 읽기 전용) · 고아 사진 dryRun(§12, `CRON_SECRET` 필요 — 자리표시자 그대로 보내면 401).
 4. 100p Supabase 조직 멤버 계정 확인(대시보드 → Organization → Team) — CLI 재로그인하면 운영 DB 직접 확인 가능.
 
@@ -328,8 +328,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 
 **2026-09-21 기준 서비스 경로는 전부 동작한다.** 단 사용자에게 먼저 알려야 할 것이 셋 있다:
 
-1. **런북 §9 — `0033` 적용**(결제 크레딧 선점). **코드가 이미 배포됐으므로 적용 전까지
-   SEC-7(주문 간 동시 confirm 으로 같은 포인트·할인 이중 사용) 창이 열려 있다.**
+1. ~~런북 §9 — `0033` 적용~~ — ✅ 2026-09-28 적용 확인.
 2. **런북 §10 — `0032` 적용**(직접 쓰기 봉쇄·권한 상승 차단).
    **precheck → 적용 → postcheck 순서**이고, precheck `[3]`~`[11]` 에서 흔적이 나오면
    적용과 별개로 개별 시정이 필요하다.

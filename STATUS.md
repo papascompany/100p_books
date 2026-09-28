@@ -4,12 +4,11 @@
 > [docs/LAUNCH-RUNBOOK.md](docs/LAUNCH-RUNBOOK.md) 한 곳에 있다.
 > 실시간 상태는 관리자 대시보드(`/admin`)의 "서비스 런치 체크" 카드.
 >
-> ⚠️ **운영 미적용 마이그레이션 2건** — `0032`(클라이언트 직접 쓰기 봉쇄, profiles 권한 상승 차단)과
-> `0033`(결제 크레딧 선점). 적용 절차는 런북 §9·§10.
-> **코드는 이미 배포됐고 `0033` 미적용 동안은 폴백 경로로 동작한다** — 그동안
-> SEC-7(주문 간 동시 결제로 같은 포인트·할인 이중 사용) 창이 남아 있다.
+> ⚠️ **운영 미적용 마이그레이션 1건** — `0032`(클라이언트 직접 쓰기 봉쇄, profiles 권한 상승 차단).
+> 절차는 런북 §10(precheck 요약 쿼리 `docs/sql/0032-precheck-summary.sql` 부터).
+> ✅ `0033`(결제 크레딧 선점)은 **2026-09-28 운영 적용 확인**(§0-14) — SEC-7 이중 사용 창은 닫혔다.
 >
-> 최종 업데이트: 2026-09-21
+> 최종 업데이트: 2026-09-28
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
 > 운영 빌드: `2d403ae` — Next.js 16.3.5 + React 19.3.0(§0-12) 위에 리뷰 후속 3건(§0-13).
@@ -24,11 +23,22 @@
 
 ---
 
-## 🆕 최근 작업 (2026-09-17 ~ 09-24)
+## 🆕 최근 작업 (2026-09-17 ~ 09-28)
 
-### 0-14. ⚠️ `0033` 적용 시도 → 운영 DB 미반영 (2026-09-24 보고, 09-26 재확인)
+### 0-14. ✅ `0033` 운영 적용 확인 (2026-09-28) — 09-24 1차 시도는 미반영이었다
 
-오너가 "0033 적용했다"고 보고했지만 `scripts/verify-0033.ts`(읽기 전용) 결과 운영 `vprifnztvlduhpuwgdau` 에
+**09-28 재적용 → 반영 확인.** 오너가 SQL Editor 에서 전체 실행(`Success. No rows returned`) 후
+`scripts/verify-0033.ts`(읽기 전용) 결과: service `reserve/release_order_credits` = `{ok:false, code:"NOT_FOUND"}`
+(함수 존재·권한 정상), anon = `42501 permission denied`, `orders.finalize_started_at` 조회 ok.
+이제 confirm 은 캡처 **전** 선점 경로로 동작한다(폴백 경로는 코드에 남아 있지만 타지 않는다).
+
+**`0032` precheck 진행 중(09-28)** — 오너가 `[11](c)`(사진 행↔원본 객체 불일치)만 먼저 실행해 **53행**:
+전부 한 사용자·`draft` 프로젝트·주문 없음·2026-05-11~06-20 생성, 객체 크기 < 행 `size_bytes`, MIME 일치.
+초기 `photos/complete`(`2c944d9`)가 sharp 로 다시 인코딩한 원본을 올리면서 `size_bytes` 에는 **클라 파일 크기**를
+기록했고 `52e80a6`(2026-06-23)에서 실제 바이트로 고쳤다 → **구 기록 방식 오탐으로 판단**(precheck 주석의 "한계"와 같다).
+확정은 요약 쿼리 `docs/sql/0032-precheck-summary.sql` 의 `c11c_suspicious = 0`·`c11c_newest < 06-23` 으로 한다.
+
+**1차 시도(09-24) 경위** — 오너가 "0033 적용했다"고 보고했지만 `scripts/verify-0033.ts`(읽기 전용) 결과 운영 `vprifnztvlduhpuwgdau` 에
 **반영되지 않았다**: `reserve/release_order_credits` = `PGRST202`(함수 없음), `orders.finalize_started_at` = `42703`
 (컬럼 없음 — 캐시 문제 아님). MCP 로 볼 수 있는 storige·bookmoa·printy 에도 흔적 없음.
 유력 원인: SQL Editor 의 **파괴적 작업 확인창**(0033 에 퍼널 중복 정리 `DELETE` 포함)을 닫음 · 일부만 선택한 채 Run ·
@@ -220,7 +230,7 @@ e2e 12 · a11y 25 · build 성공. `e2e:auth` 5 는 `bacadc1`·`34a5897` 두 배
 
 | 항목 | 현재 상태 |
 |---|---|
-| **`0032`·`0033` 운영 미적용** | 코드는 이미 배포됐다. `0033` 미적용 동안 결제는 폴백 경로(캡처 후 차감)로 동작하므로 **SEC-7(주문 간 동시 confirm 으로 같은 포인트·할인 이중 사용) 창이 남아 있다.** `0032` 미적용 동안은 `profiles.role` 권한 상승 표면이 열려 있다. 적용 절차는 런북 §9·§10 |
+| **`0032` 운영 미적용** | 코드는 이미 배포됐다. `0032` 미적용 동안은 `profiles.role` 권한 상승 표면이 열려 있다. 적용 절차는 런북 §10. (`0033` 은 2026-09-28 적용 확인 — SEC-7 창 닫힘, §0-14) |
 | 결제 키가 남은 오래된 pending 주문 | `513ba21` 이후 결제 키가 바인딩된 pending 은 사용자 취소·만료 cron 대상에서 제외되고 관리자 취소도 토스가 DONE 이면 409 `PAYMENT_CAPTURED_OR_IN_PROGRESS` 다. **확정 또는 환불로 수렴시킬 관리자 도구가 없다** |
 | 잠긴 포토북의 TopBar 제목 입력 | 내지 목록 화면에서 편집 잠금이 걸린 프로젝트인데도 TopBar 제목 입력만 비활성화되지 않는다. **데이터 위험은 없다**(서버가 409 로 거부) — UI 일관성 문제 |
 | 선물 미리보기 GET 의 쓰기 부작용 | 소유 불일치를 판정하면 `gifts.status='expired'` 로 **쓰기**를 한다. 읽기 요청이 상태를 바꾸는 구조라 **claim 경로로 한정**하는 것이 권고안 |
@@ -848,8 +858,8 @@ Next.js:  16.3.5 / React 19.3.0  (2026-09-21 전환·배포 — §0-12). next ad
           middleware.ts 유지(proxy 전환은 후속) · Turbopack 빌드
 Supabase: vprifnztvlduhpuwgdau (Seoul / papascompany org)
 Vercel:   yohans-projects-de3234df / icn1 리전
-DB 마이그레이션: 0001 ~ 0031 운영 적용 (0029: 2026-07-31 / 0030: 2026-08-09 / 0031: 2026-08-11)
-                 ⏳ 0032 · 0033 미적용 — 런북 §9·§10
+DB 마이그레이션: 0001 ~ 0031 · 0033 운영 적용 (0029: 2026-07-31 / 0030: 2026-08-09 / 0031: 2026-08-11 / 0033: 2026-09-28)
+                 ⏳ 0032 미적용 — 런북 §10
 Cron (6종, 전부 활성): process-emails */5 · attendance-reset 0 15 · storige-retention 0 18 ·
                     orphan-photos 0 20 · expire-pending-orders 30 * · reap-pdf-jobs */10 (UTC)
                     전부 Bearer CRON_SECRET 필요(미설정이면 fail-closed)
@@ -905,8 +915,7 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ### 지금 우선순위가 가장 높은 것
 
-1. **`0033` 운영 적용** — 런북 §9. **코드가 이미 배포돼 있으므로 적용 전까지 SEC-7
-   (주문 간 동시 confirm 으로 같은 포인트·할인 이중 사용) 창이 열려 있다.**
+1. ~~`0033` 운영 적용~~ — ✅ 2026-09-28 적용 확인(§0-14).
 2. **`0032` 운영 적용** — precheck → 적용 → postcheck (런북 §10).
    precheck 에서 악용 흔적이 나오면 **적용 전에** 템플릿 조치를 먼저 해야 한다.
 3. **QA-1 피해 조회** — 되돌리기 후 0객체로 저장된 내지·표지와 그중 결제된 건 (런북 §11).
