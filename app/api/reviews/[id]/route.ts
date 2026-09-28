@@ -6,6 +6,7 @@ import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { getSession, requireActiveUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
+import type { Review } from "@/lib/db/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -186,7 +187,7 @@ export async function PATCH(req: Request, props: RouteCtx) {
       return fail("FORBIDDEN", "해당 후기에 대한 권한이 없어요.", 403);
     }
 
-    const updatePayload: Record<string, unknown> = {};
+    const updatePayload: Partial<Review> = {};
     if (patch.rating !== undefined) updatePayload.rating = patch.rating;
     if (patch.body !== undefined) updatePayload.body = patch.body;
     if (patch.imageKeys !== undefined) updatePayload.image_keys = patch.imageKeys;

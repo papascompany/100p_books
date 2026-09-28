@@ -6,6 +6,7 @@ import { fail, ok } from "@/app/api/_lib/response";
 import { withAdmin } from "@/lib/admin/auth";
 import { logAdminAction } from "@/lib/admin/audit";
 import { createAdminSupabase } from "@/lib/db/admin";
+import type { DiscountCode } from "@/lib/db/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,7 +40,7 @@ export const PATCH = withAdmin<{ id: string }>(async (req, ctx, user) => {
   }
   const v = parsed.data;
 
-  const patch: Record<string, unknown> = {};
+  const patch: Partial<DiscountCode> = {};
   if (v.active !== undefined) patch.active = v.active;
   if (v.expiresAt !== undefined) patch.expires_at = v.expiresAt;
   if (v.maxUses !== undefined) patch.max_uses = v.maxUses;

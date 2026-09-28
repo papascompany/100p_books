@@ -130,7 +130,7 @@ export async function POST(req: Request) {
       .from("orders")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
-      .in("status", BLOCKING_STATUSES as unknown as string[]);
+      .in("status", BLOCKING_STATUSES);
     if (orderErr) {
       console.error("[account/delete] order query failed:", orderErr.message);
       return fail("ORDER_QUERY_FAILED", "주문 정보를 확인하지 못했습니다.", 500);

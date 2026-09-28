@@ -34,7 +34,9 @@ export default async function ProjectsPage() {
       "id, title, status, book_size_id, cover_json, created_at, updated_at, book_sizes(name)",
     )
     .eq("user_id", user.id)
-    .neq("status", "deleted")
+    // projects.status CHECK 는 draft|ordered 뿐이라 이 필터는 현재 no-op 이다.
+    // ProjectStatus 에 없는 값이라 타입드 neq() 대신 raw filter() 로 동일 쿼리를 유지한다.
+    .filter("status", "neq", "deleted")
     .order("updated_at", { ascending: false });
 
   if (error) {

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { fail, ok } from "@/app/api/_lib/response";
 import { withAdmin } from "@/lib/admin/auth";
 import { createAdminSupabase } from "@/lib/db/admin";
+import type { OrderStatus } from "@/lib/db/types";
 import { ALL_ORDER_STATUSES } from "@/lib/orders/state";
 
 export const runtime = "nodejs";
@@ -22,7 +23,7 @@ function toUuid(hex32: string): string {
 }
 
 const QuerySchema = z.object({
-  status: z.enum(ALL_ORDER_STATUSES as [string, ...string[]]).optional(),
+  status: z.enum(ALL_ORDER_STATUSES as [OrderStatus, ...OrderStatus[]]).optional(),
   q: z.string().trim().max(120).optional(),
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),

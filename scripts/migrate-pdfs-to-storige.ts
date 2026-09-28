@@ -22,6 +22,7 @@
  * ⚠️ 운영 DB 대상. 반드시 dry-run 으로 먼저 확인 후 --commit.
  */
 import { createAdminSupabase } from "@/lib/db/admin";
+import type { Order } from "@/lib/db/types";
 import { PDFS_BUCKET } from "@/lib/pdf/constants";
 import { STORIGE_ENABLED, uploadPdf } from "@/lib/storige/client";
 
@@ -106,11 +107,13 @@ async function main() {
           filename: `${title}-${j.kind}.pdf`,
         });
 
-        const col =
-          j.kind === "cover" ? "storige_cover_file_id" : "storige_interior_file_id";
+        const patch: Partial<Order> =
+          j.kind === "cover"
+            ? { storige_cover_file_id: up.id }
+            : { storige_interior_file_id: up.id };
         const { error: upErr } = await admin
           .from("orders")
-          .update({ [col]: up.id })
+          .update(patch)
           .eq("id", o.id);
         if (upErr) throw new Error(`db update: ${upErr.message}`);
 

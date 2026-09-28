@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth/session";
 import { createServerSupabase } from "@/lib/db/server";
+import type { OrderStatus } from "@/lib/db/types";
 
 import DeleteAccountCard from "./DeleteAccountCard";
 
@@ -24,7 +25,7 @@ const DT = new Intl.DateTimeFormat("ko-KR", {
   day: "2-digit",
 });
 
-const BLOCKING_STATUSES = ["pending", "paid", "in_production", "shipped"];
+const BLOCKING_STATUSES: OrderStatus[] = ["pending", "paid", "in_production", "shipped"];
 
 export default async function AccountPage() {
   let user;

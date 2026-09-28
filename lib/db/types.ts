@@ -21,7 +21,7 @@ export type OrderStatus =
   | "cancelled"
   | "refunded";
 
-export interface Profile {
+export type Profile = {
   id: string;
   email: string | null;
   role: UserRole;
@@ -41,7 +41,7 @@ export interface Profile {
   avatar_url: string | null;
   /** 가입 시 사용된 OAuth 프로바이더 ('kakao' | 'google' | 'email' | null). */
   oauth_provider: string | null;
-}
+};
 
 /**
  * 포인트 거래 내역 (M16-7).
@@ -56,7 +56,7 @@ export type PointLedgerReason =
   | "admin_adjust"
   | "welcome";
 
-export interface PointLedger {
+export type PointLedger = {
   id: string;
   user_id: string;
   amount: number;
@@ -66,26 +66,26 @@ export interface PointLedger {
   balance_after: number;
   memo: string | null;
   created_at: string;
-}
+};
 
 export type ReferralRewardStatus = "pending" | "rewarded";
 
-export interface Referral {
+export type Referral = {
   id: string;
   referrer_id: string;
   referee_id: string | null;
   referral_code: string;
   reward_status: ReferralRewardStatus;
   created_at: string;
-}
+};
 
-export interface UserPoints {
+export type UserPoints = {
   user_id: string;
   balance: number;
   updated_at: string;
-}
+};
 
-export interface BookSize {
+export type BookSize = {
   id: string;
   name: string;
   width_mm: number;
@@ -96,9 +96,9 @@ export interface BookSize {
   active: boolean;
   display_order: number;
   created_at: string;
-}
+};
 
-export interface Project {
+export type Project = {
   id: string;
   user_id: string;
   book_size_id: string;
@@ -108,9 +108,9 @@ export interface Project {
   layout_mode: LayoutMode;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface Photo {
+export type Photo = {
   id: string;
   project_id: string;
   storage_key: string;
@@ -126,9 +126,9 @@ export interface Photo {
   created_at: string;
   /** 휴지통 이동 시각. NULL 이면 active. */
   deleted_at: string | null;
-}
+};
 
-export interface Page {
+export type Page = {
   id: string;
   project_id: string;
   page_no: number;
@@ -136,9 +136,9 @@ export interface Page {
   fabric_json: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface Resource {
+export type Resource = {
   id: string;
   type: ResourceType;
   name: string;
@@ -146,16 +146,16 @@ export interface Resource {
   meta: Record<string, unknown> | null;
   active: boolean;
   created_at: string;
-}
+};
 
-export interface OrderAddress {
+export type OrderAddress = {
   name: string;
   phone: string;
   zip: string;
   addr1: string;
   addr2?: string;
   memo?: string;
-}
+};
 
 export type EmailJobStatus =
   | "pending"
@@ -164,7 +164,7 @@ export type EmailJobStatus =
   | "failed"
   | "cancelled";
 
-export interface EmailJob {
+export type EmailJob = {
   id: string;
   template: string;
   to_email: string;
@@ -183,20 +183,20 @@ export interface EmailJob {
   sent_at: string | null;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface ShareToken {
+export type ShareToken = {
   id: string;
   project_id: string;
   token: string;
   expires_at: string | null;
   view_count: number;
   created_at: string;
-}
+};
 
 export type GiftStatus = "pending" | "claimed" | "expired";
 
-export interface Gift {
+export type Gift = {
   id: string;
   order_id: string;
   sender_id: string;
@@ -208,13 +208,13 @@ export interface Gift {
   claimed_at: string | null;
   expires_at: string;
   created_at: string;
-}
+};
 
 /**
  * Storige 인쇄 검증(CMYK/재단선/해상도) 단건 결과 — worker-job 폴링 산출.
  * 단일 진실원본은 PageDoc(DB) 이고 PDF/검증은 파생물이므로 캐시 성격.
  */
-export interface StorigeValidationResult {
+export type StorigeValidationResult = {
   /** worker-job status: COMPLETED | FIXABLE | FAILED | PROCESSING | ERROR 등. */
   status: string;
   jobId?: string;
@@ -229,16 +229,16 @@ export interface StorigeValidationResult {
   warnings?: unknown[];
   /** 원본 응답 일부(디버그용). */
   raw?: unknown;
-}
+};
 
 /** orders.storige_validation 컬럼 캐시 — 표지/내지 각각의 검증 결과. */
-export interface StorigeValidationCache {
+export type StorigeValidationCache = {
   cover?: StorigeValidationResult;
   interior?: StorigeValidationResult;
   validatedAt?: string;
-}
+};
 
-export interface Order {
+export type Order = {
   id: string;
   project_id: string;
   user_id: string;
@@ -270,13 +270,19 @@ export interface Order {
   discount_amount: number;
   /** 사용된 포인트 (KRW). 0 = 미사용 (M16-4). */
   points_used: number;
+  /**
+   * finalize 리스 시작 시각 / 완료 마커 (0033).
+   * 0033 미적용 환경 폴백(lib/orders/finalize-paid.ts)이 있어 optional 로 둔다.
+   */
+  finalize_started_at?: string | null;
+  finalized_at?: string | null;
   created_at: string;
   updated_at: string;
-}
+};
 
 export type DiscountType = "percent" | "amount";
 
-export interface DiscountCode {
+export type DiscountCode = {
   id: string;
   code: string;
   type: DiscountType;
@@ -290,17 +296,17 @@ export interface DiscountCode {
   active: boolean;
   created_by: string | null;
   created_at: string;
-}
+};
 
-export interface DiscountUse {
+export type DiscountUse = {
   id: string;
   code_id: string;
   user_id: string;
   order_id: string | null;
   used_at: string;
-}
+};
 
-export interface Review {
+export type Review = {
   id: string;
   order_id: string;
   user_id: string;
@@ -311,65 +317,76 @@ export interface Review {
   public: boolean;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface ReviewLike {
+export type ReviewLike = {
   id: string;
   review_id: string;
   user_id: string;
   created_at: string;
-}
+};
 
 /**
  * 출석체크 (M16-6).
  * checked_date 는 KST 기준 YYYY-MM-DD.
  * month_key 는 'YYYY-MM' (인덱스/집계 편의용 — checked_date 의 prefix).
  */
-export interface Attendance {
+export type Attendance = {
   id: string;
   user_id: string;
   checked_date: string;
   month_key: string;
   created_at: string;
-}
+};
+
+/**
+ * Insert 페이로드 — `Required` 는 NOT NULL 이면서 DB 기본값이 없는 컬럼,
+ * 나머지(nullable·default 컬럼)는 생략 가능 (`supabase gen types` 의 Insert 규칙과 동일).
+ */
+type InsertOf<Row, Required extends keyof Row> = Pick<Row, Required> &
+  Partial<Omit<Row, Required>>;
 
 /**
  * Supabase client Database 제네릭에 넘길 얕은 스키마.
  * 실사용 (insert/select 페이로드 타입) 은 generated.ts 로 대체 예정.
  */
-export interface Database {
+export type Database = {
   public: {
     Tables: {
-      profiles: { Row: Profile; Insert: Partial<Profile> & { id: string }; Update: Partial<Profile> };
-      book_sizes: { Row: BookSize; Insert: Omit<BookSize, "id" | "created_at"> & Partial<Pick<BookSize, "id" | "created_at">>; Update: Partial<BookSize> };
-      projects: { Row: Project; Insert: Omit<Project, "id" | "created_at" | "updated_at"> & Partial<Pick<Project, "id">>; Update: Partial<Project> };
-      photos: { Row: Photo; Insert: Omit<Photo, "id" | "created_at"> & Partial<Pick<Photo, "id">>; Update: Partial<Photo> };
-      pages: { Row: Page; Insert: Omit<Page, "id" | "created_at"> & Partial<Pick<Page, "id">>; Update: Partial<Page> };
-      resources: { Row: Resource; Insert: Omit<Resource, "id" | "created_at"> & Partial<Pick<Resource, "id">>; Update: Partial<Resource> };
-      orders: { Row: Order; Insert: Omit<Order, "id" | "created_at" | "updated_at"> & Partial<Pick<Order, "id">>; Update: Partial<Order> };
+      profiles: { Row: Profile; Insert: Partial<Profile> & { id: string }; Update: Partial<Profile>; Relationships: [] };
+      book_sizes: { Row: BookSize; Insert: Omit<BookSize, "id" | "created_at"> & Partial<Pick<BookSize, "id" | "created_at">>; Update: Partial<BookSize>; Relationships: [] };
+      projects: { Row: Project; Insert: Omit<Project, "id" | "created_at" | "updated_at"> & Partial<Pick<Project, "id">>; Update: Partial<Project>; Relationships: [] };
+      photos: { Row: Photo; Insert: InsertOf<Photo, "project_id" | "storage_key">; Update: Partial<Photo>; Relationships: [] };
+      pages: { Row: Page; Insert: InsertOf<Page, "project_id" | "page_no">; Update: Partial<Page>; Relationships: [] };
+      resources: { Row: Resource; Insert: Omit<Resource, "id" | "created_at"> & Partial<Pick<Resource, "id">>; Update: Partial<Resource>; Relationships: [] };
+      orders: { Row: Order; Insert: InsertOf<Order, "project_id" | "user_id" | "amount" | "address">; Update: Partial<Order>; Relationships: [] };
       email_jobs: {
         Row: EmailJob;
         Insert: Omit<EmailJob, "id" | "created_at" | "updated_at"> &
           Partial<Pick<EmailJob, "id" | "created_at" | "updated_at">>;
         Update: Partial<EmailJob>;
+        Relationships: [];
       };
       share_tokens: {
         Row: ShareToken;
         Insert: Omit<ShareToken, "id" | "token" | "view_count" | "created_at"> &
           Partial<Pick<ShareToken, "id" | "token" | "view_count" | "created_at">>;
         Update: Partial<ShareToken>;
+        Relationships: [];
       };
       discount_codes: {
         Row: DiscountCode;
         Insert: Omit<DiscountCode, "id" | "used_count" | "created_at"> &
           Partial<Pick<DiscountCode, "id" | "used_count" | "created_at">>;
         Update: Partial<DiscountCode>;
+        Relationships: [];
       };
       discount_uses: {
         Row: DiscountUse;
         Insert: Omit<DiscountUse, "id" | "used_at"> &
           Partial<Pick<DiscountUse, "id" | "used_at">>;
         Update: Partial<DiscountUse>;
+        Relationships: [];
       };
       gifts: {
         Row: Gift;
@@ -397,18 +414,21 @@ export interface Database {
             >
           >;
         Update: Partial<Gift>;
+        Relationships: [];
       };
       referrals: {
         Row: Referral;
         Insert: Omit<Referral, "id" | "created_at"> &
           Partial<Pick<Referral, "id" | "created_at" | "reward_status" | "referee_id">>;
         Update: Partial<Referral>;
+        Relationships: [];
       };
       user_points: {
         Row: UserPoints;
         Insert: Omit<UserPoints, "updated_at"> &
           Partial<Pick<UserPoints, "updated_at" | "balance">>;
         Update: Partial<UserPoints>;
+        Relationships: [];
       };
       reviews: {
         Row: Review;
@@ -426,24 +446,28 @@ export interface Database {
             >
           >;
         Update: Partial<Review>;
+        Relationships: [];
       };
       review_likes: {
         Row: ReviewLike;
         Insert: Omit<ReviewLike, "id" | "created_at"> &
           Partial<Pick<ReviewLike, "id" | "created_at">>;
         Update: Partial<ReviewLike>;
+        Relationships: [];
       };
       attendances: {
         Row: Attendance;
         Insert: Omit<Attendance, "id" | "created_at"> &
           Partial<Pick<Attendance, "id" | "created_at">>;
         Update: Partial<Attendance>;
+        Relationships: [];
       };
       point_ledger: {
         Row: PointLedger;
         Insert: Omit<PointLedger, "id" | "created_at"> &
           Partial<Pick<PointLedger, "id" | "created_at">>;
         Update: Partial<PointLedger>;
+        Relationships: [];
       };
       site_content: {
         Row: {
@@ -464,9 +488,10 @@ export interface Database {
           updated_at?: string;
           updated_by?: string | null;
         };
+        Relationships: [];
       };
     };
-    Views: Record<string, never>;
+    Views: { [_ in never]: never };
     Functions: {
       is_admin: { Args: Record<string, never>; Returns: boolean };
       anonymize_account: {
@@ -561,14 +586,16 @@ export interface Database {
       };
       get_user_dashboard_counts: {
         Args: { p_user_id: string };
+        /** `returns table (...)` — PostgREST 는 행 배열로 돌려준다. */
         Returns: {
           order_count: number;
           project_count: number;
           active_photo_count: number;
           trash_photo_count: number;
-        };
+        }[];
       };
     };
-    Enums: Record<string, never>;
+    Enums: { [_ in never]: never };
+    CompositeTypes: { [_ in never]: never };
   };
-}
+};;

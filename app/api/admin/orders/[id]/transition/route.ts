@@ -6,7 +6,7 @@ import { fail, ok } from "@/app/api/_lib/response";
 import { withAdmin } from "@/lib/admin/auth";
 import { logAdminAction } from "@/lib/admin/audit";
 import { createAdminSupabase } from "@/lib/db/admin";
-import type { OrderStatus } from "@/lib/db/types";
+import type { Order, OrderStatus } from "@/lib/db/types";
 import { enqueueEmail } from "@/lib/email/queue";
 import { restoreOrderCredits } from "@/lib/orders/refund";
 import { TEMPLATE_BY_ORDER_STATUS } from "@/lib/email/templates";
@@ -131,7 +131,7 @@ export const POST = withAdmin<{ id: string }>(async (req, ctx, user) => {
   }
 
   // shipped 전이 시 tracking 정보 필수
-  const update: Record<string, unknown> = { status: target };
+  const update: Partial<Order> = { status: target };
   const now = new Date().toISOString();
   if (target === "shipped") {
     if (!trackingNo || !trackingCarrier) {
