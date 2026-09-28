@@ -3,13 +3,11 @@
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
 > 갱신 **2026-09-28** · `main` = `origin/main`(최신 커밋은 `git log -1`) · CI 3잡 green · Vercel prod success
-> ✅ **`0033` 은 2026-09-28 운영 적용 확인**(STATUS §0-14 — 09-24 1차 시도는 미반영이었다).
-> ⏳ **`0032` precheck 진행 중** — `[11](c)` 53행은 구 기록 방식 오탐으로 판단, 요약 쿼리
-> `docs/sql/0032-precheck-summary.sql` 결과로 확정 후 적용(런북 §10).
+> ✅ **`0032`·`0033` 2026-09-28 운영 적용**(STATUS §0-14) — `verify-0033.ts`·`verify-0032.ts`(12/12)·운영 `e2e:auth` 5 passed.
+> ⏳ 남은 확인: 오너가 `docs/sql/0032-postcheck-summary.sql` 을 SQL Editor 에서 1회 실행(27행 `pass=true` 기대).
 > **미병합 브랜치 없음** — `integ/wave2` 는 `bacadc1` 위로 rebase 해 ff 병합했다
 > (rebase 이전 SHA 는 더 이상 존재하지 않는다).
 > 🆕 **`4346c0b` = Next.js 16.3.5 + React 19.3.0 전환**(운영 배포 완료, STATUS.md §0-12).
-> ⚠️ **운영 미적용 마이그레이션 1건: `0032`** — 적용 전까지 `profiles.role` 권한 상승 표면이 열려 있다.
 > 남은 운영 액션은 전부 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md),
 > 실시간 상태는 `/admin` "서비스 런치 체크" 카드. **"다음 추천" 목록을 새로 만들지 말 것 —
 > 운영 액션·백로그의 유일한 정본은 런북이다** (사용자 지시, 2026-08-09).
@@ -65,7 +63,7 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
   마이그레이션은 사용자가 대시보드 SQL Editor에 수동 적용한다.
   ⚠️ 함정: SQL Editor가 다른 프로젝트에 연결돼 있으면 `42P01 relation does not exist` —
   상단이 `100p_books / PRODUCTION`인지 **먼저 확인시킬 것**.
-  **`0001~0031` · `0033` 적용 완료 · `0032` 미적용**(런북 §10).
+  **`0001~0033` 전부 적용 완료**(0032·0033 = 2026-09-28).
 
 **운영 환경변수 (Production 11종, `vercel env ls`)**
 
@@ -317,7 +315,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 
 **2026-09-28 기준 오너 대기 항목(순서대로)**
 1. ~~`0033` 재적용~~ — ✅ 09-28 적용 확인(`verify-0033.ts`: service `NOT_FOUND`, anon `42501`).
-2. `0032` precheck(**요약 쿼리 `docs/sql/0032-precheck-summary.sql` 한 번 → 기대와 다른 칸만 원문 섹션**) → (흔적 있으면 멈추고 보고) → 적용 → postcheck(런북 §10) → 운영 URL `pnpm e2e:auth`.
+2. ~~`0032` 적용~~ — ✅ 09-28 적용(precheck 33행 정상 → 적용 → `verify-0032.ts` 12/12 · `e2e:auth` 5 passed). 남은 것: `docs/sql/0032-postcheck-summary.sql` 오너 실행 결과 확인(27행 `pass=true`).
 3. QA-1 피해 조회(§11, 읽기 전용) · 고아 사진 dryRun(§12, `CRON_SECRET` 필요 — 자리표시자 그대로 보내면 401).
 4. 100p Supabase 조직 멤버 계정 확인(대시보드 → Organization → Team) — CLI 재로그인하면 운영 DB 직접 확인 가능.
 
@@ -329,9 +327,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 **2026-09-21 기준 서비스 경로는 전부 동작한다.** 단 사용자에게 먼저 알려야 할 것이 셋 있다:
 
 1. ~~런북 §9 — `0033` 적용~~ — ✅ 2026-09-28 적용 확인.
-2. **런북 §10 — `0032` 적용**(직접 쓰기 봉쇄·권한 상승 차단).
-   **precheck → 적용 → postcheck 순서**이고, precheck `[3]`~`[11]` 에서 흔적이 나오면
-   적용과 별개로 개별 시정이 필요하다.
+2. ~~런북 §10 — `0032` 적용~~ — ✅ 2026-09-28 적용(postcheck 요약 오너 실행만 남음).
 3. **런북 §11 — QA-1 피해 조회**(읽기 전용 SQL 3개). 되돌리기 후 0객체로 저장된 내지·표지와
    그중 결제된 건을 찾는다. 이미 발생한 피해라 조회가 먼저다.
 
