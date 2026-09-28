@@ -81,6 +81,12 @@ Next 16 전환 후 **36건 — low 3 / moderate 8 / high 24 / critical 1.**
 **`next` 23건이 전부 해소**됐고, 전체(dev 포함) `pnpm audit` 은 43건이다
 (low 3 / moderate 13 / high 25 / critical 2 — 늘어난 critical 1건은 dev 전용 경로).
 
+> ✅ **2026-09-28 갱신 — `pnpm.overrides` 로 prod audit 30 → 3건.** `fabric>canvas`·`jsdom>canvas` 를 제거(`"-"`)해
+> `canvas@2.11.2`→`tar` 12건이 트리에서 사라졌고(서버 PDF 는 `@napi-rs/canvas`, fabric 은 브라우저 전용),
+> 같은 메이저 패치로 `ws`·`tmp`·`form-data`·`brace-expansion`·`postcss-selector-parser`·`browserslist`·
+> `baseline-browser-mapping`·`@tootallnate/once` 를 올렸다. 남은 3건: `fabric` 2(7.x 필요) · `exceljs>uuid@8` 1(메이저).
+> 아래 표는 그 이전 기준 기록이다.
+
 | 패키지 | 건수 | 유입 경로 | 패치 | 현재 앱 노출 |
 |---|---|---|---|---|
 | `tar` | **12** (critical 1 · high 8 · moderate 3) | `fabric@6.9.1 > canvas@2.11.2`(fabric 의 **optionalDependencies**) `> @mapbox/node-pre-gyp > tar@6.2.1` | `>=7.5.19` | 전부 **아카이브 추출** 취약점이다(경로 탈출·심링크·압축 DoS). `tar` 는 node-pre-gyp 가 **설치 시점에** 네이티브 바이너리를 풀 때 쓰고, 앱은 **fabric 을 서버에서 import 하지 않으며**(CLAUDE.md 금지 규약) PDF 렌더러는 `@napi-rs/canvas` 다 → **앱 런타임 경로 없음**. 해소는 fabric 7.x 전환 |
