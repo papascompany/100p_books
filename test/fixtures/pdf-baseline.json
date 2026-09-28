@@ -30,13 +30,13 @@
   "pixels": {
     "darwin-arm64": {
       "shapes": "4f8c4bc94435455a39840dc1f6a4207dc5d2c23b62f4f9b6cbcd5808b33f51f9",
-      "photo-shadow": "284847f894f5fccd7401d04be3328bceb19d6076171e38da1b171ca5662748ce",
+      "photo-shadow": "301fc1e62f05d43fa7128a4771150a8c6a078a73877e6a9693342df8ebb6a410",
       "text": "5a33c68ee6a390a2be391ffad2586e9fb5bce7aaae6ebedea5d31902f2e8d408",
       "cover": "2ee828eff2a465697c2cbcf72a799d3467de6f5416547020f01f5d0fe16f17f6"
     },
     "linux-x64": {
       "shapes": "d99311a59f792ebd131537871bce2fbbd3a608d0173d075076fcffc8a90f6fdc",
-      "photo-shadow": "ffefd43375494a168b06d7614ed36a14769366bca39bf0fda67f09c8a26bef12",
+      "photo-shadow": "caea6624f32827ae77e509833336571337b716c531a7dabf47af12a1bff38414",
       "text": "8e04fcf2b771059caaf54be007e314a66781817af6269135e098c2818390cb40",
       "cover": "f6b99f16c0355afbe31b6eda49d9d05c028dd7ebbf5dd96dade5d6d194ace367"
     }

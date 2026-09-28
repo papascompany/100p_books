@@ -217,6 +217,10 @@ async function drawPhoto(
   //   - cover 모드: 이미지가 슬롯을 가득 채우므로 흰 fill 은 위에서 덮여 보이지 않음.
   //   - contain 모드: 슬롯 내부 빈 공간이 흰색으로 채워져 자연스러움.
   //   shadow 색/오프셋/블러는 PageDoc 의 PhotoObject.shadow 그대로 사용.
+  //   shadowBlur 에 보정 계수를 곱하지 말 것 — @napi-rs/canvas ≥1.0.3 은 Chromium 과 같은
+  //   sigma = shadowBlur/2 · shadowColor 알파 1회 적용이라(Brooooooklyn/canvas#1298, #1300)
+  //   에디터(fabric/Chromium Canvas2D)와 halo 가 최대 1/255 차이로 일치한다(2026-09 실측).
+  //   0.1.x 는 블러가 ~33% 넓고 알파가 제곱돼(0.35→~0.12) 에디터보다 흐리게 나왔다.
   if (obj.shadow) {
     cx.save();
     cx.shadowColor = obj.shadow.color;
