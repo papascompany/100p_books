@@ -493,8 +493,11 @@ read -rs CRON_SECRET && curl -s -H "Authorization: Bearer $CRON_SECRET" "https:/
 | Next 16 후속 ⑤ Lighthouse 비교 방법 재정의 | Next 16 이 First Load JS 표를 내지 않아 기준선(2026-08-07 Performance 88 · LCP 3.6s)과 **같은 방식의 비교가 불가능**하다 |
 | Vercel Preview 런타임 검증 | Preview 환경변수 0종이라 PDF 네이티브 바이너리·토스 결제·카카오 콜백을 프리뷰에서 실증할 수 없다. 필요하면 Production 값 복제가 선행 |
 | Dependabot 메이저 ignore 규칙 재검토 | `.github/dependabot.yml` 의 `next`/`react`/`react-dom`/`@types/react*`/`eslint`/`eslint-config-next` 메이저 ignore 는 14/18 기준으로 쓴 것이다. 16/19 기준으로 다시 볼 것. 2026-09-28 PR 정리 완료(minor/patch·actions v7·nanoid 6·lucide 1·TS 6·vitest 4 반영) — 남은 PR 은 `@napi-rs/canvas` 1.x 하나 |
-| `@napi-rs/canvas` 1.x (PR #14 보류) | 1.0.9 에서 `photo-shadow` PDF 회귀 해시가 바뀐다 — 그림자가 퍼지지 않고 아래로 짙고 날카롭게 찍혀 에디터(브라우저 canvas) 미리보기와 인쇄물이 달라진다. shadowBlur 해석 변경 원인 조사·보정 후에만 올릴 것(`pnpm test:pdf` 가 막는다) |
-| `@supabase/supabase-js` 2.117 · `@supabase/ssr` 0.12 | 수동 `Database` 타입(lib/db/types.ts)이 새 제네릭 제약(Relationships·Views·Functions, interface Row → index signature)과 맞지 않아 타입 오류 756건. `supabase gen types` 생성 타입으로 전환하는 별도 작업 |
+| 에디터 그림자 크기가 사진 해상도에 따라 달라짐 | fabric 6 `_setShadow` 가 blur·offset 에 객체 scale 을 곱한다. `buildPhoto`(lib/fabric/serialize.ts)는 원본 해상도 이미지를 축소 배치하므로 고해상도 사진일수록 미리보기 그림자가 작다(인쇄 PDF 는 mm 기준이라 정상). Shadow `nonScaling: true` 또는 blur/scale 보정 필요 |
+| 그림자 토글 px↔mm 불일치 | `SelectionPanel` 그림자 토글이 fabric.Shadow 를 blur 8 / offsetY 4(px)로 만들지만 메타는 2mm / 1mm(72dpi 기준 5.67px / 2.83px)로 기록 — 에디터와 PDF 수치가 어긋난다 |
+| 카카오 OAuth 실제 왕복 확인 | supabase-js 2.117·ssr 0.12 로 PKCE verifier 쿠키 키가 flow 별로 바뀌었다(legacy 키 폴백 있음). `e2e:auth` 는 비밀번호 로그인이라 OAuth 콜백은 수동 1회 확인 필요 |
+| a11y `/ (홈) 다크` color-contrast 간헐 실패 | 약 5~8% 빈도. 스크롤 리빌/전환 중 캡처로 추정 |
+| `eslint .` 전체 실행 실패 | eslint.config.mjs 의 react-hooks 규칙 객체가 플러그인 없는 파일에도 적용됨(기준선부터). `pnpm lint` 대상 디렉터리는 정상 |
 | fabric 7.x 전환 | SVG XSS 2건 + 선택적 `canvas` 백엔드가 끌고 오는 `tar` 12건(critical 1 포함)이 여기서 해소된다(SECURITY.md) |
 | 포인트 홀드/예약 설계 | `0033` reserve/release 로 구조적 해소 — ✅ 2026-09-28 운영 적용 |
 | 100% 할인 코드 | 100원 미만 주문은 `AMOUNT_BELOW_MINIMUM` 차단 — 무료 주문 경로 없음 |

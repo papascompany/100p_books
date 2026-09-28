@@ -25,6 +25,20 @@
 
 ## 🆕 최근 작업 (2026-09-17 ~ 09-28)
 
+### 0-15. 기술 부채 3건 병렬 처리 (2026-09-28) — supabase 업그레이드 · canvas 1.x · react-hooks 경고 0
+
+worktree 3개 병렬 구현 → 트랙별 적대 검토 → 수정 → 통합(`integ/tech-debt-3`) 후 main 반영.
+- **`@supabase/supabase-js` 2.45.6→2.117.1 · `@supabase/ssr` 0.5.2→0.12.7** — `lib/db/types.ts` 를 GenericSchema 형태로
+  (interface→type, `Relationships: []`, Views/Enums/CompositeTypes, rpc 14종 Functions 선언; 756 타입 오류→0).
+  `lib/db/server.ts`·`middleware.ts` 쿠키 어댑터를 `getAll/setAll` 로. 인증 쿠키 인코딩·청크·옵션 동일(소스 대조 + stub 런타임 비교).
+  **의도된 변화**: 쿠키를 쓰는 middleware 응답에 no-store 캐시 헤더 3종. 카카오 OAuth 왕복은 수동 1회 확인 필요(런북 백로그).
+- **`@napi-rs/canvas` 0.1.100→1.0.9** — 1.0.3~1.0.4 가 그림자 알파 제곱 버그를 고치고 blur 를 Chromium 과 맞췄다.
+  브라우저(Chromium Canvas2D·fabric) 기준 비교에서 **1.0.9 무보정이 일치**(평균 차 0.013/255), 0.1.x 가 옅고 넓게 틀렸던 것.
+  렌더 로직 무변경, `photo-shadow` baseline(darwin·linux 컨테이너) 갱신. **인쇄물 그림자가 이전보다 짙고 선명**해진다(표지 템플릿 저알파 halo 약 8배).
+- **react-hooks v7 경고 38건 + 미사용 disable 3건 → lint 0/0**, 4규칙 warn→error. 억제는 사유 적은 3건 + `assignFabricProps` 의도적 우회 1건.
+  드래그 재정렬 계산을 `lib/editor/reorder-pages.ts` 순수 함수로 분리(+테스트 8).
+- 통합 검증: typecheck 0 · lint 0/0 · vitest 84파일 1,440 · test:pdf 4 · build · e2e 12 · a11y 25 · 로컬 운영 빌드 대상 **`e2e:auth` 5 passed**(QA-1/2/4 포함).
+
 ### 0-14. ✅ `0033`·`0032` 운영 적용 (2026-09-28) — `0033` 09-24 1차 시도는 미반영이었다
 
 **`0032` 적용·검증(09-28)** — precheck 요약(`docs/sql/0032-precheck-summary.sql`) 33행 전부 기대대로
