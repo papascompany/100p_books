@@ -4,6 +4,7 @@ import { createAdminSupabase } from "@/lib/db/admin";
 import { ORIGINALS_BUCKET } from "@/lib/image/constants";
 
 import { PHOTO_CACHE_MAX_BYTES } from "./constants";
+import { validatePdfOriginal } from "./validate-original";
 
 /**
  * 빌드 잡 단위로 사용하는 사진 원본 다운로드 + 작은 LRU.
@@ -124,6 +125,8 @@ export function createPhotoResolver(opts: PhotoResolverOpts): {
       }
       const ab = await blob.arrayBuffer();
       const buf = Buffer.from(ab);
+      // 디코더(loadImage)에 넘기기 전에 업로드와 같은 기준으로 재검증 — 통과한 버퍼만 캐시한다.
+      await validatePdfOriginal(photoId, buf);
       cache.set(photoId, buf);
       return buf;
     })();

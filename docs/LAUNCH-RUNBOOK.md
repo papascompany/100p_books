@@ -477,7 +477,7 @@ read -rs CRON_SECRET && curl -s -H "Authorization: Bearer $CRON_SECRET" "https:/
 | 잠긴 포토북의 TopBar 제목 입력 | 내지 목록 화면에서 잠금인데도 제목 입력만 비활성화되지 않는다. **데이터 위험 없음**(서버가 409 로 거부) — UI 일관성 |
 | ~~`thumb_key` 고아 객체 회수 미검증~~ | ✅ `c931801` — 두 버킷 각각 스캔, 실제 참조로만 판정(추측 삭제로 살아 있는 썸네일을 지울 수 있던 결함도 함께 수정). 삭제 건수 로그는 `2d403ae` |
 | `photo-originals` SELECT 정책 잔존 | 0032 는 쓰기만 회수했다 |
-| `lib/pdf/photos.ts` 원본 재검증 부재 | 0032 로 바꿔치기 경로는 막았으나 PDF 조립 시 재검증은 없다(심층 방어) |
+| ~~`lib/pdf/photos.ts` 원본 재검증 부재~~ | ✅ 2026-09-28 해소 — `lib/pdf/validate-original.ts` 가 `loadImage` 전에 크기·매직 바이트(JPEG/PNG/WebP)·하드닝 sharp 헤더·픽셀 한도를 재검증 |
 | 관측성 | 에러 추적 SDK 미도입 — 운영 예외를 Vercel 로그 + `digest` 로만 본다 |
 | ~~Next 16 전환~~ | ✅ **2026-09-21 완료·운영 배포**(`4346c0b`). 아래 5개가 그 후속이다 |
 | Next 16 후속 ① `middleware` → `proxy` 전환 | 이번 웨이브에서 의도적으로 제외했다. **`middleware.ts` 유지 중이고 빌드 deprecation 경고 1건은 정상** |
