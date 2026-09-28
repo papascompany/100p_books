@@ -6,7 +6,7 @@
 >
 > ✅ **마이그레이션 `0001~0033` 전부 운영 적용**(2026-09-28, §0-14) — `0033`(결제 크레딧 선점)으로 SEC-7
 > 이중 사용 창, `0032`(클라이언트 직접 쓰기 봉쇄)로 `profiles.role` 권한 상승 표면이 닫혔다.
-> 남은 확인 1건: 오너가 SQL Editor 에서 `docs/sql/0032-postcheck-summary.sql` 실행(27행 모두 `pass=true` 기대).
+> postcheck 요약(`docs/sql/0032-postcheck-summary.sql`) 운영 실행 **27행 전부 `pass=true`**(2026-09-28).
 >
 > 최종 업데이트: 2026-09-28
 > 배포 URL: https://100pbooks.vercel.app
@@ -34,7 +34,7 @@
   `role=admin`)가 전부 `42501`, service_role 로 본 임시 계정 role ≠ admin, 임시 계정 hard delete 확인.
 - 운영 URL `pnpm e2e:auth` **5 passed**(업로드 sign-upload→서명 PUT→complete 포함, 정리 오류 0).
 - `docs/sql/0032-postcheck-summary.sql`(신규, 27행 PASS/FAIL) — PGlite 에 `0001~0033` **실제 적용** 하네스로
-  적용 전 23 FAIL / 적용 후 27 PASS, 음성 대조 42건 전부 FAIL 로 잡힘(적대 검토 2렌즈 반영). **운영 실행은 오너 대기.**
+  적용 전 23 FAIL / 적용 후 27 PASS, 음성 대조 42건 전부 FAIL 로 잡힘(적대 검토 2렌즈 반영). **운영 실행 27행 전부 PASS(09-28).**
 
 **09-28 재적용 → 반영 확인.** 오너가 SQL Editor 에서 전체 실행(`Success. No rows returned`) 후
 `scripts/verify-0033.ts`(읽기 전용) 결과: service `reserve/release_order_credits` = `{ok:false, code:"NOT_FOUND"}`
@@ -239,7 +239,6 @@ e2e 12 · a11y 25 · build 성공. `e2e:auth` 5 는 `bacadc1`·`34a5897` 두 배
 
 | 항목 | 현재 상태 |
 |---|---|
-| `0032` postcheck 운영 실행 | `0032` 는 2026-09-28 적용·`verify-0032.ts` 12/12·`e2e:auth` 5 passed 로 확인됐다(§0-14). storage 정책·트리거 형태는 SQL 로만 보이므로 오너가 `docs/sql/0032-postcheck-summary.sql` 을 1회 실행(27행 `pass=true` 기대) |
 | 결제 키가 남은 오래된 pending 주문 | `513ba21` 이후 결제 키가 바인딩된 pending 은 사용자 취소·만료 cron 대상에서 제외되고 관리자 취소도 토스가 DONE 이면 409 `PAYMENT_CAPTURED_OR_IN_PROGRESS` 다. **확정 또는 환불로 수렴시킬 관리자 도구가 없다** |
 | 잠긴 포토북의 TopBar 제목 입력 | 내지 목록 화면에서 편집 잠금이 걸린 프로젝트인데도 TopBar 제목 입력만 비활성화되지 않는다. **데이터 위험은 없다**(서버가 409 로 거부) — UI 일관성 문제 |
 | 선물 미리보기 GET 의 쓰기 부작용 | 소유 불일치를 판정하면 `gifts.status='expired'` 로 **쓰기**를 한다. 읽기 요청이 상태를 바꾸는 구조라 **claim 경로로 한정**하는 것이 권고안 |
@@ -924,7 +923,7 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 ### 지금 우선순위가 가장 높은 것
 
 1. ~~`0033` 운영 적용~~ — ✅ 2026-09-28 적용 확인(§0-14).
-2. ~~`0032` 운영 적용~~ — ✅ 2026-09-28 적용·검증(§0-14). postcheck 요약 SQL 운영 실행만 남음.
+2. ~~`0032` 운영 적용~~ — ✅ 2026-09-28 적용·검증(§0-14, postcheck 27/27 PASS).
 3. **QA-1 피해 조회** — 되돌리기 후 0객체로 저장된 내지·표지와 그중 결제된 건 (런북 §11).
 
 > ✅ "배포본 대상 `pnpm e2e:auth` 재실행"은 해소됐다 — `4346c0b`(Next 16) 배포본에서 5 passed.

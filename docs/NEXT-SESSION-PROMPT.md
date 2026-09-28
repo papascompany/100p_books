@@ -4,7 +4,7 @@
 >
 > 갱신 **2026-09-28** · `main` = `origin/main`(최신 커밋은 `git log -1`) · CI 3잡 green · Vercel prod success
 > ✅ **`0032`·`0033` 2026-09-28 운영 적용**(STATUS §0-14) — `verify-0033.ts`·`verify-0032.ts`(12/12)·운영 `e2e:auth` 5 passed.
-> ⏳ 남은 확인: 오너가 `docs/sql/0032-postcheck-summary.sql` 을 SQL Editor 에서 1회 실행(27행 `pass=true` 기대).
+> ✅ postcheck 요약 운영 실행 27/27 PASS. PDF 조립 전 원본 재검증(`40fd966`) 반영.
 > **미병합 브랜치 없음** — `integ/wave2` 는 `bacadc1` 위로 rebase 해 ff 병합했다
 > (rebase 이전 SHA 는 더 이상 존재하지 않는다).
 > 🆕 **`4346c0b` = Next.js 16.3.5 + React 19.3.0 전환**(운영 배포 완료, STATUS.md §0-12).
@@ -315,7 +315,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 
 **2026-09-28 기준 오너 대기 항목(순서대로)**
 1. ~~`0033` 재적용~~ — ✅ 09-28 적용 확인(`verify-0033.ts`: service `NOT_FOUND`, anon `42501`).
-2. ~~`0032` 적용~~ — ✅ 09-28 적용(precheck 33행 정상 → 적용 → `verify-0032.ts` 12/12 · `e2e:auth` 5 passed). 남은 것: `docs/sql/0032-postcheck-summary.sql` 오너 실행 결과 확인(27행 `pass=true`).
+2. ~~`0032` 적용~~ — ✅ 09-28 적용(precheck 33행 정상 → 적용 → `verify-0032.ts` 12/12 · `e2e:auth` 5 passed). postcheck 요약 27/27 PASS.
 3. QA-1 피해 조회(§11, 읽기 전용) · 고아 사진 dryRun(§12, `CRON_SECRET` 필요 — 자리표시자 그대로 보내면 401).
 4. 100p Supabase 조직 멤버 계정 확인(대시보드 → Organization → Team) — CLI 재로그인하면 운영 DB 직접 확인 가능.
 
@@ -327,7 +327,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 **2026-09-21 기준 서비스 경로는 전부 동작한다.** 단 사용자에게 먼저 알려야 할 것이 셋 있다:
 
 1. ~~런북 §9 — `0033` 적용~~ — ✅ 2026-09-28 적용 확인.
-2. ~~런북 §10 — `0032` 적용~~ — ✅ 2026-09-28 적용(postcheck 요약 오너 실행만 남음).
+2. ~~런북 §10 — `0032` 적용~~ — ✅ 2026-09-28 적용(postcheck 27/27 PASS).
 3. **런북 §11 — QA-1 피해 조회**(읽기 전용 SQL 3개). 되돌리기 후 0객체로 저장된 내지·표지와
    그중 결제된 건을 찾는다. 이미 발생한 피해라 조회가 먼저다.
 
