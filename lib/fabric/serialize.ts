@@ -39,6 +39,27 @@ import type {
 } from "@/lib/layout/types";
 
 /** 1 inch = 25.4 mm. */
+/**
+ * 사진 그림자 — mm 메타(PDF 가 쓰는 값)에서 fabric.Shadow 를 만든다. 에디터·직렬화 공용.
+ *
+ * `nonScaling: true` 가 핵심이다. fabric 6 은 기본값(false)에서 shadow blur·offset 에
+ * 객체 scale 을 곱하는데, 사진은 원본 해상도 이미지를 슬롯 크기로 축소 배치하므로
+ * (applyPhotoSlot) 고해상도 사진일수록 미리보기 그림자가 작아졌다. nonScaling 이면
+ * 캔버스 좌표(= mmToPx(mm, dpi)) 기준으로 그려지고, 뷰포트 줌만 반영된다 → PDF 와 같은 mm.
+ */
+export function buildPhotoShadow(
+  shadow: { blurMm: number; offsetYMm: number; color: string },
+  dpi: number,
+): fabric.Shadow {
+  return new fabric.Shadow({
+    blur: mmToPx(shadow.blurMm, dpi),
+    offsetX: 0,
+    offsetY: mmToPx(shadow.offsetYMm, dpi),
+    color: shadow.color,
+    nonScaling: true,
+  });
+}
+
 export function mmToPx(mm: number, dpi: number): number {
   return (mm * dpi) / 25.4;
 }
@@ -250,12 +271,7 @@ async function buildPhoto(
   });
 
   if (obj.shadow) {
-    img.shadow = new fabric.Shadow({
-      blur: mmToPx(obj.shadow.blurMm, dpi),
-      offsetX: 0,
-      offsetY: mmToPx(obj.shadow.offsetYMm, dpi),
-      color: obj.shadow.color,
-    });
+    img.shadow = buildPhotoShadow(obj.shadow, dpi);
   }
 
   const tagged = img as TaggedFabricObject;

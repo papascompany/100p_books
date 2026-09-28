@@ -7,7 +7,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { applyPhotoSlot } from "@/lib/fabric/photo-slot";
-import { ptToPx, type TaggedFabricObject } from "@/lib/fabric/serialize";
+import { buildPhotoShadow, ptToPx, type TaggedFabricObject } from "@/lib/fabric/serialize";
 
 import type { SetBackgroundInput } from "./FabricStage";
 
@@ -446,16 +446,14 @@ function PhotoEditor({
           checked={Boolean(target.shadow)}
           onChange={(e) => {
             if (e.target.checked) {
+              // 화면 그림자와 저장 메타(mm)를 같은 값에서 만든다 — 예전에는 px 8/4 를 그리고
+              // mm 2/1 을 저장해 에디터와 PDF 가 어긋났다.
+              const shadow = { blurMm: 2, offsetYMm: 1, color: "rgba(0,0,0,0.15)" };
               assignFabricProps(target, {
-                shadow: new fabric.Shadow({
-                  blur: 8,
-                  offsetX: 0,
-                  offsetY: 4,
-                  color: "rgba(0,0,0,0.15)",
-                }),
-                shadowBlurMm: 2,
-                shadowOffsetYMm: 1,
-                shadowColor: "rgba(0,0,0,0.15)",
+                shadow: buildPhotoShadow(shadow, dpi),
+                shadowBlurMm: shadow.blurMm,
+                shadowOffsetYMm: shadow.offsetYMm,
+                shadowColor: shadow.color,
               });
             } else {
               assignFabricProps(

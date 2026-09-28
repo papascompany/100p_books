@@ -493,8 +493,8 @@ read -rs CRON_SECRET && curl -s -H "Authorization: Bearer $CRON_SECRET" "https:/
 | Next 16 후속 ⑤ Lighthouse 비교 방법 재정의 | Next 16 이 First Load JS 표를 내지 않아 기준선(2026-08-07 Performance 88 · LCP 3.6s)과 **같은 방식의 비교가 불가능**하다 |
 | Vercel Preview 런타임 검증 | Preview 환경변수 0종이라 PDF 네이티브 바이너리·토스 결제·카카오 콜백을 프리뷰에서 실증할 수 없다. 필요하면 Production 값 복제가 선행 |
 | Dependabot 메이저 ignore 규칙 재검토 | `.github/dependabot.yml` 의 `next`/`react`/`react-dom`/`@types/react*`/`eslint`/`eslint-config-next` 메이저 ignore 는 14/18 기준으로 쓴 것이다. 16/19 기준으로 다시 볼 것. 2026-09-28 PR 정리 완료(minor/patch·actions v7·nanoid 6·lucide 1·TS 6·vitest 4 반영) — 남은 PR 은 `@napi-rs/canvas` 1.x 하나 |
-| 에디터 그림자 크기가 사진 해상도에 따라 달라짐 | fabric 6 `_setShadow` 가 blur·offset 에 객체 scale 을 곱한다. `buildPhoto`(lib/fabric/serialize.ts)는 원본 해상도 이미지를 축소 배치하므로 고해상도 사진일수록 미리보기 그림자가 작다(인쇄 PDF 는 mm 기준이라 정상). Shadow `nonScaling: true` 또는 blur/scale 보정 필요 |
-| 그림자 토글 px↔mm 불일치 | `SelectionPanel` 그림자 토글이 fabric.Shadow 를 blur 8 / offsetY 4(px)로 만들지만 메타는 2mm / 1mm(72dpi 기준 5.67px / 2.83px)로 기록 — 에디터와 PDF 수치가 어긋난다 |
+| ~~에디터 그림자 크기가 사진 해상도에 따라 달라짐~~ | ✅ 2026-09-28 해소 — `buildPhotoShadow`(lib/fabric/serialize.ts)가 mm 메타에서 `nonScaling: true` 그림자를 만든다(뷰포트 줌만 반영) |
+| ~~그림자 토글 px↔mm 불일치~~ | ✅ 2026-09-28 해소 — 토글도 같은 `buildPhotoShadow` 로 저장 mm 에서 그린다 |
 | 카카오 OAuth 실제 왕복 확인 | supabase-js 2.117·ssr 0.12 로 PKCE verifier 쿠키 키가 flow 별로 바뀌었다(legacy 키 폴백 있음). `e2e:auth` 는 비밀번호 로그인이라 OAuth 콜백은 수동 1회 확인 필요 |
 | a11y `/ (홈) 다크` color-contrast 간헐 실패 | 약 5~8% 빈도. 스크롤 리빌/전환 중 캡처로 추정 |
 | `eslint .` 전체 실행 실패 | eslint.config.mjs 의 react-hooks 규칙 객체가 플러그인 없는 파일에도 적용됨(기준선부터). `pnpm lint` 대상 디렉터리는 정상 |

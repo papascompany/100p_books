@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildPhotoShadow,
   fabricToPageDoc,
   mmToPx,
   ptToPx,
@@ -465,5 +466,16 @@ describe("PageDoc 좌표 라운드트립 (mock)", () => {
     expect(out.widthMm).toBeCloseTo(original.widthMm, 4);
     expect(out.heightMm).toBeCloseTo(original.heightMm, 4);
     expect(out.fill).toBe("#abcdef");
+  });
+});
+
+describe("buildPhotoShadow — 에디터 그림자를 PDF 와 같은 mm 로", () => {
+  it("mm 메타를 캔버스 px 로 바꾸고 nonScaling 으로 객체 축소 비율과 무관하게 만든다", () => {
+    const s = buildPhotoShadow({ blurMm: 2, offsetYMm: 1, color: "rgba(0,0,0,0.15)" }, 72);
+    expect(s.nonScaling).toBe(true);
+    expect(s.blur).toBeCloseTo(mmToPx(2, 72));
+    expect(s.offsetY).toBeCloseTo(mmToPx(1, 72));
+    expect(s.offsetX).toBe(0);
+    expect(s.color).toBe("rgba(0,0,0,0.15)");
   });
 });
