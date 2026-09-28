@@ -11,7 +11,7 @@ import nextTypeScript from "eslint-config-next/typescript";
  *   는 eslint-config-next 16 이 내장한 flat 프리셋 두 개로 대체한다
  *   (`core-web-vitals` = next + react + react-hooks 7 + jsx-a11y, `typescript` = typescript-eslint 8).
  * - 이번 웨이브의 방침: 전환으로 **새로 생기는 규칙 위반은 warn** 으로 두고 error 로 올리지 않는다.
- *   error 승격은 후속 웨이브에서 규칙별로 판단한다.
+ *   error 승격은 후속 웨이브에서 규칙별로 판단한다(react-hooks 4규칙은 승격 완료 — 아래 주석).
  */
 export default defineConfig([
   globalIgnores([
@@ -44,10 +44,16 @@ export default defineConfig([
       // 규칙별로 처리한다.
       //
       // eslint-plugin-react-hooks 7 (React Compiler 기반 신규 규칙):
-      "react-hooks/set-state-in-effect": "warn",
-      "react-hooks/immutability": "warn",
-      "react-hooks/refs": "warn",
-      "react-hooks/purity": "warn",
+      // 후속 웨이브(refactor/react-hooks-warnings)에서 위반 38건을 모두 해소해 error 로 올렸다
+      // — 재발 방지. 억제가 불가피한 곳은 해당 줄에 사유를 적은 eslint-disable-next-line 만 쓴다
+      // (현재 3건: CoverEditor 레이아웃 타이밍 · FileGridItem blob URL 수명 · 휴지통 서버 컴포넌트 Date.now).
+      // 참고: 이 규칙들은 await 경계를 보지 않고(await 뒤 setState 도 동기로 판정), catch 없는
+      // try/finally 가 있는 함수는 컴파일러가 분석을 건너뛴다 — effect 에서 부르는 fetch 는
+      // state 반영을 promise 콜백(.then/.catch/.finally)에 두는 패턴을 쓴다.
+      "react-hooks/set-state-in-effect": "error",
+      "react-hooks/immutability": "error",
+      "react-hooks/refs": "error",
+      "react-hooks/purity": "error",
       // typescript-eslint 8 신규 규칙(구 ban-types 분리):
       "@typescript-eslint/no-empty-object-type": "warn",
     },
