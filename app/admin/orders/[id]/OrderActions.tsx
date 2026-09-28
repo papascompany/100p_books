@@ -419,35 +419,61 @@ function RefundDialog({
   const [force, setForce] = React.useState(false);
   const [reason, setReason] = React.useState("");
 
-  const loadPreview = React.useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const r = await fetch(`/api/admin/orders/${orderId}/refund`, {
-        cache: "no-store",
-      });
-      const j = await r.json().catch(() => null);
-      if (!r.ok || !j?.ok) {
-        setPreview(null);
-        setLoadError(j?.error?.message ?? "환불 정보를 불러오지 못했습니다.");
-        return;
-      }
-      setPreview(j.data as RefundPreview);
-    } catch {
+  // 조회 본체 — 선행 상태 초기화 없이 응답만 반영한다(effect·핸들러 공용). state 반영은
+  // promise 콜백에서만 한다(react-hooks/set-state-in-effect 는 await 경계를 보지 않는다).
+  const fetchPreview = React.useCallback(
+    () =>
+      (async () => {
+        const r = await fetch(`/api/admin/orders/${orderId}/refund`, {
+          cache: "no-store",
+        });
+        const j = await r.json().catch(() => null);
+        return { r, j };
+      })()
+        .then(({ r, j }) => {
+          if (!r.ok || !j?.ok) {
+            setPreview(null);
+            setLoadError(j?.error?.message ?? "환불 정보를 불러오지 못했습니다.");
+            return;
+          }
+          setPreview(j.data as RefundPreview);
+        })
+        .catch(() => {
+          setPreview(null);
+          setLoadError("환불 정보를 불러오지 못했습니다.");
+        })
+        .finally(() => {
+          setLoading(false);
+        }),
+    [orderId],
+  );
+
+  // 열릴 때(또는 열린 채 주문이 바뀔 때) 입력·미리보기 초기화 + 로딩 표시 —
+  // effect 안 동기 setState 대신 렌더 중 상태 조정 패턴. fetch 는 아래 effect 가 한다.
+  const openKey = open ? orderId : null;
+  const [prevOpenKey, setPrevOpenKey] = React.useState<string | null>(null);
+  if (prevOpenKey !== openKey) {
+    setPrevOpenKey(openKey);
+    if (openKey !== null) {
+      setForce(false);
+      setReason("");
       setPreview(null);
-      setLoadError("환불 정보를 불러오지 못했습니다.");
-    } finally {
-      setLoading(false);
+      setLoading(true);
+      setLoadError(null);
     }
-  }, [orderId]);
+  }
 
   React.useEffect(() => {
     if (!open) return;
-    setForce(false);
-    setReason("");
-    setPreview(null);
-    void loadPreview();
-  }, [open, loadPreview]);
+    void fetchPreview();
+  }, [open, fetchPreview]);
+
+  // 이벤트 핸들러용 재조회 — 로딩 표시·에러 초기화 후 조회.
+  const loadPreview = React.useCallback(() => {
+    setLoading(true);
+    setLoadError(null);
+    return fetchPreview();
+  }, [fetchPreview]);
 
   const amount = preview?.toss?.totalAmount ?? preview?.order.amount ?? 0;
   const method = preview?.toss?.method ?? "—";

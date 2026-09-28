@@ -188,7 +188,7 @@ export default function CoverTemplateDialog({
                 <span
                   className="block w-full overflow-hidden rounded"
                   style={{ aspectRatio: "2 / 1" }}
-                  // eslint-disable-next-line react/no-danger
+                  // previewSvg 는 lib/layout 이 코드로 생성한 정적 SVG(사용자 입력 아님)
                   dangerouslySetInnerHTML={{ __html: meta.previewSvg }}
                 />
                 <span className="text-xs">{meta.label}</span>

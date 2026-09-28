@@ -83,34 +83,56 @@ export default function AttendanceWidget() {
   const [checking, setChecking] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // 데이터 로드 — 에러 상태의 "다시 시도" 버튼에서 재호출할 수 있게 useCallback 으로 추출
-  const load = React.useCallback(async () => {
+  // 데이터 조회 본체 — 선행 상태 표시 없이 응답만 반영한다(effect·"다시 시도" 공용).
+  // state 반영은 promise 콜백에서만 한다(react-hooks/set-state-in-effect 는 await 경계를
+  // 보지 않는다).
+  const fetchData = React.useCallback(
+    () =>
+      (async () => {
+        const res = await fetch(`/api/attendance/me?month=${currentMonth}`);
+        return (await res.json()) as {
+          ok: boolean;
+          data?: AttendanceData;
+          error?: { code?: string; message?: string };
+        };
+      })()
+        .then((json) => {
+          if (json.ok && json.data) {
+            setData(json.data);
+          } else {
+            setError(
+              extractErrorMessage(json.error, "출석 정보를 불러오지 못했습니다."),
+            );
+          }
+        })
+        .catch(() => {
+          setError("네트워크 오류가 발생했습니다.");
+        })
+        .finally(() => {
+          setLoading(false);
+        }),
+    [currentMonth],
+  );
+
+  // 조회 키(currentMonth)가 바뀌면 렌더 중에 로딩 표시·에러 초기화 — effect 안 동기
+  // setState 대신 React 권장 '렌더 중 상태 조정' 패턴(첫 렌더는 초기 state 와 같다).
+  const [requestedKey, setRequestedKey] = React.useState(currentMonth);
+  if (requestedKey !== currentMonth) {
+    setRequestedKey(currentMonth);
     setLoading(true);
     setError(null);
-    try {
-      const res = await fetch(`/api/attendance/me?month=${currentMonth}`);
-      const json = (await res.json()) as {
-        ok: boolean;
-        data?: AttendanceData;
-        error?: { code?: string; message?: string };
-      };
-      if (json.ok && json.data) {
-        setData(json.data);
-      } else {
-        setError(
-          extractErrorMessage(json.error, "출석 정보를 불러오지 못했습니다."),
-        );
-      }
-    } catch {
-      setError("네트워크 오류가 발생했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  }, [currentMonth]);
+  }
 
   React.useEffect(() => {
-    void load();
-  }, [load]);
+    void fetchData();
+  }, [fetchData]);
+
+  // "다시 시도" 버튼용 — 로딩 표시 후 재조회.
+  const load = React.useCallback(() => {
+    setLoading(true);
+    setError(null);
+    return fetchData();
+  }, [fetchData]);
 
   const checkedSet = React.useMemo(
     () => new Set(data?.checkedDates ?? []),

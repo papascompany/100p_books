@@ -30,30 +30,44 @@ export default function ReferralCard() {
   const [loading, setLoading] = React.useState(true);
   const [copied, setCopied] = React.useState(false);
 
-  // 데이터 로드 — 실패 상태의 "다시 시도" 버튼에서 재호출할 수 있게 useCallback 으로 추출
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const [codeRes, statsRes] = await Promise.all([
-        fetch("/api/referrals/my-code"),
-        fetch("/api/referrals/stats"),
-      ]);
-      const [codeJson, statsJson] = await Promise.all([
-        codeRes.json() as Promise<{ ok: boolean; data: ReferralData }>,
-        statsRes.json() as Promise<{ ok: boolean; data: StatsData }>,
-      ]);
-      if (codeJson.ok) setReferral(codeJson.data);
-      if (statsJson.ok) setStats(statsJson.data);
-    } catch {
-      // 네트워크 오류는 silent — 로딩 실패 UI 에서 처리
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // 데이터 조회 본체 — 선행 상태 표시 없이 응답만 반영한다(effect·"다시 시도" 공용).
+  // state 반영은 promise 콜백에서만 한다(react-hooks/set-state-in-effect 는 await 경계를
+  // 보지 않는다).
+  const fetchData = React.useCallback(
+    () =>
+      (async () => {
+        const [codeRes, statsRes] = await Promise.all([
+          fetch("/api/referrals/my-code"),
+          fetch("/api/referrals/stats"),
+        ]);
+        return Promise.all([
+          codeRes.json() as Promise<{ ok: boolean; data: ReferralData }>,
+          statsRes.json() as Promise<{ ok: boolean; data: StatsData }>,
+        ]);
+      })()
+        .then(([codeJson, statsJson]) => {
+          if (codeJson.ok) setReferral(codeJson.data);
+          if (statsJson.ok) setStats(statsJson.data);
+        })
+        .catch(() => {
+          // 네트워크 오류는 silent — 로딩 실패 UI 에서 처리
+        })
+        .finally(() => {
+          setLoading(false);
+        }),
+    [],
+  );
 
+  // 첫 로드 — loading=true 가 초기 state 라 선행 표시가 필요 없다.
   React.useEffect(() => {
-    void load();
-  }, [load]);
+    void fetchData();
+  }, [fetchData]);
+
+  // "다시 시도" 버튼용 — 로딩 표시 후 재조회.
+  const load = React.useCallback(() => {
+    setLoading(true);
+    return fetchData();
+  }, [fetchData]);
 
   async function copyLink() {
     if (!referral?.referralUrl) return;

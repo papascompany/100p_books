@@ -71,28 +71,44 @@ export default function ShareDialog({ open, onOpenChange, projectId }: ShareDial
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 토큰 목록 fetch
-  const loadTokens = useCallback(async () => {
-    setLoadingTokens(true);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/share`, { cache: "no-store" });
-      const json = (await res.json()) as {
-        ok: boolean;
-        data?: { tokens: ShareToken[] };
-        error?: { message?: string };
-      };
-      if (!res.ok || !json.ok) throw new Error(json.error?.message ?? "목록 불러오기 실패");
-      setTokens(json.data?.tokens ?? []);
-    } catch (e) {
-      toast({
-        title: "목록 불러오기 실패",
-        description: e instanceof Error ? e.message : "알 수 없는 오류",
-        variant: "destructive",
-      });
-    } finally {
-      setLoadingTokens(false);
-    }
-  }, [projectId]);
+  // 토큰 목록 fetch — state 반영은 promise 콜백에서만 한다(effect 에서 호출 —
+  // react-hooks/set-state-in-effect 는 await 경계를 보지 않는다).
+  const loadTokens = useCallback(
+    () =>
+      (async () => {
+        const res = await fetch(`/api/projects/${projectId}/share`, { cache: "no-store" });
+        const json = (await res.json()) as {
+          ok: boolean;
+          data?: { tokens: ShareToken[] };
+          error?: { message?: string };
+        };
+        if (!res.ok || !json.ok) throw new Error(json.error?.message ?? "목록 불러오기 실패");
+        return json.data?.tokens ?? [];
+      })()
+        .then((nextTokens) => {
+          setTokens(nextTokens);
+        })
+        .catch((e: unknown) => {
+          toast({
+            title: "목록 불러오기 실패",
+            description: e instanceof Error ? e.message : "알 수 없는 오류",
+            variant: "destructive",
+          });
+        })
+        .finally(() => {
+          setLoadingTokens(false);
+        }),
+    [projectId],
+  );
+
+  // 열릴 때(또는 열린 채 프로젝트가 바뀔 때) 로딩 표시 — effect 안 동기 setState 대신
+  // 렌더 중 상태 조정 패턴. 목록 조회는 아래 effect 가 한다.
+  const openKey = open ? projectId : null;
+  const [prevOpenKey, setPrevOpenKey] = useState<string | null>(null);
+  if (prevOpenKey !== openKey) {
+    setPrevOpenKey(openKey);
+    if (openKey !== null) setLoadingTokens(true);
+  }
 
   // 다이얼로그 열릴 때 목록 로드
   useEffect(() => {

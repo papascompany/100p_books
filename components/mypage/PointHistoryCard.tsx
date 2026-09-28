@@ -86,33 +86,55 @@ export default function PointHistoryCard({
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
-  const load = React.useCallback(async () => {
+  // 조회 본체 — 선행 상태 표시 없이 응답만 반영한다(effect·재시도 공용). state 반영은
+  // promise 콜백에서만 한다(react-hooks/set-state-in-effect 는 await 경계를 보지 않는다).
+  const fetchData = React.useCallback(
+    () =>
+      (async () => {
+        const res = await fetch(`/api/points?limit=${limit}`, { cache: "no-store" });
+        return (await res.json()) as {
+          ok: boolean;
+          data?: PointsResponse;
+          error?: { code?: string; message?: string };
+        };
+      })()
+        .then((json) => {
+          if (!json.ok || !json.data) {
+            setError(
+              extractErrorMessage(json.error, "포인트 내역을 불러오지 못했어요."),
+            );
+            return;
+          }
+          setData(json.data);
+        })
+        .catch(() => {
+          setError("네트워크 오류가 발생했습니다.");
+        })
+        .finally(() => {
+          setLoading(false);
+        }),
+    [limit],
+  );
+
+  // 조회 키(limit)가 바뀌면 렌더 중에 로딩 표시·에러 초기화 — effect 안 동기
+  // setState 대신 React 권장 '렌더 중 상태 조정' 패턴(첫 렌더는 초기 state 와 같다).
+  const [requestedKey, setRequestedKey] = React.useState(limit);
+  if (requestedKey !== limit) {
+    setRequestedKey(limit);
     setLoading(true);
     setError(null);
-    try {
-      const res = await fetch(`/api/points?limit=${limit}`, { cache: "no-store" });
-      const json = (await res.json()) as {
-        ok: boolean;
-        data?: PointsResponse;
-        error?: { code?: string; message?: string };
-      };
-      if (!json.ok || !json.data) {
-        setError(
-          extractErrorMessage(json.error, "포인트 내역을 불러오지 못했어요."),
-        );
-        return;
-      }
-      setData(json.data);
-    } catch {
-      setError("네트워크 오류가 발생했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  }, [limit]);
+  }
 
   React.useEffect(() => {
-    void load();
-  }, [load]);
+    void fetchData();
+  }, [fetchData]);
+
+  // "다시 시도" 버튼용 — 로딩 표시 후 재조회.
+  const load = React.useCallback(() => {
+    setLoading(true);
+    setError(null);
+    return fetchData();
+  }, [fetchData]);
 
   return (
     <Card>

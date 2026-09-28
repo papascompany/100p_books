@@ -53,31 +53,48 @@ function applyTheme(theme: Theme): "light" | "dark" {
   return resolved;
 }
 
+function subscribeNoop(): () => void {
+  return () => {};
+}
+
+function subscribeSystemTheme(onChange: () => void): () => void {
+  const mql = window.matchMedia("(prefers-color-scheme: dark)");
+  mql.addEventListener("change", onChange);
+  return () => mql.removeEventListener("change", onChange);
+}
+
+function getServerStoredTheme(): Theme {
+  return "system";
+}
+
+function getServerSystemDark(): boolean {
+  return false;
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = React.useState<Theme>("system");
-  const [resolvedTheme, setResolvedTheme] = React.useState<"light" | "dark">(
-    "light",
+  // 저장값·OS 설정은 외부 저장소 — 서버/hydration 은 기본값("system"/light),
+  // 이후 클라이언트 실제 값(예전 마운트 effect 의 setState 와 같은 시점 차이).
+  const storedTheme = React.useSyncExternalStore(
+    subscribeNoop,
+    readStoredTheme,
+    getServerStoredTheme,
   );
+  const systemDark = React.useSyncExternalStore(
+    subscribeSystemTheme,
+    systemPrefersDark,
+    getServerSystemDark,
+  );
+  // 이 마운트에서 사용자가 고른 값 — 저장 실패(localStorage 불가)여도 반영되게 따로 둔다.
+  const [chosenTheme, setChosenTheme] = React.useState<Theme | null>(null);
+  const theme = chosenTheme ?? storedTheme;
+  const resolvedTheme: "light" | "dark" =
+    theme === "system" ? (systemDark ? "dark" : "light") : theme;
 
-  // 마운트 시 저장값 로드 + 즉시 적용
+  // `<html class="dark">` 적용(마운트 시 + 선택·OS 설정 변경 시). hydration 첫 커밋에서는
+  // 렌더 값이 아직 서버 기본값일 수 있어, 렌더 값 대신 저장소를 직접 읽어 적용한다.
   React.useEffect(() => {
-    const t = readStoredTheme();
-    setThemeState(t);
-    setResolvedTheme(applyTheme(t));
-  }, []);
-
-  // system 모드일 때 OS 테마 변경 구독
-  React.useEffect(() => {
-    if (theme !== "system") return;
-    const mql = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = () => {
-      setResolvedTheme(applyTheme("system"));
-    };
-    mql.addEventListener("change", handler);
-    return () => {
-      mql.removeEventListener("change", handler);
-    };
-  }, [theme]);
+    applyTheme(chosenTheme ?? readStoredTheme());
+  }, [chosenTheme, systemDark]);
 
   const setTheme = React.useCallback((next: Theme) => {
     try {
@@ -85,8 +102,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // ignore
     }
-    setThemeState(next);
-    setResolvedTheme(applyTheme(next));
+    setChosenTheme(next);
+    applyTheme(next);
   }, []);
 
   const value = React.useMemo<ThemeContextValue>(

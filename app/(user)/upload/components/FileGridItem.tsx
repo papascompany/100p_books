@@ -36,16 +36,19 @@ export default function FileGridItem({
   selected,
   onToggleSelect,
 }: FileGridItemProps) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [imgFailed, setImgFailed] = useState(false);
+  const [issuedBlobUrl, setIssuedBlobUrl] = useState<string | null>(null);
+  // 로드 실패한 표시 소스(thumbDataUrl·blobUrl 조합) — 소스가 바뀌면 자동으로 무효가 된다.
+  const [failedSourceKey, setFailedSourceKey] = useState<string | null>(null);
 
   // 소형 썸네일(thumbDataUrl)이 준비되면 그것을 쓰고, 없을 때만 원본 blob URL 발급 (UP-10).
   // (풀사이즈 원본을 ~150px 셀 <img> 에 물리면 100장 스크롤 시 풀해상도 디코딩이
   //  반복되어 모바일 메모리 압박 → 탭 강제 리로드 위험)
+  // 썸네일이 있으면 blob URL 은 쓰지 않는다 — 예전 effect 의 setBlobUrl(null) 을 렌더 중
+  // 파생으로 대체(thumbDataUrl 은 한 번 채워지면 비워지지 않는다: upload-queue).
+  const blobUrl = item.thumbDataUrl ? null : issuedBlobUrl;
   useEffect(() => {
     if (item.thumbDataUrl) {
       // 썸네일 확보 — 이전 blob URL 은 cleanup 에서 revoke 됨
-      setBlobUrl(null);
       return;
     }
     const file = item.effectiveFile ?? item.file;
@@ -58,7 +61,10 @@ export default function FileGridItem({
       // 파일이 닫혔거나 무효화된 경우 (네비게이션 후 등) — 무시
       return;
     }
-    setBlobUrl(url);
+    // blob URL 은 revoke 와 짝을 이뤄야 하는 외부 자원이라 생성·해제를 effect 에 둔다
+    // (렌더/useMemo 에서 만들면 StrictMode·폐기된 렌더에서 revoke 없이 누수된다).
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 위 사유(외부 자원 수명 동기화)
+    setIssuedBlobUrl(url);
     return () => {
       try {
         URL.revokeObjectURL(url);
@@ -68,16 +74,15 @@ export default function FileGridItem({
     };
   }, [item.file, item.effectiveFile, item.thumbDataUrl]);
 
-  // 표시 소스가 바뀌면 로드 실패 상태 초기화
-  useEffect(() => {
-    setImgFailed(false);
-  }, [item.thumbDataUrl, blobUrl]);
+  // 표시 소스가 바뀌면 로드 실패 상태 초기화 — 실패한 소스 키와 현재 키 비교로 파생.
+  const sourceKey = JSON.stringify([item.thumbDataUrl ?? null, blobUrl]);
+  const imgFailed = failedSourceKey === sourceKey;
 
   const previewUrl = imgFailed ? null : (item.thumbDataUrl ?? blobUrl);
 
   // 이미지 로드 실패 시 (예: blob URL 무효화, signed URL 만료) 깔끔하게 폴백
   function handleImgError() {
-    setImgFailed(true);
+    setFailedSourceKey(sourceKey);
   }
 
   const isWorking =

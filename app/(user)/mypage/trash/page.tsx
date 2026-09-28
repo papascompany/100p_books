@@ -89,6 +89,10 @@ export default async function TrashPage() {
     }
   }
 
+  // 요청 시각 기준 남은 보관일 계산. 이 파일은 async 서버 컴포넌트(force-dynamic)라
+  // 요청당 1회만 렌더되고 클라이언트 재렌더·hydration 이 없다 — purity 규칙의 전제
+  // (렌더 재실행 시 결과 불안정)가 성립하지 않는 오탐이다.
+  // eslint-disable-next-line react-hooks/purity -- 서버 컴포넌트 요청 시각(위 사유)
   const now = Date.now();
   const items: TrashItem[] = photoRows
     .filter((r) => r.deleted_at)

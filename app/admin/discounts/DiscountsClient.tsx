@@ -316,9 +316,12 @@ function DeleteDialog({ row, onClose, onDeleted }: DeleteDialogProps) {
   const [force, setForce] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
 
-  React.useEffect(() => {
+  // 다이얼로그가 닫히면(row → null) 강제 삭제 체크 해제 — 렌더 중 상태 조정 패턴.
+  const [prevRow, setPrevRow] = React.useState(row);
+  if (prevRow !== row) {
+    setPrevRow(row);
     if (!row) setForce(false);
-  }, [row]);
+  }
 
   if (!row) return null;
 
@@ -417,19 +420,14 @@ interface UsesModalProps {
 }
 
 function UsesModal({ row, onClose }: UsesModalProps) {
-  const [uses, setUses] = React.useState<DiscountUseRow[]>([]);
-  const [loading, setLoading] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!row) { setUses([]); return; }
-
-    setLoading(true);
-    // discount_uses 를 직접 API 로 조회하는 전용 엔드포인트가 없으므로
-    // 어드민 Supabase 클라이언트가 필요한 서버 라우트를 추가하지 않고
-    // 간단히 현재 row 의 used_count 를 활용해 안내 메시지로 대체한다.
-    // (별도 엔드포인트 구현 시 여기에서 fetch)
-    setLoading(false);
-  }, [row]);
+  // discount_uses 를 직접 API 로 조회하는 전용 엔드포인트가 없으므로
+  // 어드민 Supabase 클라이언트가 필요한 서버 라우트를 추가하지 않고
+  // 간단히 현재 row 의 used_count 를 활용해 안내 메시지로 대체한다.
+  // (별도 엔드포인트 구현 시 여기를 조회 state + effect fetch 로 교체)
+  // 예전 effect 는 setLoading(true)→setLoading(false) 를 한 번에 호출해 화면상 항상
+  // loading=false · uses=[] 였다 — 그 관측 동작을 상수로 그대로 유지한다.
+  const uses: DiscountUseRow[] = [];
+  const loading = false;
 
   if (!row) return null;
 
@@ -509,34 +507,56 @@ export default function DiscountsClient() {
   const [deleteTarget, setDeleteTarget] = React.useState<DiscountCode | null>(null);
   const [usesTarget, setUsesTarget] = React.useState<DiscountCode | null>(null);
 
-  const fetchData = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (q.trim()) params.set("q", q.trim());
-      if (activeFilter) params.set("active", activeFilter);
-      params.set("page", String(page));
-      params.set("pageSize", String(PAGE_SIZE));
+  // 조회 본체 — 선행 로딩 표시 없이 응답만 반영한다(effect·핸들러 공용). state 반영은
+  // promise 콜백에서만 한다(react-hooks/set-state-in-effect 는 await 경계를 보지 않는다).
+  const runFetch = React.useCallback(
+    () =>
+      (async () => {
+        const params = new URLSearchParams();
+        if (q.trim()) params.set("q", q.trim());
+        if (activeFilter) params.set("active", activeFilter);
+        params.set("page", String(page));
+        params.set("pageSize", String(PAGE_SIZE));
 
-      const r = await fetch(`/api/admin/discounts?${params.toString()}`, {
-        cache: "no-store",
-      });
-      const j = (await r.json()) as ListResponse | { ok: false };
-      if (!j || j.ok !== true) {
-        setItems([]);
-        setTotal(0);
-        return;
-      }
-      setItems(j.data.items);
-      setTotal(j.data.total);
-    } finally {
-      setLoading(false);
-    }
-  }, [q, activeFilter, page]);
+        const r = await fetch(`/api/admin/discounts?${params.toString()}`, {
+          cache: "no-store",
+        });
+        return (await r.json()) as ListResponse | { ok: false };
+      })()
+        .then((j) => {
+          if (!j || j.ok !== true) {
+            setItems([]);
+            setTotal(0);
+            return;
+          }
+          setItems(j.data.items);
+          setTotal(j.data.total);
+        })
+        .finally(() => {
+          setLoading(false);
+        }),
+    [q, activeFilter, page],
+  );
+
+  // 조회 조건이 바뀌면 렌더 중에 로딩 표시를 켠다 — effect 안 동기 setState
+  // (react-hooks/set-state-in-effect) 대신 React 권장 '렌더 중 상태 조정' 패턴.
+  // 첫 렌더에서도 여기서 켜진다(기존: 마운트 effect 가 켬).
+  const queryKey = JSON.stringify([q, activeFilter, page]);
+  const [requestedKey, setRequestedKey] = React.useState<string | null>(null);
+  if (requestedKey !== queryKey) {
+    setRequestedKey(queryKey);
+    setLoading(true);
+  }
 
   React.useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    void runFetch();
+  }, [runFetch]);
+
+  // 이벤트 핸들러용 수동 재조회 — 로딩 표시 후 조회.
+  const fetchData = React.useCallback(() => {
+    setLoading(true);
+    return runFetch();
+  }, [runFetch]);
 
   const toggleActive = async (row: DiscountCode) => {
     const next = !row.active;

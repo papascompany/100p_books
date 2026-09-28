@@ -41,9 +41,15 @@ export default function UploadDropzone({
   const [hover, setHover] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
-  React.useEffect(() => {
+  // 외부 reset 신호 — React state 는 렌더 중 상태 조정으로 비우고,
+  // DOM(input.value) 초기화만 effect 에서 한다.
+  const [prevResetSignal, setPrevResetSignal] = React.useState(resetSignal);
+  if (prevResetSignal !== resetSignal) {
+    setPrevResetSignal(resetSignal);
     setFile(null);
     setError(null);
+  }
+  React.useEffect(() => {
     if (inputRef.current) inputRef.current.value = "";
   }, [resetSignal]);
 

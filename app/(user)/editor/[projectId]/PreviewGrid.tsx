@@ -8,6 +8,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -99,13 +100,21 @@ export default function PreviewGrid({
   // pointermove 마다 리스너·rAF 루프가 재구독되는 것을 막는다.
   const overIndexRef = useRef<number | null>(null);
   const orderedPagesRef = useRef<PageSummary[]>(pages);
-  orderedPagesRef.current = orderedPages;
+  // 렌더 중 ref 쓰기 금지(react-hooks/refs) — 커밋 직후 미러링. 읽는 쪽은 드래그 종료
+  // 이벤트 핸들러(onUp)뿐이라 커밋 이후 값이면 충분하다.
+  useLayoutEffect(() => {
+    orderedPagesRef.current = orderedPages;
+  }, [orderedPages]);
 
-  // 외부 pages 가 갱신되면 동기화 (refresh 후)
-  useEffect(() => {
+  // 외부 pages 가 갱신되면 동기화 (refresh 후) — 렌더 중 상태 조정 패턴.
+  const [prevPages, setPrevPages] = useState(pages);
+  if (prevPages !== pages) {
+    setPrevPages(pages);
     setOrderedPages(pages);
     setDraggingId(null);
     setOverIndex(null);
+  }
+  useEffect(() => {
     overIndexRef.current = null;
   }, [pages]);
 

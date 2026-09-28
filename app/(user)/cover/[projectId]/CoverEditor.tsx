@@ -869,6 +869,10 @@ export default function CoverEditor({
     const box = scrollBoxRef.current;
     if (!box) return;
     if (!isMobile || coverSegment === "all") {
+      // 렌더 중 파생(null)으로 바꾸면 전체→면 전환 시 이전 면의 폭이 한 프레임 남아
+      // FabricStage 리사이즈(150ms debounce)·스크롤 정렬 타이밍이 달라진다. 편집 화면
+      // 레이아웃 동작 불변을 우선해 effect 안 초기화를 유지한다(후속 검토 대상).
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 위 사유(레이아웃 타이밍 보존)
       setStageBoxWidth(null);
       return;
     }

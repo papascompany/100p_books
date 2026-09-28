@@ -71,15 +71,14 @@ export default function GalleryClient({
     return () => {
       mounted = false;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sort]);
 
   // 무한 스크롤 — sentinel
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
-  const loadMoreRef = React.useRef<(() => void) | null>(null);
 
-  // 다음 페이지 로드 함수 — ref 에 저장해서 IntersectionObserver 에서 최신 상태 참조
-  loadMoreRef.current = async function loadMore() {
+  // 다음 페이지 로드 함수 — Effect Event 로 IntersectionObserver 콜백에서 최신 상태 참조
+  // (예전: 렌더 중 ref 에 대입 → react-hooks/refs 위반. 구독은 그대로 마운트 1회).
+  const loadMore = React.useEffectEvent(async () => {
     if (loading || !nextCursor) return;
     setLoading(true);
     const result = await fetchPage(sort, nextCursor);
@@ -90,7 +89,7 @@ export default function GalleryClient({
       setNextCursor(result.nextCursor);
     }
     setLoading(false);
-  };
+  });
 
   React.useEffect(() => {
     const el = sentinelRef.current;
@@ -99,7 +98,7 @@ export default function GalleryClient({
     const io = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
-          loadMoreRef.current?.();
+          void loadMore();
         }
       },
       { threshold: 0.1 },

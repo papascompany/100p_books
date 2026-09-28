@@ -50,14 +50,13 @@ export default function PagePreviewDialog({
   const [showBleed, setShowBleed] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const fetchPreview = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setPngDataUrl(null);
+  // 조회 본체 — 선행 상태 초기화 없이 응답만 반영한다(effect·재시도 공용). state 반영은
+  // promise 콜백에서만 한다(react-hooks/set-state-in-effect 는 await 경계를 보지 않는다).
+  const runFetch = useCallback(() => {
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
-    try {
+    return (async () => {
       const res = await fetch(`/api/pages/${pageId}/preview`, {
         method: "GET",
         signal: ac.signal,
@@ -70,32 +69,52 @@ export default function PagePreviewDialog({
       if (!res.ok || !json.ok || !json.data) {
         throw new Error(json.error?.message ?? "미리보기 생성에 실패했어요.");
       }
-      setPngDataUrl(json.data.pngDataUrl);
-    } catch (e) {
-      if ((e as { name?: string })?.name === "AbortError") return;
-      const msg = e instanceof Error ? e.message : "미리보기 생성에 실패했어요.";
-      setError(msg);
-      toast({ description: msg, variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+      return json.data.pngDataUrl;
+    })()
+      .then((png) => {
+        setPngDataUrl(png);
+      })
+      .catch((e: unknown) => {
+        if ((e as { name?: string })?.name === "AbortError") return;
+        const msg = e instanceof Error ? e.message : "미리보기 생성에 실패했어요.";
+        setError(msg);
+        toast({ description: msg, variant: "destructive" });
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, [pageId]);
 
-  // 다이얼로그 open 시 자동 fetch
+  // 재시도 버튼용 — 상태 초기화 후 조회.
+  const fetchPreview = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    setPngDataUrl(null);
+    return runFetch();
+  }, [runFetch]);
+
+  // 열림/닫힘(또는 열린 채 pageId 변경) 시 상태 초기화 — effect 안 동기 setState 대신
+  // 렌더 중 상태 조정 패턴. 열릴 때는 로딩 표시, 닫힐 때는 리셋(다음 열림 시 fresh).
+  const openKey = open ? pageId : null;
+  const [prevOpenKey, setPrevOpenKey] = useState<string | null>(null);
+  if (prevOpenKey !== openKey) {
+    setPrevOpenKey(openKey);
+    setPngDataUrl(null);
+    setError(null);
+    setLoading(openKey !== null);
+  }
+
+  // 다이얼로그 open 시 자동 fetch, 닫힐 때 abort
   useEffect(() => {
     if (open) {
-      void fetchPreview();
+      void runFetch();
     } else {
-      // 닫힐 때 abort + 상태 리셋 (다음 열림 시 fresh)
       abortRef.current?.abort();
-      setPngDataUrl(null);
-      setError(null);
-      setLoading(false);
     }
     return () => {
       abortRef.current?.abort();
     };
-  }, [open, fetchPreview]);
+  }, [open, runFetch]);
 
   const onDownload = useCallback(() => {
     if (!pngDataUrl) return;

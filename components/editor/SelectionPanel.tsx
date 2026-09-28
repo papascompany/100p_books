@@ -2,7 +2,7 @@
 
 import * as fabric from "fabric";
 import { ImageIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -292,6 +292,16 @@ function TextEditor({
   );
 }
 
+/**
+ * Fabric 객체 속성 직접 대입. Fabric 객체는 React state 가 아닌 외부 가변 객체라
+ * 이벤트 핸들러에서 제자리 갱신한 뒤 update() 로 캔버스·패널을 다시 그린다.
+ * `target.x = v` 를 연달아 쓰는 것과 같은 의미(Object.assign = 순서대로 [[Set]])이며,
+ * prop 직접 변경을 금지하는 react-hooks/immutability 규칙에 의도를 드러내기 위한 래퍼다.
+ */
+function assignFabricProps<T extends object>(obj: T, patch: Partial<T>): void {
+  Object.assign(obj, patch);
+}
+
 function PhotoEditor({
   target,
   dpi,
@@ -337,7 +347,7 @@ function PhotoEditor({
         dpi,
       });
     } else {
-      target.cropMode = mode;
+      assignFabricProps(target, { cropMode: mode });
     }
     update();
   };
@@ -420,7 +430,7 @@ function PhotoEditor({
           step={0.5}
           value={target.borderRadiusMm ?? 0}
           onChange={(e) => {
-            target.borderRadiusMm = Number(e.target.value);
+            assignFabricProps(target, { borderRadiusMm: Number(e.target.value) });
             update();
           }}
           className="mt-1 w-full"
@@ -433,21 +443,27 @@ function PhotoEditor({
           checked={Boolean(target.shadow)}
           onChange={(e) => {
             if (e.target.checked) {
-              target.shadow = new fabric.Shadow({
-                blur: 8,
-                offsetX: 0,
-                offsetY: 4,
-                color: "rgba(0,0,0,0.15)",
+              assignFabricProps(target, {
+                shadow: new fabric.Shadow({
+                  blur: 8,
+                  offsetX: 0,
+                  offsetY: 4,
+                  color: "rgba(0,0,0,0.15)",
+                }),
+                shadowBlurMm: 2,
+                shadowOffsetYMm: 1,
+                shadowColor: "rgba(0,0,0,0.15)",
               });
-              target.shadowBlurMm = 2;
-              target.shadowOffsetYMm = 1;
-              target.shadowColor = "rgba(0,0,0,0.15)";
             } else {
-              (target as unknown as { shadow: fabric.Shadow | null }).shadow =
-                null;
-              target.shadowBlurMm = undefined;
-              target.shadowOffsetYMm = undefined;
-              target.shadowColor = undefined;
+              assignFabricProps(
+                target as unknown as { shadow: fabric.Shadow | null },
+                { shadow: null },
+              );
+              assignFabricProps(target, {
+                shadowBlurMm: undefined,
+                shadowOffsetYMm: undefined,
+                shadowColor: undefined,
+              });
             }
             update();
           }}
@@ -472,11 +488,6 @@ function RectEditor({
     force((v) => v + 1);
     onChange?.();
   };
-
-  // target 변경 시 강제 리렌더 (참조만 바뀌어도)
-  useEffect(() => {
-    force((v) => v + 1);
-  }, [target]);
 
   return (
     <div className="space-y-3">

@@ -30,33 +30,55 @@ export default function UsersClient() {
   const [page, setPage] = React.useState(1);
   const [busy, setBusy] = React.useState(false);
 
-  const refresh = React.useCallback(async () => {
+  // 조회 본체 — 선행 로딩 표시 없이 응답만 반영한다(effect·핸들러 공용). state 반영은
+  // promise 콜백에서만 한다(react-hooks/set-state-in-effect 는 await 경계를 보지 않는다).
+  const runFetch = React.useCallback(
+    () =>
+      (async () => {
+        const params = new URLSearchParams();
+        if (q.trim()) params.set("q", q.trim());
+        if (role) params.set("role", role);
+        params.set("page", String(page));
+        params.set("pageSize", String(PAGE_SIZE));
+        const r = await fetch(`/api/admin/users?${params.toString()}`, {
+          cache: "no-store",
+        });
+        return (await r.json()) as ListResponse | { ok: false };
+      })()
+        .then((j) => {
+          if (!j || j.ok !== true) {
+            setItems([]);
+            setTotal(0);
+            return;
+          }
+          setItems(j.data.items);
+          setTotal(j.data.total);
+        })
+        .finally(() => {
+          setBusy(false);
+        }),
+    [q, role, page],
+  );
+
+  // 조회 조건이 바뀌면 렌더 중에 로딩 표시를 켠다 — effect 안 동기 setState
+  // (react-hooks/set-state-in-effect) 대신 React 권장 '렌더 중 상태 조정' 패턴.
+  // 첫 렌더에서도 여기서 켜진다(기존: 마운트 effect 가 켬).
+  const queryKey = JSON.stringify([q, role, page]);
+  const [requestedKey, setRequestedKey] = React.useState<string | null>(null);
+  if (requestedKey !== queryKey) {
+    setRequestedKey(queryKey);
     setBusy(true);
-    try {
-      const params = new URLSearchParams();
-      if (q.trim()) params.set("q", q.trim());
-      if (role) params.set("role", role);
-      params.set("page", String(page));
-      params.set("pageSize", String(PAGE_SIZE));
-      const r = await fetch(`/api/admin/users?${params.toString()}`, {
-        cache: "no-store",
-      });
-      const j = (await r.json()) as ListResponse | { ok: false };
-      if (!j || j.ok !== true) {
-        setItems([]);
-        setTotal(0);
-        return;
-      }
-      setItems(j.data.items);
-      setTotal(j.data.total);
-    } finally {
-      setBusy(false);
-    }
-  }, [q, role, page]);
+  }
 
   React.useEffect(() => {
-    refresh();
-  }, [refresh]);
+    void runFetch();
+  }, [runFetch]);
+
+  // 이벤트 핸들러용 수동 재조회 — 로딩 표시 후 조회.
+  const refresh = React.useCallback(() => {
+    setBusy(true);
+    return runFetch();
+  }, [runFetch]);
 
   const setRoleFor = async (id: string, target: UserRole, currentEmail: string) => {
     if (

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import type { Resource, ResourceType } from "@/lib/db/types";
 
-interface Item extends Resource {}
+type Item = Resource;
 
 const ACCEPT: Record<ResourceType, string> = {
   font: ".ttf,.otf,.woff2",
@@ -52,26 +52,50 @@ export default function ResourcesClient({ type }: { type: ResourceType }) {
   } | null>(null);
   const [deleteBusy, setDeleteBusy] = React.useState(false);
 
-  const refresh = React.useCallback(async () => {
+  // 조회 본체 — 선행 로딩 표시 없이 응답만 반영한다(effect·핸들러 공용). state 반영은
+  // promise 콜백에서만 한다(react-hooks/set-state-in-effect 는 await 경계를 보지 않는다).
+  const runFetch = React.useCallback(
+    () =>
+      (async () => {
+        const r = await fetch(`/api/admin/resources?type=${type}`, {
+          cache: "no-store",
+        });
+        const j = await r.json();
+        if (!j?.ok) throw new Error(j?.error?.message ?? "조회 실패");
+        return j.data.items as Item[];
+      })()
+        .then((items) => {
+          setItems(items);
+          setErr(null);
+        })
+        .catch((e: unknown) => {
+          setErr(e instanceof Error ? e.message : String(e));
+        })
+        .finally(() => {
+          setLoading(false);
+        }),
+    [type],
+  );
+
+  // 조회 조건이 바뀌면 렌더 중에 로딩 표시를 켠다 — effect 안 동기 setState
+  // (react-hooks/set-state-in-effect) 대신 React 권장 '렌더 중 상태 조정' 패턴.
+  // 첫 렌더에서도 여기서 켜진다(기존: 마운트 effect 가 켬).
+  const queryKey = JSON.stringify([type]);
+  const [requestedKey, setRequestedKey] = React.useState<string | null>(null);
+  if (requestedKey !== queryKey) {
+    setRequestedKey(queryKey);
     setLoading(true);
-    try {
-      const r = await fetch(`/api/admin/resources?type=${type}`, {
-        cache: "no-store",
-      });
-      const j = await r.json();
-      if (!j?.ok) throw new Error(j?.error?.message ?? "조회 실패");
-      setItems(j.data.items as Item[]);
-      setErr(null);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [type]);
+  }
 
   React.useEffect(() => {
-    refresh();
-  }, [refresh]);
+    void runFetch();
+  }, [runFetch]);
+
+  // 이벤트 핸들러용 수동 재조회 — 로딩 표시 후 조회.
+  const refresh = React.useCallback(() => {
+    setLoading(true);
+    return runFetch();
+  }, [runFetch]);
 
   const resetForm = () => {
     setName("");

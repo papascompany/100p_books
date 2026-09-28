@@ -57,10 +57,13 @@ export default function ResourcePalette({
   );
   const [tab, setTab] = useState<ResourceTab>(initialTab);
 
-  // 부모가 시트를 유지한 채 initialTab 만 바꾸는 경우(클립아트→배경 등) 동기화.
-  useEffect(() => {
+  // 부모가 시트를 유지한 채 initialTab 만 바꾸는 경우(클립아트→배경 등) 동기화 —
+  // 렌더 중 상태 조정 패턴.
+  const [prevInitialTab, setPrevInitialTab] = useState(initialTab);
+  if (prevInitialTab !== initialTab) {
+    setPrevInitialTab(initialTab);
     setTab(initialTab);
-  }, [initialTab]);
+  }
 
   // 현재 탭이 허용 목록 밖이면 첫 허용 탭으로 폴백.
   const activeTab = allowedTabs.some((t) => t.id === tab)
@@ -72,10 +75,10 @@ export default function ResourcePalette({
   const [q, setQ] = useState("");
 
   const fetchItems = useCallback(
-    async (type: ResourceTab) => {
-      setLoading(true);
-      setError(null);
-      try {
+    // state 반영은 promise 콜백에서만 한다(effect 에서 호출 — react-hooks/set-state-in-effect
+    // 는 await 경계를 보지 않는다).
+    (type: ResourceTab) =>
+      (async () => {
         const res = await fetch(`/api/resources?type=${type}`, {
           cache: "no-store",
         });
@@ -87,16 +90,29 @@ export default function ResourcePalette({
         if (!res.ok || !json.ok || !json.data) {
           throw new Error(json.error?.message ?? "리소스 로드 실패");
         }
-        setItems(json.data.items);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "리소스 로드 실패");
-        setItems([]);
-      } finally {
-        setLoading(false);
-      }
-    },
+        return json.data.items;
+      })()
+        .then((nextItems) => {
+          setItems(nextItems);
+        })
+        .catch((e: unknown) => {
+          setError(e instanceof Error ? e.message : "리소스 로드 실패");
+          setItems([]);
+        })
+        .finally(() => {
+          setLoading(false);
+        }),
     [],
   );
+
+  // 활성 탭이 바뀌면(첫 렌더 포함) 로딩 표시·에러 초기화 — 렌더 중 상태 조정 패턴.
+  // 조회 자체는 아래 effect 가 한다.
+  const [requestedTab, setRequestedTab] = useState<ResourceTab | null>(null);
+  if (requestedTab !== activeTab) {
+    setRequestedTab(activeTab);
+    setLoading(true);
+    setError(null);
+  }
 
   useEffect(() => {
     void fetchItems(activeTab);

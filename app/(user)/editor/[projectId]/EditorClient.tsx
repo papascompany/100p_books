@@ -25,6 +25,24 @@ export interface EditorClientProps {
   lockMessage: string | null;
 }
 
+/** 내지 목록 조회 — state 는 건드리지 않고 응답만 돌려준다(실패 시 throw). */
+async function requestPages(
+  projectId: string,
+): Promise<{ pages: PageSummary[]; photoUrls: Record<string, string> }> {
+  const res = await fetch(`/api/pages?projectId=${projectId}`, {
+    cache: "no-store",
+  });
+  const json = (await res.json()) as {
+    ok: boolean;
+    data?: { pages: PageSummary[]; photoUrls: Record<string, string> };
+    error?: { message: string };
+  };
+  if (!res.ok || !json.ok || !json.data) {
+    throw new Error(json.error?.message ?? "페이지 로드 실패");
+  }
+  return json.data;
+}
+
 /**
  * 내지 편집 메인 클라이언트 셸 —
  *   상단 TopBar + 좌/상단 컨트롤 + 하단 썸네일 프리뷰 구성.
@@ -52,39 +70,43 @@ export default function EditorClient({
   const [busy, setBusy] = useState<boolean>(false);
   const hasLoadedRef = useRef(false);
 
-  const refresh = useCallback(async () => {
+  // 조회 본체 — 선행 상태 표시 없이 응답만 반영한다. state 반영은 promise 콜백에서만
+  // 한다(effect 에서 호출되므로 — react-hooks/set-state-in-effect 는 await 경계를 보지 않는다).
+  const fetchPages = useCallback(
+    () =>
+      requestPages(projectId)
+        .then((data) => {
+          setPages(data.pages);
+          setPhotoUrls(data.photoUrls ?? {});
+          setPageCount(data.pages.length);
+          hasLoadedRef.current = true;
+        })
+        .catch((e: unknown) => {
+          setLoadError(e instanceof Error ? e.message : "페이지 로드 실패");
+        })
+        .finally(() => {
+          setLoading(false);
+          setRefreshing(false);
+        }),
+    [projectId],
+  );
+
+  // 초기 로드 — loading=true·loadError=null 이 초기 state 라 선행 표시가 필요 없다.
+  // (projectId 가 바뀌면 App Router 가 [projectId] 세그먼트 키로 이 컴포넌트를 새로
+  //  마운트하므로 이 effect 는 사실상 마운트 1회다.)
+  useEffect(() => {
+    void fetchPages();
+  }, [fetchPages]);
+
+  // 재조회(insert/delete/재생성 후) — 이벤트 핸들러에서만 호출된다.
+  const refresh = useCallback(() => {
     // 초기 로드에만 스켈레톤 — 이후 재조회는 stale-while-revalidate 로
     // 기존 페이지를 유지해 스크롤 위치가 튀지 않게 한다.
     if (hasLoadedRef.current) setRefreshing(true);
     else setLoading(true);
     setLoadError(null);
-    try {
-      const res = await fetch(`/api/pages?projectId=${projectId}`, {
-        cache: "no-store",
-      });
-      const json = (await res.json()) as {
-        ok: boolean;
-        data?: { pages: PageSummary[]; photoUrls: Record<string, string> };
-        error?: { message: string };
-      };
-      if (!res.ok || !json.ok || !json.data) {
-        throw new Error(json.error?.message ?? "페이지 로드 실패");
-      }
-      setPages(json.data.pages);
-      setPhotoUrls(json.data.photoUrls ?? {});
-      setPageCount(json.data.pages.length);
-      hasLoadedRef.current = true;
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : "페이지 로드 실패");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [projectId]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    return fetchPages();
+  }, [fetchPages]);
 
   const handleReorder = useCallback(
     async (pageIds: string[]) => {

@@ -2,7 +2,7 @@
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Keyboard, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,11 @@ interface ShortcutGroup {
   items: ShortcutItem[];
 }
 
+/** 변경 알림이 없는 클라이언트 전용 값용 구독(useSyncExternalStore). */
+function subscribeNoop(): () => void {
+  return () => {};
+}
+
 function getModKey(): "Cmd" | "Ctrl" {
   if (typeof navigator === "undefined") return "Ctrl";
   const ua = navigator.userAgent || "";
@@ -46,10 +51,12 @@ export default function KeyboardShortcutsHelp({
   open,
   onOpenChange,
 }: KeyboardShortcutsHelpProps) {
-  const [mod, setMod] = useState<"Cmd" | "Ctrl">("Ctrl");
-  useEffect(() => {
-    setMod(getModKey());
-  }, []);
+  // 클라이언트 전용 값 — 서버/hydration 은 "Ctrl", 이후 실제 플랫폼 값.
+  const mod = useSyncExternalStore<"Cmd" | "Ctrl">(
+    subscribeNoop,
+    getModKey,
+    () => "Ctrl",
+  );
 
   const groups: ShortcutGroup[] = [
     {
@@ -178,6 +185,17 @@ export default function KeyboardShortcutsHelp({
   );
 }
 
+function readShortcutsUnseen(): boolean {
+  if (typeof window === "undefined") return false;
+  if (!window.matchMedia("(pointer: fine)").matches) return false;
+  try {
+    return !window.localStorage.getItem(SEEN_KEY);
+  } catch {
+    // localStorage 불가 환경: 그냥 표시 안 함.
+    return false;
+  }
+}
+
 /**
  * 첫 방문 자동 노출 헬퍼. localStorage 에 SEEN_KEY 가 없으면 true 를 반환.
  * 호출 측에서 다이얼로그 open 직후 mark() 로 표시.
@@ -189,26 +207,19 @@ export function useShortcutsAutoShow(): {
   shouldShow: boolean;
   mark: () => void;
 } {
-  const [shouldShow, setShouldShow] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!window.matchMedia("(pointer: fine)").matches) return;
-    try {
-      const seen = window.localStorage.getItem(SEEN_KEY);
-      if (!seen) setShouldShow(true);
-    } catch {
-      // localStorage 불가 환경: 그냥 표시 안 함.
-    }
-  }, []);
+  // 서버/hydration 은 false, 이후 클라이언트 판정값(예전 마운트 effect 와 같은 시점 차이).
+  const unseen = useSyncExternalStore(subscribeNoop, readShortcutsUnseen, () => false);
+  // mark() 이후엔 저장 실패 여부와 무관하게 이 마운트에서 다시 노출하지 않는다(예전과 동일).
+  const [dismissed, setDismissed] = useState(false);
   return {
-    shouldShow,
+    shouldShow: unseen && !dismissed,
     mark: () => {
       try {
         window.localStorage.setItem(SEEN_KEY, "1");
       } catch {
         // ignore
       }
-      setShouldShow(false);
+      setDismissed(true);
     },
   };
 }

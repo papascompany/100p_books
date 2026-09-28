@@ -44,43 +44,65 @@ export default function AuditClient() {
 
   const [open, setOpen] = React.useState<Row | null>(null);
 
-  const fetchData = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (actor) params.set("actor", actor);
-      if (action) params.set("action", action);
-      if (targetType) params.set("targetType", targetType);
-      if (from) params.set("from", new Date(from).toISOString());
-      if (to) {
-        const toDate = new Date(to);
-        toDate.setHours(23, 59, 59, 999);
-        params.set("to", toDate.toISOString());
-      }
-      params.set("page", String(page));
-      params.set("pageSize", String(PAGE_SIZE));
+  // 조회 본체 — 선행 로딩 표시 없이 응답만 반영한다(effect·핸들러 공용). state 반영은
+  // promise 콜백에서만 한다(react-hooks/set-state-in-effect 는 await 경계를 보지 않는다).
+  const runFetch = React.useCallback(
+    () =>
+      (async () => {
+        const params = new URLSearchParams();
+        if (actor) params.set("actor", actor);
+        if (action) params.set("action", action);
+        if (targetType) params.set("targetType", targetType);
+        if (from) params.set("from", new Date(from).toISOString());
+        if (to) {
+          const toDate = new Date(to);
+          toDate.setHours(23, 59, 59, 999);
+          params.set("to", toDate.toISOString());
+        }
+        params.set("page", String(page));
+        params.set("pageSize", String(PAGE_SIZE));
 
-      const r = await fetch(`/api/admin/audit?${params.toString()}`, {
-        cache: "no-store",
-      });
-      const j = (await r.json()) as
-        | { ok: true; data: { items: Row[]; total: number } }
-        | { ok: false };
-      if (!j || j.ok !== true) {
-        setItems([]);
-        setTotal(0);
-        return;
-      }
-      setItems(j.data.items);
-      setTotal(j.data.total);
-    } finally {
-      setLoading(false);
-    }
-  }, [actor, action, targetType, from, to, page]);
+        const r = await fetch(`/api/admin/audit?${params.toString()}`, {
+          cache: "no-store",
+        });
+        return (await r.json()) as
+          | { ok: true; data: { items: Row[]; total: number } }
+          | { ok: false };
+      })()
+        .then((j) => {
+          if (!j || j.ok !== true) {
+            setItems([]);
+            setTotal(0);
+            return;
+          }
+          setItems(j.data.items);
+          setTotal(j.data.total);
+        })
+        .finally(() => {
+          setLoading(false);
+        }),
+    [actor, action, targetType, from, to, page],
+  );
+
+  // 조회 조건이 바뀌면 렌더 중에 로딩 표시를 켠다 — effect 안 동기 setState
+  // (react-hooks/set-state-in-effect) 대신 React 권장 '렌더 중 상태 조정' 패턴.
+  // 첫 렌더에서도 여기서 켜진다(기존: 마운트 effect 가 켬).
+  const queryKey = JSON.stringify([actor, action, targetType, from, to, page]);
+  const [requestedKey, setRequestedKey] = React.useState<string | null>(null);
+  if (requestedKey !== queryKey) {
+    setRequestedKey(queryKey);
+    setLoading(true);
+  }
 
   React.useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    void runFetch();
+  }, [runFetch]);
+
+  // 이벤트 핸들러용 수동 재조회 — 로딩 표시 후 조회.
+  const fetchData = React.useCallback(() => {
+    setLoading(true);
+    return runFetch();
+  }, [runFetch]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 

@@ -43,18 +43,30 @@ function guessAuthedSync(): boolean {
   }
 }
 
+/** 변경 알림이 없는 클라이언트 전용 값용 구독(useSyncExternalStore). */
+function subscribeNoop(): () => void {
+  return () => {};
+}
+
 export default function HeaderClient({ nav }: { nav?: NavItem[] }) {
   const NAV = nav ?? DEFAULT_NAV;
   const pathname = usePathname();
   const [open, setOpen] = React.useState(false);
-  const [isAuthed, setIsAuthed] = React.useState(false);
+  // 세션 확인 전에는 localStorage 토큰 존재로 추정한 값을 쓴다(서버/hydration 은 false).
+  const guessedAuthed = React.useSyncExternalStore(
+    subscribeNoop,
+    guessAuthedSync,
+    () => false,
+  );
+  // Supabase 세션으로 확정된 값 — null 이면 아직 미확정(추정값 사용).
+  const [sessionAuthed, setSessionAuthed] = React.useState<boolean | null>(null);
+  const isAuthed = sessionAuthed ?? guessedAuthed;
   const signOutFormRef = React.useRef<HTMLFormElement>(null);
 
   // 클라이언트 세션으로 로그인 여부 판단 (Header 를 정적 렌더 가능하게).
   // env 누락(로컬 worktree 등) 시 getBrowserSupabase 가 throw 하더라도
   // 헤더/페이지 전체가 죽지 않도록 방어 — guess 결과만 사용.
   React.useEffect(() => {
-    setIsAuthed(guessAuthedSync());
     let supabase;
     try {
       supabase = getBrowserSupabase();
@@ -63,17 +75,20 @@ export default function HeaderClient({ nav }: { nav?: NavItem[] }) {
     }
     supabase.auth
       .getSession()
-      .then(({ data }) => setIsAuthed(Boolean(data.session)))
+      .then(({ data }) => setSessionAuthed(Boolean(data.session)))
       .catch(() => undefined);
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      setIsAuthed(Boolean(session));
+      setSessionAuthed(Boolean(session));
     });
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  React.useEffect(() => {
+  // 경로가 바뀌면 드로어 닫기 — 렌더 중 상태 조정 패턴.
+  const [prevPathname, setPrevPathname] = React.useState(pathname);
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname);
     setOpen(false);
-  }, [pathname]);
+  }
 
   // 드로어 열림 동안: Escape 로 닫기 + body 스크롤 락
   React.useEffect(() => {

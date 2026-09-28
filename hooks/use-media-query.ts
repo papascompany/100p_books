@@ -1,28 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 /**
  * SSR-safe matchMedia hook.
  * Returns `false` on the server and during hydration to avoid mismatch.
+ * (클라이언트 이후 렌더는 실제 matchMedia 값을 구독한다 — useSyncExternalStore.)
  *
  * @example
  *   const isMobile = useMediaQuery("(max-width: 768px)");
  */
 export function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(false);
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const mql = window.matchMedia(query);
+      mql.addEventListener("change", onChange);
+      return () => mql.removeEventListener("change", onChange);
+    },
+    [query],
+  );
+  const getSnapshot = useCallback(
+    () => window.matchMedia(query).matches,
+    [query],
+  );
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+}
 
-  useEffect(() => {
-    const mql = window.matchMedia(query);
-    setMatches(mql.matches);
-
-    function onChange(e: MediaQueryListEvent) {
-      setMatches(e.matches);
-    }
-
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, [query]);
-
-  return matches;
+function getServerSnapshot(): boolean {
+  return false;
 }

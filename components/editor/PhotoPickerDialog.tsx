@@ -69,11 +69,19 @@ export default function PhotoPickerDialog({
   const [query, setQuery] = useState("");
   const [picking, setPicking] = useState<string | null>(null);
 
+  // 열림·범위·프로젝트가 바뀌어 새로 조회할 때 로딩 표시 — effect 안 동기 setState 대신
+  // 렌더 중 상태 조정 패턴(닫힐 때는 예전처럼 건드리지 않는다).
+  const loadKey = open ? `${scope}|${currentProjectId}` : null;
+  const [prevLoadKey, setPrevLoadKey] = useState<string | null>(null);
+  if (prevLoadKey !== loadKey) {
+    setPrevLoadKey(loadKey);
+    if (loadKey !== null) setLoading(true);
+  }
+
   // 사진 로드
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setLoading(true);
 
     (async () => {
       try {
