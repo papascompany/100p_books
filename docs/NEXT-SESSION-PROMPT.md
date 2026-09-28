@@ -316,7 +316,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 **2026-09-28 기준 오너 대기 항목(순서대로)**
 1. ~~`0033` 재적용~~ — ✅ 09-28 적용 확인(`verify-0033.ts`: service `NOT_FOUND`, anon `42501`).
 2. ~~`0032` 적용~~ — ✅ 09-28 적용(precheck 33행 정상 → 적용 → `verify-0032.ts` 12/12 · `e2e:auth` 5 passed). postcheck 요약 27/27 PASS.
-3. QA-1 피해 조회(§11, 읽기 전용) · 고아 사진 dryRun(§12, `CRON_SECRET` 필요 — 자리표시자 그대로 보내면 401).
+3. QA-1 피해 조회(§11, 읽기 전용). ~~고아 사진 dryRun(§12)~~ — ✅ 09-28 orphans 0 / scanned 114.
 4. 100p Supabase 조직 멤버 계정 확인(대시보드 → Organization → Team) — CLI 재로그인하면 운영 DB 직접 확인 가능.
 
 **여기에 목록을 다시 만들지 말 것.** 키 발급·콘솔 클릭·SQL 등 남은 운영 액션과 백로그는

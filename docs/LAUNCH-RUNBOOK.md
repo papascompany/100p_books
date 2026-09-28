@@ -402,6 +402,9 @@ select o.id as order_id, o.status, o.paid_at, o.project_id
 
 ## §12. 고아 사진 정리 cron 점검 (읽기 전용 dryRun)
 
+> ✅ **2026-09-28 운영 실행** — `scanned=114`(원본 57·썸네일 57) · `orphans=0` · `wouldDelete=0` · `truncated=false` ·
+> `listCalls=22` · 2.6s. 지울 고아 없음, 참조 판정 정상(`photos` 57행과 일치). 다시 볼 필요는 cron 로그에 삭제가 찍힐 때뿐이다.
+
 `/api/cron/orphan-photos` 는 매일 20:00 UTC 에 24시간 지난 **참조 없는** 사진 객체를 지운다.
 `c931801`(09-21)부터 썸네일 버킷(`photo-thumbs`)도 회수 대상이고, 판정은 `photos.storage_key` /
 `photos.thumb_key` 실제 참조로만 한다. 09-21~23 자동 실행은 성공(200, 삭제 실패 0건)했지만 그 시점엔
