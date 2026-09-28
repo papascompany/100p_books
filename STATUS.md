@@ -121,7 +121,7 @@ cron 무인증 401 · `/_next/image` 최적화 200 · 오픈 리다이렉트 차
 
 | 항목 | 이유 |
 |---|---|
-| `middleware.ts` → `proxy.ts` 전환 | 이번 웨이브는 동작을 바꾸지 않는 것이 방침이라 codemod 결과를 되돌렸다. **`middleware.ts` 를 그대로 쓰고 있으며 빌드에 deprecation 경고 1건이 나오는 것은 정상이다** |
+| ~~`middleware.ts` → `proxy.ts` 전환~~ | ✅ 2026-09-28 완료 — `proxy.ts`/`export function proxy`, Node.js 런타임(구 Edge). 빌드 deprecation 경고 해소 |
 | `@supabase/ssr` 0.5.2 · `@supabase/supabase-js` 2.45.6 업그레이드 | 인증·쿠키 경로의 회귀 범위가 따로 커서 분리했다 |
 | React Compiler · Cache Components | 동작·성능 변화가 커서 측정과 함께 별도 판단. codemod 가 넣은 `instant = false` 47건도 되돌렸다 |
 | AVIF 재활성화 | `GHSA-2xp9-vwfh-vxw4` 자체는 16.3.5 에서 해소됐지만 인코딩 비용·품질 회귀를 따로 측정한 뒤 판단한다. `images.formats` 는 **webp 유지**(Next 16 기본값도 webp 단독) |
@@ -877,7 +877,7 @@ Core Web Vitals(LCP/CLS/INP-대용 TBT) 모두 통과. Speed Index/TTI 는 클�
 ```
 운영 빌드:  main = 2d403ae (2026-09-24) — 미병합 브랜치 없음 (§0-12·§0-13)
 Next.js:  16.3.5 / React 19.3.0  (2026-09-21 전환·배포 — §0-12). next advisory 0건
-          middleware.ts 유지(proxy 전환은 후속) · Turbopack 빌드
+          proxy.ts(Node.js 런타임, 2026-09-28 전환) · Turbopack 빌드
 Supabase: vprifnztvlduhpuwgdau (Seoul / papascompany org)
 Vercel:   yohans-projects-de3234df / icn1 리전
 DB 마이그레이션: 0001 ~ 0033 운영 적용 (0029: 2026-07-31 / 0030: 2026-08-09 / 0031: 2026-08-11 / 0032·0033: 2026-09-28)

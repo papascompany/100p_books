@@ -13,7 +13,7 @@ Next 16 전환 경위는 STATUS.md §0-12.
 - `cookies()`·`params`·`searchParams` 는 **async** 다 — `createServerSupabase()` 는 `await` 필수.
 - 관리자 라우트는 `withAdmin` 이 `ctx.params` 를 바깥에서 await 해 넘긴다(핸들러 시그니처 유지).
 - `revalidateTag` 는 2번째 인자가 필수다(`{ expire: 0 }` = 즉시 무효화).
-- `middleware.ts` 는 의도적으로 유지 중이다(`proxy.ts` 전환은 후속 — 빌드 경고 1건은 정상).
+- 요청 전처리는 **`proxy.ts`**(구 `middleware.ts`, 2026-09-28 전환) — Next 16 규약상 **Node.js 런타임 고정**(runtime 설정 불가).
 
 ## 코드 규약
 - 파일명: 컴포넌트 `PascalCase.tsx`, 그 외 `kebab-case.ts`

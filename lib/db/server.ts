@@ -36,7 +36,7 @@ export async function createServerSupabase() {
       },
       setAll(cookiesToSet) {
         // 두 번째 인자(no-store 캐시 헤더)는 cookies() 로 응답 헤더를 쓸 수 없어 다루지 않는다 —
-        // 토큰 갱신 쿠키는 middleware 가 매 요청 기록하며 그쪽에서 헤더도 붙인다.
+        // 토큰 갱신 쿠키는 proxy(proxy.ts) 가 매 요청 기록하며 그쪽에서 헤더도 붙인다.
         try {
           for (const { name, value, options } of cookiesToSet) {
             cookieStore.set(name, value, options);

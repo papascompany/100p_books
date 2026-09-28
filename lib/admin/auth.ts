@@ -8,7 +8,7 @@ import { requireAdmin } from "@/lib/auth/session";
 /**
  * `/api/admin/*` 라우트 공용 래퍼.
  *
- *   - middleware 가 1차 방어 (cookie + role 체크) → 본 래퍼가 2차 방어
+ *   - proxy(proxy.ts) 가 1차 방어 (cookie + role 체크) → 본 래퍼가 2차 방어
  *     (서버 컴포넌트/라우트 핸들러 단에서도 항상 admin 임을 강제).
  *   - throw 된 에러는 표준 fail 응답으로 변환.
  *

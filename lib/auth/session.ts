@@ -47,7 +47,7 @@ function authError(
  *
  * 🔒 탈퇴 가드가 필요한 곳(돈·정체성 변경 액션)은 `requireActiveUser()` 명시 호출.
  *    이 함수는 deleted_at 을 보지 않는다.
- * 🛂 cookie 갱신은 middleware 의 createServerClient 가 매 요청마다 수행.
+ * 🛂 cookie 갱신은 proxy(proxy.ts) 의 createServerClient 가 매 요청마다 수행.
  */
 export const requireUser = cache(async (): Promise<User> => {
   const supabase = await createServerSupabase();
@@ -127,7 +127,7 @@ export const requireActiveUser = cache(async (): Promise<User> => {
 
 /**
  * admin 역할 유저를 반환. 아니면 throw (403).
- * profiles.role 조회 1 RTT 발생. middleware 에서도 admin 라우트는 별도 검증함.
+ * profiles.role 조회 1 RTT 발생. proxy 에서도 admin 라우트는 별도 검증함.
  */
 export async function requireAdmin(): Promise<User> {
   const user = await requireUser();

@@ -21,9 +21,12 @@ const REFERRAL_COOKIE_MAX_AGE_SEC = 60 * 60 * 24 * 30;
 const REFERRAL_CODE_REGEX = /^[A-Z0-9]{4,16}$/;
 
 /**
+ * Next 16 `proxy` 파일 규약(구 middleware, 2026-09-28 전환). **Node.js 런타임 고정**이다
+ * (proxy 는 runtime 설정 불가 — 구 middleware 는 Edge 였다). Vercel 에서는 함수 리전(icn1)에서 돈다.
+ *
  * 세션 쿠키를 새로고침하고 /admin/** · /api/admin/** 는 role=admin 을 강제한다.
  */
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   // Supabase 매직링크/OAuth 후속 ?code= 가 콜백 경로가 아닌 곳에 도착하면
   // /api/auth/callback 으로 보존하여 라우트 핸들러가 세션 교환을 수행하게 한다.
   // (Supabase Auth 가 redirect_to path 를 일관되게 strip 하는 동작에 대한 우회.)
