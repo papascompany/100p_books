@@ -11,14 +11,14 @@ import {
   toShippingRow,
 } from "@/lib/admin/excel";
 import { createAdminSupabase } from "@/lib/db/admin";
-import type { OrderAddress } from "@/lib/db/types";
+import type { OrderAddress, OrderStatus } from "@/lib/db/types";
 import { ALL_ORDER_STATUSES } from "@/lib/orders/state";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const QuerySchema = z.object({
-  status: z.enum(ALL_ORDER_STATUSES as [string, ...string[]]).optional(),
+  status: z.enum(ALL_ORDER_STATUSES as [OrderStatus, ...OrderStatus[]]).optional(),
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
   /** 미리보기 모드 — 카운트만 반환. */

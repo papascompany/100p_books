@@ -4,6 +4,7 @@ import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { requireActiveUser, requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
+import type { Project } from "@/lib/db/types";
 import { assertProjectsEditable } from "@/lib/orders/edit-lock";
 
 export const dynamic = "force-dynamic";
@@ -190,7 +191,7 @@ export async function PATCH(req: Request, props: RouteCtx) {
     //   잠기면 409 PROJECT_LOCKED(failFromError), 주문 조회 실패는 503 PROJECT_LOCK_CHECK_FAILED.
     await assertProjectsEditable(createAdminSupabase(), params.id);
 
-    const patch: Record<string, unknown> = {};
+    const patch: Partial<Project> = {};
     if (parsed.data.title !== undefined) patch.title = parsed.data.title;
     if (parsed.data.bookSizeId !== undefined) patch.book_size_id = parsed.data.bookSizeId;
 

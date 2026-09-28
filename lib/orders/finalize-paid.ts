@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { waitUntil } from "@vercel/functions";
 
 import { trackFunnelEvent } from "@/lib/analytics/funnel";
-import type { Database, OrderStatus } from "@/lib/db/types";
+import type { Database, Order, OrderStatus } from "@/lib/db/types";
 import type { EmailTemplate, TemplateContext } from "@/lib/email/templates";
 import { isMissingDbObjectError, sumHeldOrderPoints } from "@/lib/orders/refund";
 import { enqueuePdfJob, runPdfJob } from "@/lib/pdf/job-runner";
@@ -219,7 +219,7 @@ export async function finalizePaidOrder(
     // ── 단일 실행 게이트 ────────────────────────────────────────────
     if (loaded.leaseMode === "column") {
       const cutoff = new Date(now.getTime() - FINALIZE_LEASE_MS).toISOString();
-      const leasePatch: Record<string, unknown> = {
+      const leasePatch: Partial<Order> = {
         finalize_started_at: now.toISOString(),
       };
       const { data: leased, error: leaseErr } = await admin
@@ -254,7 +254,7 @@ export async function finalizePaidOrder(
 
     if (loaded.leaseMode === "column") {
       // 완료면 마커, 일시 실패가 남았으면 리스를 풀어 다음 트리거가 바로 재시도하게.
-      const donePatch: Record<string, unknown> =
+      const donePatch: Partial<Order> =
         result.outcome === "finalized"
           ? { finalized_at: new Date().toISOString() }
           : { finalize_started_at: null };

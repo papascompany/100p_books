@@ -1,6 +1,7 @@
 import "server-only";
 
 import type {
+  Order,
   StorigeValidationCache,
   StorigeValidationResult,
 } from "@/lib/db/types";
@@ -27,8 +28,8 @@ export interface PdfBuildSuccessFields {
 export function storigeOrderPatch(
   r: PdfBuildSuccessFields,
   nowIso: string,
-): Record<string, unknown> {
-  const patch: Record<string, unknown> = {};
+): Partial<Order> {
+  const patch: Partial<Order> = {};
   if (r.coverKey) patch.storige_cover_file_id = r.coverKey;
   if (r.interiorKey) patch.storige_interior_file_id = r.interiorKey;
   if (r.coverValidation || r.interiorValidation) {

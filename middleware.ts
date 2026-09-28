@@ -1,4 +1,4 @@
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 import type { Database } from "@/lib/db/types";
@@ -66,17 +66,22 @@ export async function middleware(req: NextRequest) {
   }
 
   const supabase = createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
+    // @supabase/ssr 0.12 공식 getAll/setAll 어댑터(0.5.2 get/set/remove 는 deprecated).
+    // 쓰기 대상은 이전과 같다 — 요청 쿠키(req)와 응답 쿠키(res) 양쪽. 삭제는 value "" 항목으로 온다.
+    // headers 는 인증 쿠키를 쓰는 응답에 라이브러리가 요구하는 no-store 캐시 헤더
+    // (Cache-Control/Expires/Pragma) — 한 사용자의 세션 쿠키가 CDN 에 캐시되지 않게 그대로 붙인다.
     cookies: {
-      get(name: string) {
-        return req.cookies.get(name)?.value;
+      getAll() {
+        return req.cookies.getAll();
       },
-      set(name: string, value: string, options: CookieOptions) {
-        req.cookies.set({ name, value, ...options });
-        res.cookies.set({ name, value, ...options });
-      },
-      remove(name: string, options: CookieOptions) {
-        req.cookies.set({ name, value: "", ...options });
-        res.cookies.set({ name, value: "", ...options });
+      setAll(cookiesToSet, headers) {
+        for (const { name, value, options } of cookiesToSet) {
+          req.cookies.set(name, value);
+          res.cookies.set(name, value, options);
+        }
+        for (const [key, value] of Object.entries(headers)) {
+          res.headers.set(key, value);
+        }
       },
     },
   });

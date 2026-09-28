@@ -2,6 +2,7 @@ import "server-only";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { createAdminSupabase } from "@/lib/db/admin";
+import type { Order } from "@/lib/db/types";
 import { STORIGE_RETENTION_DAYS_DEFAULT } from "@/lib/pdf/constants";
 import { verifyCronRequest } from "@/lib/security/cron-auth";
 import { deleteFile, STORIGE_ENABLED } from "@/lib/storige/client";
@@ -72,7 +73,7 @@ export async function GET(req: Request) {
 
     for (const o of orders) {
       scanned += 1;
-      const patch: Record<string, unknown> = {};
+      const patch: Partial<Order> = {};
       let clearedCover = false;
       let clearedInterior = false;
 
