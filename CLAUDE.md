@@ -39,7 +39,7 @@ Next 16 전환 경위는 STATUS.md §0-12.
 | 접근성 | `pnpm test:a11y` | axe-core WCAG 2.1 AA, 공개 라우트 + 다크 모드 |
 | PDF 회귀 | `pnpm test:pdf` | 페이지 수·페이지 크기 + 첫 페이지 SHA-256 |
 | 인증 + 편집 무결성 | `pnpm e2e:auth` | ⚠️ **운영 Supabase** 에 임시 계정·프로젝트를 만든다(afterAll 정리). CI 미포함 |
-| 타입·린트·빌드 | `pnpm typecheck && pnpm lint && pnpm build` | lint 는 **ESLint 9 flat config**(`eslint.config.mjs`) — Next 16 이 `next lint` 를 제거해 `eslint` CLI 직접 호출. 빌드는 Turbopack |
+| 타입·린트·빌드 | `pnpm typecheck && pnpm lint && pnpm build` | lint 는 **ESLint 9 flat config**(`eslint.config.mjs`) — `eslint .`(저장소 전체). 빌드는 Turbopack |
 
 - PDF 회귀 baseline: `test/fixtures/pdf-baseline.json`. 구조(페이지 수·크기)는 플랫폼 무관하게
   엄격 비교하고, 픽셀 해시는 `${platform}-${arch}` 키별로 비교한다(래스터라이저·폰트 폴백이 OS마다 다름).

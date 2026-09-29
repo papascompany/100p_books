@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint app components lib hooks",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -90,7 +90,8 @@
       "@tootallnate/once@2": "^2.0.1",
       "fabric>canvas": "-",
       "ws": "^8.21.0",
-      "jsdom>canvas": "-"
+      "jsdom>canvas": "-",
+      "exceljs>uuid": "^11.1.1"
     }
   }
 }

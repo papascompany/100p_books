@@ -79,6 +79,14 @@ const PUBLIC_ROUTES: Array<{ path: string; label: string }> = [
  */
 async function settle(page: Page): Promise<void> {
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  // 진입 애니메이션·전환을 끄고 **최종 상태**를 잰다. 홈 하단 섹션은 늦게 마운트되며 fade-up 을
+  // 그때 재생하므로(네트워크 idle 이후 시작 실측), 기다리거나 한 번 finish() 해도 axe 측정 중에
+  // 반투명 글자가 color-contrast 위반으로 잡혔다(모바일 다크 약 5~15% 간헐 실패의 원인).
+  // fade-up 등은 fill-mode both 라 animation:none 이면 기본 스타일(opacity 1)로 선다.
+  await page.addStyleTag({
+    content:
+      "*,*::before,*::after{animation:none!important;transition:none!important}",
+  });
   await page.waitForFunction(
     () =>
       Array.from(document.querySelectorAll<HTMLElement>('[class*="animate-"]')).every(

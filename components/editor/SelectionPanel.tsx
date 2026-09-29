@@ -1,6 +1,6 @@
 "use client";
 
-import * as fabric from "fabric";
+import type * as fabric from "fabric";
 import { ImageIcon } from "lucide-react";
 import { useState } from "react";
 

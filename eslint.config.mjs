@@ -20,12 +20,25 @@ export default defineConfig([
     "out/**",
     "dist/**",
     "supabase/migrations/**",
+    // 테스트·회귀 스크립트가 만드는 산출물(번들된 JS 포함) — 소스가 아니다.
+    "tmp/**",
+    "test-results/**",
+    "playwright-report/**",
   ]),
 
   ...nextCoreWebVitals,
   ...nextTypeScript,
 
+  // CommonJS 스텁(scripts/*.cjs — vitest·tsx 용 server-only 대체)은 require 가 정상이다.
   {
+    files: ["**/*.cjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
+
+  // 규칙 블록은 해당 플러그인이 등록된 파일 범위와 같게 한정한다 — 범위가 없으면
+  // 플러그인이 없는 .cjs 등에도 적용돼 `eslint .` 가 "could not find plugin" 으로 죽는다.
+  {
+    files: ["**/*.{ts,tsx}"],
     rules: {
       // .eslintrc.json 에서 그대로 옮겨온 프로젝트 규칙.
       "@typescript-eslint/no-unused-vars": [
@@ -37,6 +50,14 @@ export default defineConfig([
         { prefer: "type-imports" },
       ],
       "@typescript-eslint/no-explicit-any": "warn",
+      // typescript-eslint 8 신규 규칙(구 ban-types 분리):
+      "@typescript-eslint/no-empty-object-type": "warn",
+    },
+  },
+
+  {
+    files: ["**/*.{js,jsx,mjs,ts,tsx,mts,cts}"],
+    rules: {
 
       // ── Next 16 / eslint-config-next 16 전환으로 **새로 생긴** 규칙들 ──
       // 기본 severity 가 error 라 전환 자체를 막는다. 이번 웨이브는 동작 변경을 하지 않는
@@ -57,8 +78,6 @@ export default defineConfig([
       "react-hooks/immutability": "error",
       "react-hooks/refs": "error",
       "react-hooks/purity": "error",
-      // typescript-eslint 8 신규 규칙(구 ban-types 분리):
-      "@typescript-eslint/no-empty-object-type": "warn",
     },
   },
 ]);

@@ -84,7 +84,7 @@ Next 16 전환 후 **36건 — low 3 / moderate 8 / high 24 / critical 1.**
 > ✅ **2026-09-28 갱신 — `pnpm.overrides` 로 prod audit 30 → 3건.** `fabric>canvas`·`jsdom>canvas` 를 제거(`"-"`)해
 > `canvas@2.11.2`→`tar` 12건이 트리에서 사라졌고(서버 PDF 는 `@napi-rs/canvas`, fabric 은 브라우저 전용),
 > 같은 메이저 패치로 `ws`·`tmp`·`form-data`·`brace-expansion`·`postcss-selector-parser`·`browserslist`·
-> `baseline-browser-mapping`·`@tootallnate/once` 를 올렸다. 남은 3건: `fabric` 2(7.x 필요) · `exceljs>uuid@8` 1(메이저).
+> `baseline-browser-mapping`·`@tootallnate/once` 를 올렸다. 남은 3건: `fabric` 2(7.x 필요) · `exceljs>uuid@8` 1(메이저) → 2026-09-29 `exceljs>uuid` 를 ^11.1.1 로 강제(CJS `require('uuid').v4` 호환 확인) — **남은 것은 fabric 2건**.
 > 아래 표는 그 이전 기준 기록이다.
 
 | 패키지 | 건수 | 유입 경로 | 패치 | 현재 앱 노출 |

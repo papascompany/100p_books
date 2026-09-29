@@ -496,8 +496,8 @@ read -rs CRON_SECRET && curl -s -H "Authorization: Bearer $CRON_SECRET" "https:/
 | ~~에디터 그림자 크기가 사진 해상도에 따라 달라짐~~ | ✅ 2026-09-28 해소 — `buildPhotoShadow`(lib/fabric/serialize.ts)가 mm 메타에서 `nonScaling: true` 그림자를 만든다(뷰포트 줌만 반영) |
 | ~~그림자 토글 px↔mm 불일치~~ | ✅ 2026-09-28 해소 — 토글도 같은 `buildPhotoShadow` 로 저장 mm 에서 그린다 |
 | 카카오 OAuth 실제 왕복 확인 | supabase-js 2.117·ssr 0.12 로 PKCE verifier 쿠키 키가 flow 별로 바뀌었다(legacy 키 폴백 있음). `e2e:auth` 는 비밀번호 로그인이라 OAuth 콜백은 수동 1회 확인 필요 |
-| a11y `/ (홈) 다크` color-contrast 간헐 실패 | 약 5~8% 빈도. 스크롤 리빌/전환 중 캡처로 추정 |
-| `eslint .` 전체 실행 실패 | eslint.config.mjs 의 react-hooks 규칙 객체가 플러그인 없는 파일에도 적용됨(기준선부터). `pnpm lint` 대상 디렉터리는 정상 |
+| ~~a11y `/ (홈) 다크` color-contrast 간헐 실패~~ | ✅ 2026-09-29 해소 — 홈 하단 섹션이 늦게 마운트되며 fade-up 을 재생하는 도중 axe 가 반투명 글자를 쟀다. `settle()` 이 측정 전 animation/transition 을 끈다(모바일·데스크톱 다크 360회 연속 통과) |
+| ~~`eslint .` 전체 실행 실패~~ | ✅ 2026-09-29 해소 — 규칙 블록을 플러그인 파일 범위로 한정 + tmp/test-results 무시 + .cjs require 허용. `pnpm lint` 가 이제 `eslint .`(저장소 전체, 0/0) |
 | fabric 7.x 전환 | SVG XSS 2건 + 선택적 `canvas` 백엔드가 끌고 오는 `tar` 12건(critical 1 포함)이 여기서 해소된다(SECURITY.md) |
 | 포인트 홀드/예약 설계 | `0033` reserve/release 로 구조적 해소 — ✅ 2026-09-28 운영 적용 |
 | 100% 할인 코드 | 100원 미만 주문은 `AMOUNT_BELOW_MINIMUM` 차단 — 무료 주문 경로 없음 |
