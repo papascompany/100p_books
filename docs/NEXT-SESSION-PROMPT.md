@@ -30,19 +30,19 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
 - **정본 로컬**: `/Users/yohan/Developer/claude/100p_books` (branch `main`).
   Documents 사본은 node_modules 제거됨 — 쓰지 말 것.
 - 레포 `papascompany/100p_books` (PUBLIC). main push → **Vercel auto-deploy** 정상.
-- **브랜치 상태 (2026-09-26)** — `main` = `origin/main`. **미병합 브랜치·worktree 없음.**
-  `4346c0b`(Next 16) 이후 리뷰 후속 `a41e195`·`c931801`·`2d403ae` 가 올라가 있다(STATUS §0-13).
-  `4346c0b` 은 **Next 16.3.5 + React 19.3.0 전환**이고 그 부모가 `34a5897` 이다.
+- **브랜치 상태 (2026-09-30)** — `main` = `origin/main`. **미병합 브랜치·worktree 없음**,
+  `git fetch --prune` 후 원격 브랜치는 `main` 하나뿐(옛 dependabot·funnel 추적 참조 16개 정리됨).
+  운영 코드 최신은 `55e4101`(fabric 7.4.0, §0-16) — 그 아래로 §0-15·§0-14·§0-13 순.
+  `4346c0b` 은 **Next 16.3.5 + React 19.3.0 전환**이고 그 부모가 `34a5897` 이다(현재 next 는 16.3.6).
   `integ/wave2` 를 `bacadc1` 위로 rebase 해 ff 병합했으므로 **rebase 이전 SHA
   (`552f6e1`·`c6deee9`·`5161cc9`·`67c8f2f`·`692c888`·`3d4b24e`·`69df5d2`·`f4af049`)는 존재하지 않는다.**
   현재 main 의 해당 커밋은 `31eaabf`·`88163d0`·`488cccb`·`061273a`·`be00e1b`·`b47834c`·`aed8404`·`513ba21`
   이고, 그 위에 INT-ui `34a5897` 이 올라가 있다.
 - **main 브랜치 보호가 켜져 있다**(2026-09-17): CI 3잡 필수 체크, force-push·삭제 금지,
   관리자 우회 허용(`enforce_admins=false`). Dependabot alerts·security updates 활성화.
-  **`next` 15.5.24 보안 PR 은 16.3.5 직행 전환으로 해소됐다.** 현재 열린 PR 은 actions 메이저,
-  `@napi-rs/canvas` 1.x, `lucide-react` 1.x, `nanoid` 6, `typescript` 6, `postcss` 패치,
-  npm-minor-patch 그룹 등이다 — **머지 전에 `dependabot.yml` 의 메이저 ignore 규칙(14/18 기준으로
-  작성됨)을 16/19 기준으로 재검토할 것.**
+  **열린 PR 0건**(2026-09-30) — Dependabot PR 은 09-28~30 에 전부 병합·종료했다(§0-15·§0-16).
+  `dependabot.yml` 의 ignore 는 버전 번호가 아니라 `next`·`react*`·`fabric`·`eslint*`·`@types/node` 의
+  **semver-major 업데이트** 단위라 Next 16/React 19 전환 후에도 그대로 유효하다.
 - **로컬에서 전체 검증이 가능하다**:
   ```
   pnpm typecheck && pnpm lint && pnpm test && pnpm test:pdf && pnpm build
@@ -89,24 +89,24 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
 로컬 `.env.local` 에는 Supabase 3종 + TOSS 3종만 있고 **`STORIGE_*` 키가 없다** →
 Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(미설정 시 503/SKIPPED).
 
-- 첫 작업 전 루트 `STATUS.md`(§0-12·§0-11) + 이 문서를 읽고 현재 상태를 사용자에게 보고할 것.
+- 첫 작업 전 루트 `STATUS.md`(§0-16~§0-14) + 이 문서를 읽고 현재 상태를 사용자에게 보고할 것.
   ⚠️ **성능 수치 정본은 `STATUS.md` §0-5(2026-08-07, prod 5회 중앙값)** 다.
   STATUS.md 안의 "Performance 97 · LCP 1.5s"(§M8 QA 표)는 **2026-05-13 옛 측정치**이니
   baseline 으로 쓰지 말 것.
 
 ### 1. 검증 명령 (전부 로컬에서 동작)
 
-**기준선은 `main`(`4346c0b`, Next 16 전환 후)에서 2026-09-21 실측한 값이다.**
+**기준선은 `main`(`55e4101`, fabric 7 전환 후)에서 2026-09-30 실측한 값이다**(루트 `CLAUDE.md` 테스트 절과 동일).
 
 | 대상 | 명령 | 현재 기준선 |
 |---|---|---|
 | 타입 | `pnpm typecheck` | 0 에러 |
-| 린트 | `pnpm lint` | **0 error / 41 warning** — 38건이 `react-hooks` v7 신규 규칙. **전환 방침상 warn 유지**이므로 "경고 0" 을 기준선으로 쓰지 말 것 |
-| 유닛 | `pnpm test` | **82 파일 / 1,427 passed / 1 skipped** (`2d403ae`, 2026-09-24) |
+| 린트 | `pnpm lint` | **0 error / 0 warning** — `eslint .`(저장소 전체), react-hooks v7 4규칙은 **error**(§0-15) |
+| 유닛 | `pnpm test` | **84 파일 / 1,443 passed / 1 skipped** |
 | PDF 회귀 | `pnpm test:pdf` | 4 케이스 OK (394ms, darwin-arm64 — baseline 무수정) |
 | 접근성 | `pnpm test:a11y` | 25 passed / 1 skipped (WCAG 2.1 AA 위반 0) |
 | E2E 스모크 | `pnpm e2e` | 12 passed |
-| **인증 + 편집 무결성** | `pnpm e2e:auth` | **5 passed** — 골든 플로우 2 + 편집 무결성 회귀 3(QA-1/QA-4/QA-2). `4346c0b` 배포본 대상 실측 완료 |
+| **인증 + 편집 무결성** | `pnpm e2e:auth` | **5 passed** — 골든 플로우 2 + 편집 무결성 회귀 3(QA-1/QA-4/QA-2). fabric 7 전환 검증(§0-16)·운영 URL(0032 적용 후, 09-28)에서 실측 |
 | 빌드 | `pnpm build` | 성공 (**Turbopack**, `--webpack` 불요. 라우트 121개 렌더링 모드 변경 0) |
 
 > `pnpm lint` 는 **`eslint .`(저장소 전체, 0 error / 0 warning)** — react-hooks v7 4규칙은 error.
@@ -143,8 +143,9 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
    `withAdmin` 이 `ctx.params` 를 바깥에서 await(관리자 라우트 21개 무수정),
    `revalidateTag(..., { expire: 0 })`, ESLint flat config, `serverExternalPackages` 이관,
    `images.minimumCacheTTL: 60` 명시, `agentRules: false`, `sw.js` CACHE_NAME v3, `tsconfig` `jsx: react-jsx`.
-   **의도적으로 제외한 것**(되돌리지 말고 후속 웨이브에서 판단): `middleware`→`proxy` 전환,
-   `@supabase/ssr`·`supabase-js` 업그레이드, React Compiler, Cache Components, AVIF 재활성화.
+   **당시 의도적으로 제외한 것**: `middleware`→`proxy` 전환(→ 09-28 `ee054c5` 완료),
+   `@supabase/ssr`·`supabase-js` 업그레이드(→ 09-28 §0-15 완료), React Compiler, Cache Components,
+   AVIF 재활성화(이 셋은 여전히 미착수 — 되돌리지 말고 후속 웨이브에서 판단).
    자세한 함정은 아래 19~24 번.
 
 **2026-09-17~18 세션 (보안·결제·편집 무결성)** — 상세는 `STATUS.md` §0-11
@@ -239,7 +240,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 
 --- 아래는 2026-09-17 세션에서 새로 확인한 함정이다 ---
 
-11. 🚨 **fabric 6.9.1 의 `canvas.toJSON()` 은 인자를 무시한다**(`index.mjs:2939`).
+11. 🚨 **fabric 6.9.x·7.x 의 `canvas.toJSON()` 은 인자를 무시한다**(발견 당시 6.9.1 `index.mjs:2939`, 7.4.0 도 동일).
     그래서 `toJSON(EXTRA_PROPS)` 로 커스텀 속성을 담을 수 없다. 이 때문에 히스토리 스냅샷에서
     `oType`·`objectId`·`photoId`·슬롯 태그가 빠졌고, undo/redo 후 직렬화가 태그 없는 객체를
     건너뛰어 **페이지·표지가 0객체로 자동저장**됐다(QA-1, critical).
@@ -310,14 +311,12 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 22. **`next.config` 의 `images.minimumCacheTTL: 60` 을 지우지 말 것.** Next 16 기본값이
     60초 → **4시간**으로 바뀌었다. 지우면 서명 URL 회전·콘텐츠 교체 반영이 최대 4시간 늦게
     체감된다(기존 동작을 유지하려고 일부러 명시해 둔 값이다).
-23. **`middleware.ts` 는 의도적으로 유지 중이다.** Next 16 은 `proxy.ts` 로의 리네임을 권하고
-    **빌드에 deprecation 경고 1건이 나오지만 정상**이다. 이번 웨이브에서 동작 변경을 피하려고
-    codemod 의 리네임을 되돌렸다 — 경고를 보고 "고장"으로 오판하거나 즉흥적으로 전환하지 말 것.
+23. **요청 전처리는 `proxy.ts` 다**(2026-09-28 `ee054c5` 에서 `middleware.ts` 를 전환, deprecation 경고 해소).
+    Next 16 규약상 **Node.js 런타임 고정**이라 `runtime` 설정을 넣을 수 없다. `middleware.ts` 를 되살리지 말 것.
 24. **ESLint 는 flat config(`eslint.config.mjs`)이고 `.eslintrc.json` 은 삭제됐다.**
-    Next 16 이 `next lint` 를 제거해 `pnpm lint` 가 `eslint` CLI 를 직접 부른다(검사 범위는
-    스크립트의 `app components lib hooks`). **전환으로 새로 생긴 규칙은 warn 유지가 방침**이라
-    현재 기준선은 **0 error / 41 warning**(38건이 `react-hooks` v7)이다. 규칙을 error 로 올리거나
-    경고 0 을 목표로 일괄 수정하는 것은 별도 웨이브에서 규칙별로 판단한다.
+    Next 16 이 `next lint` 를 제거해 `pnpm lint` 가 **`eslint .`(저장소 전체)** 를 부른다.
+    기준선은 **0 error / 0 warning** 이고 react-hooks v7 4규칙(set-state-in-effect·immutability·refs·purity)은
+    **error** 다(§0-15). 억제는 사유를 적은 3건 + `assignFabricProps` 의도적 우회 1건뿐 — 새 억제는 사유를 함께 적을 것.
 
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
 
@@ -347,7 +346,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
   토스 결제·카카오 콜백을 프리뷰에서 실증할 수 없다. Next 16 전환분도 운영 배포본으로만 검증했다.
 - **Lighthouse 비교 보류** — Next 16 이 빌드에서 First Load JS 표를 내지 않아 기준선(§0-5,
   2026-08-07 Performance 88 · LCP 3.6s)과 **같은 방식의 비교가 불가능**하다. 측정 방법을 먼저 정할 것.
-- `pnpm e2e:auth` 재실행은 **완료**됐다 — `4346c0b` 배포본에서 5 passed.
+- `pnpm e2e:auth` 재실행은 **완료**됐다 — 운영 URL 최근 실측은 0032 적용 후(09-28) 5 passed, fabric 7 전환분은 로컬 운영 빌드 대상 5 passed(§0-16).
 
 운영 규칙: **환불은 전액만**(부분 취소는 앱이 의도적으로 무시), **`CRON_SECRET` 을 지우지 말 것.**
 
@@ -368,7 +367,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 - 에디터 변경은 객체 수만 보는 e2e 로 부족하다 — 필요 시 main worktree 대비 캔버스 픽셀 diff QA(§0-16 방식).
 
 **첫 작업**: `git status -sb && git log --oneline -5` 로 실제 상태를 확인하고
-(main HEAD 가 `55e4101` 이후인지), `STATUS.md`(§0-11)와 이 문서를 읽어 현재 상태를
+(main HEAD 가 `55e4101` 이후인지), `STATUS.md`(§0-16~§0-14)와 이 문서를 읽어 현재 상태를
 한 문단으로 보고한다. **추천 목록을 만들지 말고**, 사용자가 시킨 작업을 바로 진행한다.
 운영 액션이 궁금하면 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md) 를 가리키는 것으로 끝.
 
