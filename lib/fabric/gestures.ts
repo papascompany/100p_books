@@ -104,8 +104,9 @@ export function attachGestures(
       longPressOrigin = { x: e.clientX, y: e.clientY };
       longPressTimer = setTimeout(() => {
         longPressTimer = null;
+        // fabric 7: findTarget 은 객체가 아니라 { target, subTargets, ... } 를 돌려준다.
         const target =
-          (canvas.findTarget(e) as TaggedFabricObject | undefined) ?? null;
+          (canvas.findTarget(e).target as TaggedFabricObject | undefined) ?? null;
         opts.onLongPress?.(target, e.clientX, e.clientY);
       }, LONG_PRESS_MS);
     }
@@ -225,7 +226,8 @@ export function attachGestures(
     ) {
       lastTap = null;
       // 객체 위 더블탭(텍스트 편집 진입 등)은 Fabric 기본 동작에 위임
-      const target = canvas.findTarget(e);
+      // fabric 7: findTarget 은 항상 info 객체 — 빈 영역 판정은 .target 으로.
+      const { target } = canvas.findTarget(e);
       if (!target) {
         canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
         canvas.requestRenderAll();

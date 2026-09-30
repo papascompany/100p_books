@@ -316,6 +316,11 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         selection: true,
         // 모바일 스크롤 충돌 방지: 캔버스 위 터치는 캔버스가 처리
         allowTouchScrolling: false,
+        // fabric 7 은 셋 다 기본 true(우·가운데 클릭도 mouse:down/up 발생 + 브라우저 메뉴 차단).
+        // 좌클릭 전제인 snap(mouse:up)·선택 동작과 브라우저 우클릭 메뉴를 6 과 같게 유지한다.
+        fireRightClick: false,
+        fireMiddleClick: false,
+        stopContextMenu: false,
       });
       canvasRef.current = canvas;
       applyReadOnly(canvas, readOnlyRef.current);

@@ -366,6 +366,39 @@ describe("restoreSnapshotObjects — 스냅샷 → 복원 → 저장 라운드�
     expect(serializeObjects(restored).objects).toHaveLength(1);
   });
 
+  it("객체 일부가 복원되지 않으면 reject — 사진이 빠진 캔버스를 자동저장하지 않는다 (fabric 7 allSettled)", async () => {
+    const canvas = makeCanvas();
+    canvas.add(makeRect(), makeRect());
+    // 로드에 실패한 객체를 조용히 빼고 resolve 하는 enliven(fabric 7 동작)을 흉내 낸다.
+    const dropping = async (objects: Record<string, unknown>[]) =>
+      fabric.util.enlivenObjects<fabric.FabricObject>(objects.slice(1));
+    await expect(
+      restoreSnapshotObjects(createSnapshot(canvas), { dpi: DPI, enliven: dropping }),
+    ).rejects.toThrow(/1개를 불러오지 못했습니다/);
+  });
+
+  it("실제 fabric enlivenObjects 는 비동기 로드 실패 객체를 빼고 resolve 한다 → 우리는 reject", async () => {
+    // 이미지 로드 실패와 같은 모양: fromObject 가 비동기로 reject 하는 클래스.
+    class LoadFailing extends fabric.Rect {
+      static override type = "LoadFailingForTest";
+      static override async fromObject(): Promise<never> {
+        await Promise.resolve();
+        throw new Error("load failed");
+      }
+    }
+    fabric.classRegistry.setClass(LoadFailing);
+    const canvas = makeCanvas();
+    canvas.add(makeRect(), makeRect());
+    const snap = JSON.parse(createSnapshot(canvas)) as { objects: Array<Record<string, unknown>> };
+    snap.objects[1]!.type = "LoadFailingForTest";
+    // 전제 확인: fabric 7 자체는 reject 하지 않고 1개만 돌려준다(6 은 reject 했다).
+    const raw = await fabric.util.enlivenObjects<fabric.FabricObject>(snap.objects);
+    expect(raw).toHaveLength(1);
+    await expect(
+      restoreSnapshotObjects(JSON.stringify(snap), { dpi: DPI }),
+    ).rejects.toThrow(/1개를 불러오지 못했습니다/);
+  });
+
   it("형식이 깨진 스냅샷은 reject — 호출자가 포인터를 되돌린다", async () => {
     await expect(
       restoreSnapshotObjects("{not json", { dpi: DPI }),

@@ -181,6 +181,14 @@ export async function restoreSnapshotObjects(
     : snapshot.objects;
   const enliven = opts.enliven ?? defaultEnliven;
   const restored = (await enliven(objects)) as TaggedFabricObject[];
+  // fabric 7 의 enlivenObjects 는 Promise.allSettled 라 로드에 실패한 객체(만료된 사진 URL 등)를
+  // **빼고 resolve** 한다(6 은 reject). 그대로 두면 사진이 빠진 캔버스가 자동저장돼 PageDoc 에서
+  // 사진이 사라진다. 개수가 줄면 reject 해 호출자가 히스토리 포인터를 되돌리게 한다.
+  if (restored.length !== objects.length) {
+    throw new Error(
+      `히스토리 복원 중 객체 ${objects.length - restored.length}개를 불러오지 못했습니다.`,
+    );
+  }
   for (const o of restored) {
     if (o.oType === "photo" && o instanceof fabric.FabricImage) {
       syncPhotoClip(o, opts.dpi);
