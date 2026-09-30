@@ -104,9 +104,7 @@ export function attachGestures(
       longPressOrigin = { x: e.clientX, y: e.clientY };
       longPressTimer = setTimeout(() => {
         longPressTimer = null;
-        // fabric 7: findTarget 은 객체가 아니라 { target, subTargets, ... } 를 돌려준다.
-        const target =
-          (canvas.findTarget(e).target as TaggedFabricObject | undefined) ?? null;
+        const target = targetAt(canvas, e);
         opts.onLongPress?.(target, e.clientX, e.clientY);
       }, LONG_PRESS_MS);
     }
@@ -226,8 +224,7 @@ export function attachGestures(
     ) {
       lastTap = null;
       // 객체 위 더블탭(텍스트 편집 진입 등)은 Fabric 기본 동작에 위임
-      // fabric 7: findTarget 은 항상 info 객체 — 빈 영역 판정은 .target 으로.
-      const { target } = canvas.findTarget(e);
+      const target = targetAt(canvas, e);
       if (!target) {
         canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
         canvas.requestRenderAll();
@@ -335,6 +332,27 @@ export function attachGestures(
     clearLongPress();
     pointers.clear();
   };
+}
+
+/**
+ * 포인터 아래의 객체(없으면 null). fabric 이벤트 사이클 **밖**에서 부르는 판정 전용.
+ *
+ * fabric 7 의 `canvas.findTarget(e)` 는 ① 객체 대신 `{ target, ... }` 정보 객체를 돌려주고,
+ * ② 이벤트 사이클 밖에서는 `getScenePoint` 가 캐시 없이 계산되며 viewportTransform 역변환을
+ * CSS 축소 보정보다 **먼저** 적용한다. 캔버스가 CSS 로 축소(모바일 applyFit)되고 핀치로 팬이
+ * 생긴 상태에서 좌표가 어긋나 대상 판정이 틀렸다(fabric 6 은 영향 없음 — 2026-09-30 QA 실측).
+ * 그래서 CSS 보정만 한 viewport 좌표를 우리가 직접 scene 좌표로 바꿔 탐색한다.
+ */
+function targetAt(
+  canvas: fabric.Canvas,
+  e: fabric.TPointerEvent,
+): TaggedFabricObject | null {
+  if (canvas.skipTargetFind) return null; // 읽기 전용 — fabric 6 findTarget 과 동일하게 대상 없음
+  const scene = canvas
+    .getViewportPoint(e)
+    .transform(fabric.util.invertTransform(canvas.viewportTransform));
+  const { target } = canvas.searchPossibleTargets(canvas.getObjects(), scene);
+  return (target as TaggedFabricObject | undefined) ?? null;
 }
 
 function dist(a: { x: number; y: number }, b: { x: number; y: number }) {
