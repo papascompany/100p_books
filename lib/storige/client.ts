@@ -603,17 +603,28 @@ export async function downloadBuffer(fileId: string): Promise<Buffer> {
 // =====================================================================
 
 export interface DeleteResult {
-  /** 삭제 성공(2xx) 또는 이미 없음(404). */
+  /** 삭제 성공(2xx) 또는 이미 없음(404 + `FILE_NOT_FOUND`). */
   ok: boolean;
   /** HTTP status (네트워크 오류는 0). */
   status: number;
-  /** 삭제 API 미지원(405/501/404 라우트)으로 판단되면 false. */
+  /** 삭제 API 미지원(405/501, 또는 `FILE_NOT_FOUND` 가 아닌 404 = 라우트 없음)으로 판단되면 false. */
   supported: boolean;
 }
 
 /**
- * DELETE {BASE}/files/{fileId}/external (계약 미확정 — best-effort).
- *   - 2xx/404 → ok (삭제됨 또는 이미 없음).
+ * Storige 가 "파일 없음" 404 에 싣는 오류 코드. `FilesService.findById`/`assertSiteAccess` 의
+ * `NotFoundException({ code: 'FILE_NOT_FOUND' })` 가 Nest 기본 필터를 거쳐 본문 그대로 나온다.
+ * 라우트가 없으면 Nest 기본 `{ message: "Cannot DELETE …", error: "Not Found" }`(또는 프록시 HTML)라
+ * 이 코드가 없다.
+ */
+const STORIGE_FILE_NOT_FOUND = "FILE_NOT_FOUND";
+
+/**
+ * DELETE {BASE}/files/{fileId}/external (best-effort).
+ *   - 2xx → ok (삭제됨).
+ *   - 404 + 본문 `code: FILE_NOT_FOUND` → ok (이미 없음).
+ *   - 그 외 404(라우트 없음·경로 변경·프록시) → supported=false. 이걸 성공으로 보면 retention cron 이
+ *     유일한 참조(fileId)를 지워 Storige 객체가 추적 불가 고아가 된다.
  *   - 405/501 → supported=false (삭제 API 미지원 — 운영자 협의 대상).
  *   - 그 외(5xx/네트워크) → ok=false, supported=true (다음 cron 에서 재시도).
  */
@@ -628,8 +639,12 @@ export async function deleteFile(fileId: string): Promise<DeleteResult> {
   } catch {
     return { ok: false, status: 0, supported: true };
   }
-  if (resp.ok || resp.status === 404) {
+  if (resp.ok) {
     return { ok: true, status: resp.status, supported: true };
+  }
+  if (resp.status === 404) {
+    const fileGone = isFileNotFoundBody(await safeText(resp));
+    return { ok: fileGone, status: 404, supported: fileGone };
   }
   if (resp.status === 405 || resp.status === 501) {
     return { ok: false, status: resp.status, supported: false };
@@ -653,6 +668,19 @@ async function abortPresignedUpload(fileId: string): Promise<void> {
     await deleteFile(fileId);
   } catch {
     // 정리 실패는 무시 — 원래 업로드 실패가 우선.
+  }
+}
+
+function isFileNotFoundBody(body: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    return (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      (parsed as { code?: unknown }).code === STORIGE_FILE_NOT_FOUND
+    );
+  } catch {
+    return false;
   }
 }
 
