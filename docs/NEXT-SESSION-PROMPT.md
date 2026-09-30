@@ -2,12 +2,11 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 **2026-09-28** · `main` = `origin/main`(최신 커밋은 `git log -1`) · CI 3잡 green · Vercel prod success
-> ✅ **`0032`·`0033` 2026-09-28 운영 적용**(STATUS §0-14) — `verify-0033.ts`·`verify-0032.ts`(12/12)·운영 `e2e:auth` 5 passed.
-> ✅ postcheck 요약 운영 실행 27/27 PASS. PDF 조립 전 원본 재검증(`40fd966`) 반영.
-> **미병합 브랜치 없음** — `integ/wave2` 는 `bacadc1` 위로 rebase 해 ff 병합했다
-> (rebase 이전 SHA 는 더 이상 존재하지 않는다).
-> 🆕 **`4346c0b` = Next.js 16.3.5 + React 19.3.0 전환**(운영 배포 완료, STATUS.md §0-12).
+> 갱신 **2026-09-30** · `main` = `origin/main` = `55e4101` · CI 3잡 green · Vercel prod success · 운영 `e2e:auth` 5 passed
+> ✅ 마이그레이션 `0001~0033` 전부 운영 적용(STATUS §0-14, postcheck 27/27) · QA-1 피해 0 · 고아 사진 0.
+> ✅ 09-28~30: Dependabot PR 전부 정리 · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
+>    `middleware`→`proxy.ts` · PDF 원본 재검증 · 에디터 그림자 mm 통일 · **fabric 7.4.0**(§0-16) · **prod audit 0**.
+> **미병합 브랜치·worktree 없음.**
 > 남은 운영 액션은 전부 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md),
 > 실시간 상태는 `/admin` "서비스 런치 체크" 카드. **"다음 추천" 목록을 새로 만들지 말 것 —
 > 운영 액션·백로그의 유일한 정본은 런북이다** (사용자 지시, 2026-08-09).
@@ -110,8 +109,7 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
 | **인증 + 편집 무결성** | `pnpm e2e:auth` | **5 passed** — 골든 플로우 2 + 편집 무결성 회귀 3(QA-1/QA-4/QA-2). `4346c0b` 배포본 대상 실측 완료 |
 | 빌드 | `pnpm build` | 성공 (**Turbopack**, `--webpack` 불요. 라우트 121개 렌더링 모드 변경 0) |
 
-> `pnpm lint` 는 Next 16 에서 `next lint` 가 제거돼 **`eslint` CLI 직접 호출**이다
-> (`eslint app components lib hooks`, flat config `eslint.config.mjs`).
+> `pnpm lint` 는 **`eslint .`(저장소 전체, 0 error / 0 warning)** — react-hooks v7 4규칙은 error.
 > Lighthouse 는 Next 16 이 First Load JS 표를 내지 않아 **기준선(§0-5)과 같은 방식의 비교가 불가**하다.
 
 ⚠️ `pnpm e2e` / `pnpm test:a11y` 는 playwright webServer 로 `pnpm dev --port 3000` 을 띄우는데
@@ -127,6 +125,16 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 ```
 
 ### 2. 완료된 것 — 재작업 금지 (증거 커밋 포함)
+
+**2026-09-28~30 (의존성·기술 부채·fabric 7)** — 상세는 `STATUS.md` §0-14~§0-16
+- 0032·0033 운영 적용·검증(`scripts/verify-003{2,3}.ts`, `docs/sql/0032-{pre,post}check-summary.sql`)
+- PDF 조립 전 원본 재검증 `lib/pdf/validate-original.ts`(`40fd966`)
+- Dependabot 정리(`eb9d458` `18acb71` `c9d1cb7`) — 열린 PR 0 · vitest 4 + vite 7 · TS 6 · lucide 1 · nanoid 6
+- supabase-js 2.117·ssr 0.12(수동 Database 타입 GenericSchema 화, 쿠키 getAll/setAll) · canvas 1.0.9(Chromium 일치 —
+  인쇄 그림자 짙어짐은 의도) · react-hooks 경고 0 + 4규칙 error(§0-15, worktree 3병렬)
+- 보안 overrides(`3d63ddd`, `1c552cd`) · 그림자 `buildPhotoShadow` nonScaling(`1b27aed`) · `proxy.ts`(`ee054c5`) ·
+  eslint . 정상화 · a11y 다크 간헐 실패 제거(`settle()` 이 애니메이션 끔)
+- **fabric 7.4.0**(`c817726` `14f30d9`) — `targetAt()`·enliven 개수 가드·클릭 기본값. v6 대비 캔버스 픽셀 diff 0
 
 **2026-09-21 (Next 16 + React 19 전환)** — 상세는 `STATUS.md` §0-12
 
@@ -313,6 +321,9 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
 
+**2026-09-30 기준 오너 확인 대기**: ① 카카오 로그인 실제 1회(supabase 업그레이드 후 PKCE 쿠키 키 변경) ·
+② 실제 iPhone Safari 에서 에디터 핀치 후 더블탭(빈 곳=줌 리셋, 글자 위=유지) · ③ Supabase 조직 멤버 계정 확인.
+
 **2026-09-28 기준 오너 대기 항목(순서대로)**
 1. ~~`0033` 재적용~~ — ✅ 09-28 적용 확인(`verify-0033.ts`: service `NOT_FOUND`, anon `42501`).
 2. ~~`0032` 적용~~ — ✅ 09-28 적용(precheck 33행 정상 → 적용 → `verify-0032.ts` 12/12 · `e2e:auth` 5 passed). postcheck 요약 27/27 PASS.
@@ -328,8 +339,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 
 1. ~~런북 §9 — `0033` 적용~~ — ✅ 2026-09-28 적용 확인.
 2. ~~런북 §10 — `0032` 적용~~ — ✅ 2026-09-28 적용(postcheck 27/27 PASS).
-3. **런북 §11 — QA-1 피해 조회**(읽기 전용 SQL 3개). 되돌리기 후 0객체로 저장된 내지·표지와
-   그중 결제된 건을 찾는다. 이미 발생한 피해라 조회가 먼저다.
+3. ~~런북 §11 — QA-1 피해 조회~~ — ✅ 2026-09-28 피해 0건.
 
 **검증 후속(운영 액션 아님, 런북 백로그에도 등재)**
 
@@ -351,9 +361,14 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
   (0033 의 NULL 비교 버그가 이 방식으로 잡혔다).
 - **측정이 필요한 주장은 측정으로 뒷받침한다.** 수치를 보고할 때 측정 횟수와 편차를 함께 밝힐 것.
 - 세션 종료 시 `STATUS.md`와 이 문서를 갱신한다(완료/미완/다음 단계/새로 발견한 함정).
+- **로컬 운영 빌드 서버는 포트 기준으로 종료**: `lsof -nP -iTCP:<port> -sTCP:LISTEN | awk 'NR>1{print $2}' | xargs kill`.
+  `pnpm start` 프로세스명은 `next-server` 라 `pkill -f "next start"` 가 안 먹는다 — 옛 서버가 남으면 재빌드 후
+  ChunkLoadError·거짓 통과가 난다(2026-09-28 실측). e2e 는 `PLAYWRIGHT_BASE_URL=http://localhost:<port>` 로 새 서버에.
+- 병렬 구현은 worktree 격리(포트 분리 3101~3103, e2e:auth 는 통합 후 CTO 1회) → 트랙별 적대 검토 → 통합 게이트.
+- 에디터 변경은 객체 수만 보는 e2e 로 부족하다 — 필요 시 main worktree 대비 캔버스 픽셀 diff QA(§0-16 방식).
 
 **첫 작업**: `git status -sb && git log --oneline -5` 로 실제 상태를 확인하고
-(main HEAD 가 `34a5897` 인지), `STATUS.md`(§0-11)와 이 문서를 읽어 현재 상태를
+(main HEAD 가 `55e4101` 이후인지), `STATUS.md`(§0-11)와 이 문서를 읽어 현재 상태를
 한 문단으로 보고한다. **추천 목록을 만들지 말고**, 사용자가 시킨 작업을 바로 진행한다.
 운영 액션이 궁금하면 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md) 를 가리키는 것으로 끝.
 
