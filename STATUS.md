@@ -25,6 +25,18 @@
 
 ## 🆕 최근 작업 (2026-09-17 ~ 09-28)
 
+### 0-16. fabric 6.9.1 → 7.4.0 전환 (2026-09-30) — prod audit 0
+
+조사(공식 CHANGELOG·소스 대조 + 저장소 사용처 매핑) → 구현 → v6/v7 픽셀 비교 QA → 회귀 수정 → 재검증.
+- **데이터 마이그레이션 없음** — DB 는 PageDoc(mm) 저장, PDF 렌더러는 fabric 무관. origin center 기본값 전환도
+  우리는 이미 전부 center 명시라 무영향.
+- 수정: `findTarget` 반환 형태 변경 + 이벤트 밖 좌표 오판정 → `gestures.ts` `targetAt()` ·
+  `enlivenObjects` allSettled(실패 객체를 빼고 resolve) → `snapshot.ts` 개수 불일치 reject(undo 중 사진 유실 자동저장 방지) ·
+  우클릭·가운데 클릭 기본값을 6 과 같게 명시.
+- QA(Chromium): 내지·표지 × 데스크톱·모바일 캔버스 픽셀 **v6 대비 diff 0**(편집 진입 포함), 핀치 후 판정 441/441,
+  우클릭 정상. 게이트 전부 + `e2e:auth` 5. **실제 iOS Safari 는 미확인**.
+- 보안: fabric SVG XSS 2건 해소 → **`pnpm audit --prod` 0건**.
+
 ### 0-15. 기술 부채 3건 병렬 처리 (2026-09-28) — supabase 업그레이드 · canvas 1.x · react-hooks 경고 0
 
 worktree 3개 병렬 구현 → 트랙별 적대 검토 → 수정 → 통합(`integ/tech-debt-3`) 후 main 반영.

@@ -6,7 +6,7 @@
 자세한 사양은 [PLAN.md](PLAN.md), 기술 아키텍처는 [ARCHITECTURE.md](ARCHITECTURE.md) 참조.
 
 ## 기술 스택
-Next.js 16 (App Router) + React 19 + TypeScript + Tailwind + shadcn/ui + Fabric.js 6 + Supabase +
+Next.js 16 (App Router) + React 19 + TypeScript + Tailwind + shadcn/ui + Fabric.js 7 + Supabase +
 pdf-lib + sharp. 버전 정본은 [STATUS.md](STATUS.md) "기술 스택 버전 현황",
 Next 16 전환 경위는 STATUS.md §0-12.
 
@@ -48,7 +48,10 @@ Next 16 전환 경위는 STATUS.md §0-12.
   **main push 와 PR 마다** 자동 실행된다. 피처 브랜치 단독 push 로는 돌지 않는다.
 - 현재 기준선(main, 2026-09-28): typecheck 0 · lint **0 error / 0 warning** — react-hooks v7 4규칙(set-state-in-effect·immutability·refs·purity)은 **error**(사유 적은 억제 3건 + `assignFabricProps` 의도적 우회 1건) ·
   vitest 84파일 1,440 pass / 1 skip · test:pdf 4 · e2e 12 · a11y 25(+1 의도된 skip) · build 성공.
-- Fabric 스냅샷은 `lib/fabric/snapshot.ts` 가 정본이다 — fabric 6.9.x 의 `canvas.toJSON()` 은
+- fabric 7(2026-09-30 전환): 기본 origin 이 center(우리는 원래 전부 center 명시) · `findTarget` 은 `{target,…}`
+  정보 객체를 반환하고 이벤트 밖에서는 좌표가 어긋난다 → 판정은 `lib/fabric/gestures.ts` 의 `targetAt()` 방식 ·
+  `enlivenObjects` 는 실패 객체를 빼고 resolve 하므로 `snapshot.ts` 가 개수 불일치를 reject 한다.
+- Fabric 스냅샷은 `lib/fabric/snapshot.ts` 가 정본이다 — fabric 6.9.x·7.x 의 `canvas.toJSON()` 은
   **인자를 무시**하므로 `toJSON(props)` 로 커스텀 속성을 담을 수 없다(QA-1 원인).
 
 ## 금지 사항

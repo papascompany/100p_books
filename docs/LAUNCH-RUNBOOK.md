@@ -498,7 +498,8 @@ read -rs CRON_SECRET && curl -s -H "Authorization: Bearer $CRON_SECRET" "https:/
 | 카카오 OAuth 실제 왕복 확인 | supabase-js 2.117·ssr 0.12 로 PKCE verifier 쿠키 키가 flow 별로 바뀌었다(legacy 키 폴백 있음). `e2e:auth` 는 비밀번호 로그인이라 OAuth 콜백은 수동 1회 확인 필요 |
 | ~~a11y `/ (홈) 다크` color-contrast 간헐 실패~~ | ✅ 2026-09-29 해소 — 홈 하단 섹션이 늦게 마운트되며 fade-up 을 재생하는 도중 axe 가 반투명 글자를 쟀다. `settle()` 이 측정 전 animation/transition 을 끈다(모바일·데스크톱 다크 360회 연속 통과) |
 | ~~`eslint .` 전체 실행 실패~~ | ✅ 2026-09-29 해소 — 규칙 블록을 플러그인 파일 범위로 한정 + tmp/test-results 무시 + .cjs require 허용. `pnpm lint` 가 이제 `eslint .`(저장소 전체, 0/0) |
-| fabric 7.x 전환 | SVG XSS 2건 + 선택적 `canvas` 백엔드가 끌고 오는 `tar` 12건(critical 1 포함)이 여기서 해소된다(SECURITY.md) |
+| ~~fabric 7.x 전환~~ | ✅ 2026-09-30 완료(7.4.0) — prod audit 0. 실제 iOS Safari 에서 핀치·더블탭 1회 수동 확인 권장(QA 는 Chromium 에뮬레이션) |
+| 다중 선택 중 자동저장 좌표 | ActiveSelection 자식 left/top 은 선택 그룹 기준 상대좌표인데 `FabricStage.serialize()` 가 선택을 풀지 않고 읽는다는 추정(fabric 6·7 공통, 미재현). 재현·확인 필요 |
 | 포인트 홀드/예약 설계 | `0033` reserve/release 로 구조적 해소 — ✅ 2026-09-28 운영 적용 |
 | 100% 할인 코드 | 100원 미만 주문은 `AMOUNT_BELOW_MINIMUM` 차단 — 무료 주문 경로 없음 |
 | 인증 E2E 의 CI 편입 | staging Supabase 신설이 선행 조건. 그 전까지 릴리스 전 로컬 1회 |

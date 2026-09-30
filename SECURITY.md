@@ -118,6 +118,8 @@ Next 16 전환 후 **36건 — low 3 / moderate 8 / high 24 / critical 1.**
 > `middleware.ts` 는 의도적으로 유지 중이다(빌드 deprecation 경고 1건은 정상).
 > Pages Router + i18n 우회 advisory(`GHSA-36qx-fr4f-26g5`)는 App Router 전용 앱이라 원래 미해당이었다.
 
+> ✅ **2026-09-30 fabric 7.4.0 전환 완료 — `pnpm audit --prod` 0건.** 아래는 전환 전 기록이다.
+
 ### Fabric.js 6.9.1 → 7.x (현재 앱에서 직접 노출 없음)
 
 | 심각도 | advisory | 내용 | 패치 |
