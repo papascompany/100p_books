@@ -11,7 +11,7 @@
 > 최종 업데이트: 2026-09-30
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `55e4101`(2026-09-30) — fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
+> 운영 빌드: `e32edc1`(2026-09-30) — Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
 > `proxy.ts` · 보안 overrides(**prod audit 0**) · Next 16.3.6. 그 이전 `2d403ae` = Next 16 전환(§0-12)+리뷰 후속(§0-13).
 > 그 직전 `34a5897` 까지 2026-09-17~21 보안·결제·편집 무결성 작업 전량 반영(§0-11).
 > **미병합 브랜치 없음.**
@@ -24,7 +24,27 @@
 
 ---
 
-## 🆕 최근 작업 (2026-09-17 ~ 09-28)
+## 🆕 최근 작업 (2026-09-17 ~ 09-30)
+
+### 0-17. Storige 삭제 404 구분 + 인계 문서 정리 + Storige 세션 교신 (2026-09-30)
+
+- **`e32edc1` fix(storige)** — `deleteFile`(`DELETE /files/{id}/external`)이 404 를 본문과 무관하게 "이미 없음"(성공)으로
+  보던 것을, **JSON 본문 `code === "FILE_NOT_FOUND"` 일 때만 성공**으로 바꿨다. 그 외 404(라우트 부재·경로 변경·프록시 HTML)는
+  `ok=false, supported=false` → retention cron 이 `orders.storige_*_file_id` 참조를 **유지**하고 다음 날 재시도한다.
+  이전에는 라우트가 사라지면 참조를 비워 Storige 객체가 추적 불가 고아가 될 수 있었다. 판정 근거는 Storige
+  `files.service.ts` 의 `findById`·`assertSiteAccess` 가 던지는 `NotFoundException({code:'FILE_NOT_FOUND'})`(Nest 기본 필터로 본문 그대로).
+  `lib/storige/client.test.ts` 신규 6건. typecheck 0 · lint 0/0 · vitest 85파일 1,449 / 1 skip · CI 3잡·Vercel success.
+- **Storige 측 약속(2026-09-30 ACK)**: ① 파일 없음 404 의 `code:"FILE_NOT_FOUND"` 유지, 변경 시 사전 통지, 다른 거부 사유에 재사용 금지 ·
+  ② `/files/:id/external` DELETE 제거·이동 계획 없음, 변경 시 사전 통지 · ③ 다른 테넌트 파일도 같은 404(존재 비노출 설계) —
+  **100p 키가 다른 site 에 매핑되면 남은 파일도 "이미 없음" 처리**되는 잔여 위험은 응답만으로 구분 불가(키·site 매핑은 Storige 발급 기록으로 관리).
+  비 UUID id 는 404 가 아니라 400(100p 는 재시도로 처리, 실제 id 는 전부 Storige 발급이라 해당 없음).
+- **Storige 워커 TrimBox 판형 검사(운영 적용 2026-09-30 07:54Z)** — 내지(content) 중 `/TrimBox` 가 명시되고 MediaBox 판정이 SIZE_MISMATCH 인 PDF 만 TrimBox 로 재판정(실패→통과 가능).
+  추가 필드(additive): 경고 `TRIMBOX_SIZE_BASIS`(비차단) · `result.metadata.trimBox` · SIZE_MISMATCH `details.trimBox`.
+  100p PDF 는 MediaBox(판형+블리드)만 있어 **기존 MediaBox 판정 그대로**임을 Storige 가 확인했고, 같은 형태 픽스처를 회귀 테스트에 넣었다.
+  100p 는 `status`·`result.isValid/errors/warnings` 만 저장하고(`metadata` 미저장), 발주 게이트는 `status` 만 보며, 경고는 관리자 주문 상세 개수 표시뿐 →
+  **배포 후 재확인 완료, 영향 없음**(ACK 회신). `TRIMBOX_SIZE_BASIS` 경고가 100p 주문에 보이면 PDF 형식이 바뀌었다는 신호다.
+- Storige 주문 연결 편집 세션 관리자 작업 원칙(09-30) ACK — 100p 는 편집 세션(`edit-sessions`·`/embed`) 미사용이라 대상 0건.
+- 인계 문서 stale 정리(`7101c38`) — lint 0/0·`proxy.ts`·fabric 7 함정·Dependabot 열린 PR 0. `git fetch --prune` 으로 원격 추적 참조 16개 정리(원격 브랜치 `main` 하나).
 
 ### 0-16. fabric 6.9.1 → 7.4.0 전환 (2026-09-30) — prod audit 0
 
@@ -1016,12 +1036,12 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ## 테스트 현황
 
-**기준선 — `main`(`2d403ae`) 에서 2026-09-24 실측** (Next 16 전환 직후 `4346c0b` 는 78 파일 / 1,371)
+**기준선 — `main`(`e32edc1`) 에서 2026-09-30 실측** (타입·린트·유닛. 나머지 행은 표기된 시점 값)
 
 ```
-타입·린트:                pnpm typecheck 0 에러 · pnpm lint 0 error / 41 warning
-                          (38건이 react-hooks v7 신규 규칙 — 전환 방침상 warn 유지)
-유닛 테스트 (Vitest):     82 파일 / 1,427 passed / 1 skipped
+타입·린트:                pnpm typecheck 0 에러 · pnpm lint(eslint .) 0 error / 0 warning
+                          (react-hooks v7 4규칙 error — §0-15)
+유닛 테스트 (Vitest):     85 파일 / 1,449 passed / 1 skipped
 E2E 스모크 (Playwright):  desktop+mobile chromium 12/12 통과
 접근성 (axe-core):       WCAG 2.1 AA 25 passed / 1 skipped · 위반 0
 PDF 회귀(페이지수+해시): pnpm test:pdf — 4 케이스 / 394ms (darwin-arm64)
