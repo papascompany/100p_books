@@ -43,12 +43,14 @@
   100p PDF 는 MediaBox(판형+블리드)만 있어 **기존 MediaBox 판정 그대로**임을 Storige 가 확인했고, 같은 형태 픽스처를 회귀 테스트에 넣었다.
   100p 는 `status`·`result.isValid/errors/warnings` 만 저장하고(`metadata` 미저장), 발주 게이트는 `status` 만 보며, 경고는 관리자 주문 상세 개수 표시뿐 →
   **배포 후 재확인 완료, 영향 없음**(ACK 회신). `TRIMBOX_SIZE_BASIS` 경고가 100p 주문에 보이면 PDF 형식이 바뀌었다는 신호다.
-- **Storige P4 — 대용량 업로드 사이트 귀속(예고, 2026-10-03 사전 질의·회신)** — 90MB 초과 presigned `complete` 때 호출 키의 사이트를
+- **Storige P4 — 대용량 업로드 사이트 귀속(✅ 운영 적용 2026-10-03 api 04:58Z / worker 04:55:41Z, Storige master `9e2a817`)** — 90MB 초과 presigned `complete` 때 호출 키의 사이트를
   파일에 기록하고, 이후 download·validate·DELETE 는 같은 사이트 키만 허용(다른 사이트 키는 404). 보관 영구·업로드 흐름·응답 형식 불변.
   100p 는 검증만 **워커 키**(`STORIGE_WORKER_API_KEY`)를 쓰고 나머지는 편집기 키라 404 우려를 제기했으나, Storige 확인 결과
   **두 키 모두 같은 100p 사이트 행**(워커 키는 role=editor + siteId=100p, 사이트 바이패스는 Storige 내부 키만)이라 그대로 통과한다.
   운영에 100p 사이트 기록 파일 0건 → 신규 대용량 업로드부터 적용. 함께 워커 중단 잡의 장기 PROCESSING 을 FAILED 로 정리하지만,
-  100p 는 빌드 중 최대 2회(maxMs 4s) 폴링 후 재조회가 없어 저장값 영향 없음. **배포 전 최종 동작 통지가 오면 ACK 할 것.**
+  100p 는 빌드 중 최대 2회(maxMs 4s) 폴링 후 재조회가 없어 저장값 영향 없음. Wave 2 사전 통지에 ACK(`b0f5d3a` 기준) 후 배포됐다.
+  04:58Z 이후 완료되는 90MB 초과 파일부터 귀속(이전 파일 불변). 검증 반복 중단 잡은 `FAILED` + `errorCode: JOB_STALLED`(100p 는 errorCode 미사용, FAILED 면 기존 게이트가 막음).
+  Storige 스모크(04:59Z) health 200·오류 로그 0. 정본: Storige `CONTRACT_FREEZE` v1.9 §1-C-1, `docs/partner-notices/PARTNER_NOTICE_WAVE2_2026-10-03.md`.
   ⚠️ 100p 키를 회전·재발급할 때 두 키가 같은 사이트로 묶여 있는지 Storige 와 확인할 것 — 어긋나면 대용량 PDF 검증이 404 → `ERROR`
   (게이트는 FIXABLE/FAILED 만 막으므로 무검증 발주가 된다).
 - Storige 주문 연결 편집 세션 관리자 작업 원칙(09-30) ACK — 100p 는 편집 세션(`edit-sessions`·`/embed`) 미사용이라 대상 0건.

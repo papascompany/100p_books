@@ -331,8 +331,8 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
     잔여 위험: 다른 테넌트 파일도 같은 404 라 키↔site 오매핑은 구분 불가.
     Storige 워커 TrimBox 판형 검사(09-30 07:54Z 운영 적용)는 100p PDF(MediaBox 만)·파싱에 영향 없음을 재확인했다.
     PDF 에 `/TrimBox` 를 넣기 시작하면 내지 판정이 달라지고 `TRIMBOX_SIZE_BASIS` 경고가 붙으니 그때 다시 볼 것.
-    **Storige P4(대용량 업로드 사이트 귀속)** 는 배포 전 최종 동작 통지가 온다 — 100p 편집기·워커 키가 같은 사이트 행이라
-    검증이 통과한다는 전제(§0-17)를 확인하고 ACK 할 것. 키 회전 시에도 두 키의 사이트 일치를 Storige 와 확인할 것.
+    **Storige P4(대용량 업로드 사이트 귀속)** 는 2026-10-03 04:58Z 운영 적용됐다(§0-17) — 100p 편집기·워커 키가 같은 사이트 행이라
+    검증이 통과한다. **키 회전 시 두 키의 사이트 일치를 Storige 와 확인할 것** — 어긋나면 대용량 PDF 검증이 404 → `ERROR` → 무검증 발주.
 
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
 
