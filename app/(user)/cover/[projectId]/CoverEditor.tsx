@@ -1188,11 +1188,13 @@ export default function CoverEditor({
           </div>
         </main>
 
-        {/* 우측 — SelectionPanel */}
+        {/* 우측 (lg 이상) — SelectionPanel */}
         {readOnly ? null : (
           <aside
             aria-label="속성"
-            className="hidden md:block md:w-56 lg:w-72 md:shrink-0"
+            // lg 미만(768~1023px)에서는 숨긴다 — 캔버스 폭 확보. 그 구간의 속성 편집은 좌측 Toolbar
+            // "텍스트/레이어" → MobileBottomSheet(SelectionPanel) 공통 경로가 맡는다(2026-10-05).
+            className="hidden lg:block lg:w-72 lg:shrink-0"
           >
             <SelectionPanel
               selection={selection}
