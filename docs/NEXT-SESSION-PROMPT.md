@@ -103,8 +103,8 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
 |---|---|---|
 | 타입 | `pnpm typecheck` | 0 에러 |
 | 린트 | `pnpm lint` | **0 error / 0 warning** — `eslint .`(저장소 전체), react-hooks v7 4규칙은 **error**(§0-15) |
-| 유닛 | `pnpm test` | **88 파일 / 1,483 passed / 1 skipped** |
-| PDF 회귀 | `pnpm test:pdf` | 4 케이스 OK (394ms, darwin-arm64 — baseline 무수정) |
+| 유닛 | `pnpm test` | **89 파일 / 1,490 passed / 1 skipped** |
+| PDF 회귀 | `pnpm test:pdf` | 5 케이스 OK (약 500ms, darwin-arm64 — `photo-downscale` 추가 2026-10-05) |
 | 접근성 | `pnpm test:a11y` | 25 passed / 1 skipped (WCAG 2.1 AA 위반 0) |
 | E2E 스모크 | `pnpm e2e` | 12 passed |
 | **인증 + 편집 무결성** | `pnpm e2e:auth` | **5 passed** — 골든 플로우 2 + 편집 무결성 회귀 3(QA-1/QA-4/QA-2). fabric 7 전환 검증(§0-16)·운영 URL(0032 적용 후, 09-28)에서 실측 |
@@ -126,6 +126,9 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 ```
 
 ### 2. 완료된 것 — 재작업 금지 (증거 커밋 포함)
+
+**2026-10-05 (PDF 렌더 메모리)** — 상세는 `STATUS.md` §0-20
+- 사진을 슬롯 크기로 줄여 디코드(`lib/pdf/photo-downscale.ts`) — collage-6 RSS 약 -45% · 함정 31 번.
 
 **2026-10-05 (결제 수렴 도구 · PDF 100p 측정)** — 상세는 `STATUS.md` §0-19
 - 주문 상세 "결제 상태 확인·수렴"(`lib/orders/reconcile-pending.ts`, `/api/admin/orders/[id]/reconcile-payment`) — 함정 30 번.
@@ -369,6 +372,11 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
     toss_order_id 를 덮어 이중 과금이 된다(10-05 적대 리뷰 HIGH). 또 POST 는 실행 직전 재조회한 계획이 미리보기와 같을 때만
     실행한다(`PLAN_CHANGED`) — 미리보기 결과로 바로 쓰는 단축을 만들지 말 것. 이 라우트는 finalize 로 PDF 빌드를 돌리므로
     `lib/pdf/job-reaper.test.ts` JOB_ROUTES 와 vercel.json(300s/1769MB)에 함께 등록돼 있다.
+
+31. **PDF 사진은 `lib/pdf/photo-downscale.ts` 로 슬롯 크기까지 줄여 디코드한다**(§0-20). `render-page.ts` `drawPhoto` 에서
+    원본을 다시 `loadImage` 로 직접 읽게 되돌리면 collage-6 이 함수 메모리 한도의 93~99% 로 돌아간다. 축소는 배율 < 1 일 때만이고
+    업스케일·EXIF orientation≠1·sharp 실패는 기존 경로다 — 이 예외를 없애면 기존 렌더 결과가 바뀐다. sharp 는 하드닝본만(함정 17).
+    회귀 `photo-downscale` 케이스가 축소 경로를 고정한다(기존 `photo-shadow` 는 사진이 작아 업스케일 경로만 탄다).
 
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
 

@@ -26,6 +26,28 @@
 
 ## 🆕 최근 작업 (2026-09-17 ~ 10-05)
 
+### 0-20. PDF 렌더 메모리 — 사진을 슬롯 크기로 줄여 디코드 (2026-10-05) — collage-6 RSS 약 -45%
+
+§0-19 측정에서 collage-6 100p 가 RSS 1,648~1,749MB(함수 한도 1769MB 의 93~99%)였던 문제의 1순위 레버를 적용했다.
+- `lib/pdf/photo-downscale.ts`(신규) — `drawPhoto` 가 원본을 전체 해상도로 `loadImage` 하던 것을, 헤더로 크기만 읽고
+  **슬롯에 실제로 그려지는 픽셀 크기까지 하드닝 sharp 로 줄여**(cover = 슬롯 크기·가운데 잘라내기, contain = 비율 유지, lanczos3,
+  JPEG 는 libvips 축소 디코드) RGBA 를 캔버스에 올린다(재인코딩 없음). 그리는 수식은 그대로라 위치·크기 동일.
+  **기존 경로 유지**: 업스케일(원본이 슬롯보다 작음) · EXIF orientation≠1 옛 원본 · sharp 실패(원본 loadImage 로 폴백, 그것도 실패면 placeholder).
+- A/B(같은 머신·같은 시점, 운영 코드 경로, 4032×3024 사진, 20×20 판형, `ff5f42b` 임시 worktree 대비):
+
+  | 시나리오 | 최대 RSS 기존 → 새 | 벽시계 기존 → 새 | 내지 PDF |
+  |---|---|---|---|
+  | collage-6 100p (슬롯 600) | 1,518 / 1,676 → **924 / 862 MB** | 31.4 / 27.8 → 20.8 / 21.1s | 129.5 → 92.6MB |
+  | 폴라로이드 100p | 955 → 935 MB | 11.0 → 13.5s | 101.7 → 88.6MB |
+
+  collage-6 은 한도의 49~52% 로 내려왔다. 폴라로이드는 축소비가 약 2배라 메모리 이득이 없고 CPU 가 페이지당 약 45ms 늘었다(100p 약 5초).
+- 화질: 실제 사진에 가까운 이미지에서 기존 경로 대비 평균 차이 0.18~1.0/255(가장자리 1px 반올림 0.1% 제외). 픽셀 단위 백색 잡음
+  이미지에서만 축소 필터 차이로 평균 8~15 차이 — 고주파 잡음의 평균 방식 차이라 인쇄 품질 저하로 보지 않는다.
+- PDF 회귀: 기존 4 케이스 해시 **불변**(DUMMY_PNG 는 슬롯보다 작아 업스케일 경로). 축소 경로를 고정하는 `photo-downscale` 케이스
+  (3000×2000 4분할 사진 · cover+contain·회전)를 추가 — 내지 구조 3→4p. **linux-x64 해시는 CI 첫 실행 로그에서 옮겨 적을 것**(함정 2).
+- 미적용 레버(측정상 필요 없어짐, 런북 백로그 유지): `RENDER_CONCURRENCY` 픽셀 기준 제한 · `PHOTO_CACHE_MAX_BYTES` 적중률.
+- 검증: typecheck 0 · lint 0/0 · vitest 89파일 1,490 / 1 skip · test:pdf 5 케이스 · build 성공. 측정 하네스는 scratch.
+
 ### 0-19. 결제 키가 남은 pending 주문 복구 도구 + PDF 100페이지 부하 측정 (2026-10-05)
 
 **① 관리자 결제 수렴 도구** — `lib/orders/reconcile-pending.ts` + `GET/POST /api/admin/orders/[id]/reconcile-payment` +
@@ -1115,10 +1137,10 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 ```
 타입·린트:                pnpm typecheck 0 에러 · pnpm lint(eslint .) 0 error / 0 warning
                           (react-hooks v7 4규칙 error — §0-15)
-유닛 테스트 (Vitest):     88 파일 / 1,483 passed / 1 skipped
+유닛 테스트 (Vitest):     89 파일 / 1,490 passed / 1 skipped
 E2E 스모크 (Playwright):  desktop+mobile chromium 12/12 통과
 접근성 (axe-core):       WCAG 2.1 AA 25 passed / 1 skipped · 위반 0
-PDF 회귀(페이지수+해시): pnpm test:pdf — 4 케이스 / 394ms (darwin-arm64)
+PDF 회귀(페이지수+해시): pnpm test:pdf — 5 케이스(photo-downscale 추가, 2026-10-05) / 약 500ms (darwin-arm64)
 PDF 런타임 검증:          pnpm verify:pdf — 1페이지 스모크
 인증 골든 플로우:         pnpm e2e:auth — 5 passed (운영 URL 실측, 1.8m)
                           골든 플로우 2 + 편집 무결성 회귀 3(QA-1/QA-4/QA-2)

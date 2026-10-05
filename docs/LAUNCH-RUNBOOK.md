@@ -512,8 +512,9 @@ read -rs CRON_SECRET && curl -s -H "Authorization: Bearer $CRON_SECRET" "https:/
 | 데모 모드 | "구현 시작" 지시 시: 데모 계정 + `DEMO_*` env + 원클릭 로그인 |
 | Storige C-2 배포 통지 시 | PDF 검증 E2E 재실증(로컬 `.env.local`에 STORIGE 키 필요) |
 | 성능 추가 개선 | 현재 Performance 88 · LCP 3.6s. 다음 레버는 전송량(이미지/JS) |
-| **PDF 렌더 메모리 (collage-6)** | 2026-10-05 측정(STATUS §0-19): 폴라로이드 100p 는 RSS 약 700MB 로 여유, **collage-6 은 1,648~1,749MB 로 1769MB 한도의 93~99%**. 48MP 원본이면 OOM 확실(외삽). 레버 ① `lib/pdf/render-page.ts` 가 원본 전체를 `loadImage` — 디코드 전 sharp 로 슬롯 300dpi 크기까지 축소(CPU·메모리 동시 절감, 가장 효과 큼) ② `RENDER_CONCURRENCY=4` 고정 → 동시 디코드 픽셀 총량 기준 제한 ③ `PHOTO_CACHE_MAX_BYTES` 100MB 가 사진 재사용 레이아웃에서 적중 0%(다운로드 반복). 렌더 결과가 바뀌므로 `test:pdf` baseline 갱신·리뷰 필요 |
-| PDF 측정 확정 | 측정은 부하 큰 로컬 arm64 였다 — x64 Linux(또는 Vercel 실배포)에서 collage-6 17p·48MP 원본 실측으로 확정할 것 |
+| ~~**PDF 렌더 메모리 (collage-6)**~~ | ✅ 2026-10-05 레버 ① 적용(STATUS §0-20) — 사진을 슬롯 크기로 줄여 디코드, collage-6 RSS 1,518~1,676 → 862~924MB(한도의 약 50%). 남은 레버(필요 시): ② `RENDER_CONCURRENCY=4` 픽셀 기준 제한 ③ `PHOTO_CACHE_MAX_BYTES` 적중률(사진 재사용 레이아웃에서 다운로드 반복) |
+| PDF 측정 확정 | 측정은 로컬 arm64 였다 — x64 Linux(또는 Vercel 실배포)에서 collage-6 17p·48MP 원본 실측으로 확정할 것(축소 디코드 적용 후에도) |
+| PDF 회귀 linux-x64 해시 | 2026-10-05 추가한 `photo-downscale` 케이스는 darwin 해시만 있다 — CI 첫 실행 로그의 "신규 플랫폼 기록" 해시를 `test/fixtures/pdf-baseline.json` `pixels["linux-x64"]` 에 커밋할 것(그 전까지 CI 는 이 케이스 픽셀을 비교하지 않는다) |
 | 랜딩 CMS 수치·후기 문구 | `/admin/content` 의 "5,000+ 제작·4.9★·후기 3건"은 실제 주문 0·후기 0 상태와 다르다 — 표시 광고 관점에서 **오너가 문구를 결정**(2026-10-05 점검) |
 | 내 포토북 카드 썸네일 | 표지에 사진 객체가 있을 때만 썸네일, 없으면 아이콘 — 첫 페이지 사진 폴백 개선 후보. 제목도 전부 "Untitled" |
 | ~~에디터 진입 후 캔버스 공백 ~12초~~ | ✅ 2026-10-05 원인 확정 — Vercel 자동 완화(Security Checkpoint 403)가 자동화 브라우저의 청크 요청을 챌린지해 hydration 지연. 일반 사용자 조건 아님. 함께 드러난 **SW 403 캐시 오염 결함은 `ea1610e` 로 수정**(v4). 운영에서 사용자 챌린지가 의심되면 `x-vercel-mitigated` 헤더·SW 캐시 content-type 을 확인할 것. Vercel 설정은 CLI 로 확인 결과 변경 불요(Attack Mode Off·규칙 0·이벤트 0, 2026-10-05) |
