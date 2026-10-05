@@ -510,4 +510,5 @@ read -rs CRON_SECRET && curl -s -H "Authorization: Bearer $CRON_SECRET" "https:/
 | 성능 추가 개선 | 현재 Performance 88 · LCP 3.6s. 다음 레버는 전송량(이미지/JS) |
 | 랜딩 CMS 수치·후기 문구 | `/admin/content` 의 "5,000+ 제작·4.9★·후기 3건"은 실제 주문 0·후기 0 상태와 다르다 — 표시 광고 관점에서 **오너가 문구를 결정**(2026-10-05 점검) |
 | 내 포토북 카드 썸네일 | 표지에 사진 객체가 있을 때만 썸네일, 없으면 아이콘 — 첫 페이지 사진 폴백 개선 후보. 제목도 전부 "Untitled" |
+| 에디터 진입 후 캔버스 공백 ~12초 | `/api/pages/{id}` 요청 자체가 진입 **12.8초 뒤 시작**(응답 405ms, 2026-10-05 운영 실측 2회). API 가 아니라 클라이언트 시작 지연 — fabric 청크 lazy-load·SW v3·hydration 중 원인 미확인. 첫 방문 4초 내. 재현·프로파일 필요 |
 | 표지 수동 저장 시 PATCH 2회 | 수동 클릭과 자동저장 debounce 가 겹쳐 `PATCH /api/cover` 가 2회 나간다(무해, 중복 요청) |

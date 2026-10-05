@@ -11,7 +11,7 @@
 > 최종 업데이트: 2026-09-30
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `7609291`(2026-10-05) — UI 결함 5건 + 에디터 레이아웃 후속 3건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
+> 운영 빌드: `99f3702`(2026-10-05) — UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
 > `proxy.ts` · 보안 overrides(**prod audit 0**) · Next 16.3.6. 그 이전 `2d403ae` = Next 16 전환(§0-12)+리뷰 후속(§0-13).
 > 그 직전 `34a5897` 까지 2026-09-17~21 보안·결제·편집 무결성 작업 전량 반영(§0-11).
 > **미병합 브랜치 없음.**
@@ -44,6 +44,10 @@
   `7609291` **FabricStage 최초 fit 을 `observe` 직후 직접 호출** — 데스크톱 첫 로드에서 wrapper 크기가 변하지 않으면
   ResizeObserver 콜백이 오지 않아 캔버스가 자연 폭으로 남던 잠복 결함(이전엔 inline-block 이 원폭이라 scale 1 로 가려져 있었다).
   배포본 실측: 1440px 784/784 · 1024px 368/368 · 811px 내지 283/283 · 375px 앞표지 세그먼트 확대(676/351, scrollLeft 325) 유지. CI 3건 모두 green.
+- **`99f3702` 우측 속성 패널을 `lg:` 부터만 표시**(오너 지시) — 768~1023px 에서는 숨기고 좌측 Toolbar "텍스트/레이어" → `MobileBottomSheet`(SelectionPanel)
+  공통 경로로 편집. 실측: 953px 패널 숨김·캔버스 열 665px·"레이어" 시트 열림, 1024px 패널 복귀(right=1000)·overflow 0. CI green.
+- **관찰(미수정, 런북 백로그)**: 에디터 진입 후 `/api/pages/{id}` 요청이 **약 12.8초 뒤에 시작**(응답 405ms)해 캔버스가 그동안 비어 보인다.
+  API 지연이 아니라 클라이언트 시작 지연(fabric 청크 lazy-load·SW 등 원인 미확인). 첫 방문 때는 4초 내였다.
 
 ### 0-17. Storige 삭제 404 구분 + 인계 문서 정리 + Storige 세션 교신 (2026-09-30)
 
@@ -1065,7 +1069,7 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ## 테스트 현황
 
-**기준선 — `main`(`7609291`) 에서 2026-10-05 실측** (타입·린트·유닛. 나머지 행은 표기된 시점 값)
+**기준선 — `main`(`99f3702`) 에서 2026-10-05 실측** (타입·린트·유닛. 나머지 행은 표기된 시점 값)
 
 ```
 타입·린트:                pnpm typecheck 0 에러 · pnpm lint(eslint .) 0 error / 0 warning

@@ -2,7 +2,7 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 **2026-10-05** · `main` = `origin/main` = `7609291` · CI 3잡 green · Vercel prod success · 운영 `e2e:auth` 5 passed
+> 갱신 **2026-10-05** · `main` = `origin/main` = `99f3702` · CI 3잡 green · Vercel prod success · 운영 `e2e:auth` 5 passed
 > ✅ 마이그레이션 `0001~0033` 전부 운영 적용(STATUS §0-14, postcheck 27/27) · QA-1 피해 0 · 고아 사진 0.
 > ✅ 09-28~30: Dependabot PR 전부 정리 · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
 >    `middleware`→`proxy.ts` · PDF 원본 재검증 · 에디터 그림자 mm 통일 · **fabric 7.4.0**(§0-16) · **prod audit 0** ·
@@ -33,7 +33,7 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
 - 레포 `papascompany/100p_books` (PUBLIC). main push → **Vercel auto-deploy** 정상.
 - **브랜치 상태 (2026-09-30)** — `main` = `origin/main`. **미병합 브랜치·worktree 없음**,
   `git fetch --prune` 후 원격 브랜치는 `main` 하나뿐(옛 dependabot·funnel 추적 참조 16개 정리됨).
-  운영 코드 최신은 `7609291`(UI 결함 5건 + 에디터 레이아웃 후속 3건, §0-18) — 그 아래로 §0-17(Storige DELETE 404)·§0-16(fabric 7.4.0)·§0-15 순.
+  운영 코드 최신은 `99f3702`(UI 결함 5건 + 에디터 레이아웃 후속 4건, §0-18) — 그 아래로 §0-17(Storige DELETE 404)·§0-16(fabric 7.4.0)·§0-15 순.
   `4346c0b` 은 **Next 16.3.5 + React 19.3.0 전환**이고 그 부모가 `34a5897` 이다(현재 next 는 16.3.6).
   `integ/wave2` 를 `bacadc1` 위로 rebase 해 ff 병합했으므로 **rebase 이전 SHA
   (`552f6e1`·`c6deee9`·`5161cc9`·`67c8f2f`·`692c888`·`3d4b24e`·`69df5d2`·`f4af049`)는 존재하지 않는다.**
@@ -97,7 +97,7 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
 
 ### 1. 검증 명령 (전부 로컬에서 동작)
 
-**기준선은 `main`(`7609291`)에서 2026-10-05 실측한 값이다**(루트 `CLAUDE.md` 테스트 절과 동일).
+**기준선은 `main`(`99f3702`)에서 2026-10-05 실측한 값이다**(루트 `CLAUDE.md` 테스트 절과 동일).
 
 | 대상 | 명령 | 현재 기준선 |
 |---|---|---|
@@ -129,7 +129,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 
 **2026-10-05 (운영 브라우저 점검·UI 결함 5건)** — 상세는 `STATUS.md` §0-18
 - hydration 날짜 KST 고정(`lib/date/kst.ts`) · 에디터 `min-w-0`/표지 헤더 `flex-wrap` · coral 800~950 · `/admin/emails` 문구(`b8783ea`)
-- 후속: md 측면 패널 `w-56`(`b6b3d7c`) · 표지 스프레드 `max-w-full`(`e707538`) · FabricStage 최초 fit 직접 호출(`7609291`) — 배포본 4폭 재측정 완료(§0-18).
+- 후속: md 측면 패널 `w-56`(`b6b3d7c`) · 표지 스프레드 `max-w-full`(`e707538`) · FabricStage 최초 fit 직접 호출(`7609291`) · 우측 속성 패널 `lg:` 부터(`99f3702`) — 배포본 재측정 완료(§0-18).
 
 **2026-09-30 (Storige 삭제 판정)** — 상세는 `STATUS.md` §0-17
 - `deleteFile` 404 는 본문 `code:"FILE_NOT_FOUND"` 일 때만 성공(`e32edc1`) — 함정 25 번.
@@ -347,6 +347,8 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 28. **FabricStage 의 fit 은 `observe` 직후 `applyFit()` 1회 직접 호출에 의존한다**(`7609291`). ResizeObserver 초기 콜백만 믿으면
     데스크톱 첫 로드에서 캔버스가 자연 폭(표지 868px)으로 남는다. 표지 스프레드 박스(`inline-block min-w-full`)는 데스크톱에서만
     `max-w-full` — 모바일 면 확대는 inline width 가 박스를 넘어야 하므로 조건을 풀지 말 것.
+    **우측 속성 패널은 `lg:` 부터만 렌더**(`99f3702`) — 768~1023px 의 속성 편집은 Toolbar→바텀시트 경로가 맡으므로
+    그 시트(`toolSheet`)를 `lg` 미만에서 막지 말 것.
 
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
 
@@ -397,7 +399,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 - 에디터 변경은 객체 수만 보는 e2e 로 부족하다 — 필요 시 main worktree 대비 캔버스 픽셀 diff QA(§0-16 방식).
 
 **첫 작업**: `git status -sb && git log --oneline -5` 로 실제 상태를 확인하고
-(main HEAD 가 `7609291` 이후인지), `STATUS.md`(§0-18~§0-14)와 이 문서를 읽어 현재 상태를
+(main HEAD 가 `99f3702` 이후인지), `STATUS.md`(§0-18~§0-14)와 이 문서를 읽어 현재 상태를
 한 문단으로 보고한다. **추천 목록을 만들지 말고**, 사용자가 시킨 작업을 바로 진행한다.
 운영 액션이 궁금하면 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md) 를 가리키는 것으로 끝.
 
