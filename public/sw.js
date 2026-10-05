@@ -17,7 +17,9 @@
  *      precache 한 셸과 새 서버 응답이 섞인다.
  */
 
-const CACHE_NAME = "100p-v3";
+// v4 (2026-10-05): _next/static 핸들러가 비-2xx 응답(Vercel Security Checkpoint 403 HTML 등)까지
+// 캐시하던 결함을 고치면서, 그 사이 오염됐을 수 있는 캐시를 통째로 버린다.
+const CACHE_NAME = "100p-v4";
 const STATIC_ASSETS = ["/", "/offline"];
 
 /**
@@ -82,8 +84,14 @@ self.addEventListener("fetch", (event) => {
         (cached) =>
           cached ||
           fetch(request).then((res) => {
-            const clone = res.clone();
-            caches.open(CACHE_NAME).then((c) => c.put(request, clone));
+            // 2xx 이고 HTML 이 아닐 때만 캐시한다. 운영 실측(2026-10-05): Vercel 방화벽 챌린지가
+            // 청크 요청에 403 "Security Checkpoint" HTML 을 돌려줬고, 그것이 불변 URL 에 캐시되면
+            // 이후 모든 로드에서 스크립트 대신 HTML 이 실행돼 앱이 깨진다(SW 버전 bump 전까지 영구).
+            const type = res.headers.get("content-type") || "";
+            if (res.ok && !/text\/html/i.test(type)) {
+              const clone = res.clone();
+              caches.open(CACHE_NAME).then((c) => c.put(request, clone));
+            }
             return res;
           })
       )
