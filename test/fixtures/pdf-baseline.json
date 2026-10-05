@@ -43,7 +43,8 @@
       "shapes": "d99311a59f792ebd131537871bce2fbbd3a608d0173d075076fcffc8a90f6fdc",
       "photo-shadow": "caea6624f32827ae77e509833336571337b716c531a7dabf47af12a1bff38414",
       "text": "8e04fcf2b771059caaf54be007e314a66781817af6269135e098c2818390cb40",
-      "cover": "f6b99f16c0355afbe31b6eda49d9d05c028dd7ebbf5dd96dade5d6d194ace367"
+      "cover": "f6b99f16c0355afbe31b6eda49d9d05c028dd7ebbf5dd96dade5d6d194ace367",
+      "photo-downscale": "abe60a43419077d3902a2540a47eb615e24fff6aea88a5a4042bc33fe2ecc022"
     }
   }
 }
