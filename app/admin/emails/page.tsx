@@ -12,8 +12,8 @@ export default function AdminEmailsPage() {
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           결제·상태 전이·가입·탈퇴 시점에 큐에 등록된 알림 메일.
-          SMTP 미설정 환경에서는 status=&apos;cancelled&apos; 로 마킹되며, Phase 12 에서 Resend
-          등 통합 후 자동 발송돼요.
+          RESEND_API_KEY 가 없으면 잡은 대기(pending) 상태로 보존되고, 키를 등록하면 5분 cron 이
+          밀린 잡까지 순서대로 발송해요. 실패 잡은 5분→30분→2시간 백오프로 재시도돼요.
         </p>
       </header>
       <EmailsClient />

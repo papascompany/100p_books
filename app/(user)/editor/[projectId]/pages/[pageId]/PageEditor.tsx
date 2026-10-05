@@ -1056,7 +1056,9 @@ export default function PageEditor({
         {/* 중앙 — Stage */}
         <main
           className={cn(
-            "flex min-h-0 flex-1 flex-col items-center justify-start gap-3",
+            // min-w-0: flex 자식의 min-width:auto 가 캔버스 폭을 강제해 md(768~1100px)에서
+            // 3단이 가로로 넘치고 우측 속성 패널이 잘렸다. FabricStage 는 wrapper 폭에 맞춰 축소된다.
+            "flex min-h-0 min-w-0 flex-1 flex-col items-center justify-start gap-3",
             // 모바일: 터치 전용, 사이드바 없음
             "touch-action-none",
           )}

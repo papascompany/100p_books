@@ -941,7 +941,9 @@ export default function CoverEditor({
           className="ml-1 max-w-[12rem] flex-1 truncate bg-transparent text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-md md:text-base"
         />
 
-        <div className="ml-auto flex items-center gap-2">
+        {/* flex-wrap + min-w-0 — 375px 에서 버튼 4개(443px)가 한 줄로 고정돼 레이아웃 뷰포트가
+            455px 로 넓어지고 페이지 전체가 가로 스크롤됐다. 줄바꿈을 허용해 폭 안에 둔다. */}
+        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
           {readOnly ? null : (
             <Button
               variant="outline"
@@ -1096,7 +1098,10 @@ export default function CoverEditor({
         )}
 
         {/* 중앙 — Stage + 가이드 오버레이 */}
-        <main className="flex min-h-0 flex-1 flex-col items-center justify-start gap-3">
+        {/* min-w-0 — flex 자식의 기본 min-width:auto 가 캔버스 폭을 강제해 md(768~1100px)에서
+            3단 레이아웃이 가로로 넘치고 우측 속성 패널이 화면 밖으로 밀렸다. 0 으로 두면
+            FabricStage 가 wrapper.clientWidth 에 맞춰 축소된다. */}
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-start gap-3">
           <ReadOnlyNotice message={lockMessage} />
           {legacyWidthMismatch && !readOnly ? (
             <div

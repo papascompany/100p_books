@@ -17,6 +17,7 @@ import { describeTrashResult, type TrashResponseData } from "./trash-result";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
+import { formatDateShortKst } from "@/lib/date/kst";
 import { MAX_PHOTOS_PER_PROJECT } from "@/lib/image/constants";
 import { cn } from "@/lib/utils";
 
@@ -344,7 +345,7 @@ export default function PhotoLibraryClient({ photos, projects }: Props) {
                     {p.exifTakenAt ? (
                       <p className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
                         <Camera className="size-3" aria-hidden />
-                        {formatDateShort(p.exifTakenAt)}
+                        {formatDateShortKst(p.exifTakenAt)}
                       </p>
                     ) : null}
                   </div>
@@ -421,12 +422,4 @@ export default function PhotoLibraryClient({ photos, projects }: Props) {
   );
 }
 
-function formatDateShort(iso: string): string {
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "";
-    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
-  } catch {
-    return "";
-  }
-}
+// 날짜 포맷은 lib/date/kst.ts — 서버(UTC)/브라우저(KST) 동일 출력(hydration #418 방지).
