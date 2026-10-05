@@ -11,7 +11,7 @@
 > 최종 업데이트: 2026-09-30
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `99f3702`(2026-10-05) — UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
+> 운영 빌드: `ea1610e`(2026-10-05) — SW 캐시 오염 수정(v4) · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
 > `proxy.ts` · 보안 overrides(**prod audit 0**) · Next 16.3.6. 그 이전 `2d403ae` = Next 16 전환(§0-12)+리뷰 후속(§0-13).
 > 그 직전 `34a5897` 까지 2026-09-17~21 보안·결제·편집 무결성 작업 전량 반영(§0-11).
 > **미병합 브랜치 없음.**
@@ -46,8 +46,13 @@
   배포본 실측: 1440px 784/784 · 1024px 368/368 · 811px 내지 283/283 · 375px 앞표지 세그먼트 확대(676/351, scrollLeft 325) 유지. CI 3건 모두 green.
 - **`99f3702` 우측 속성 패널을 `lg:` 부터만 표시**(오너 지시) — 768~1023px 에서는 숨기고 좌측 Toolbar "텍스트/레이어" → `MobileBottomSheet`(SelectionPanel)
   공통 경로로 편집. 실측: 953px 패널 숨김·캔버스 열 665px·"레이어" 시트 열림, 1024px 패널 복귀(right=1000)·overflow 0. CI green.
-- **관찰(미수정, 런북 백로그)**: 에디터 진입 후 `/api/pages/{id}` 요청이 **약 12.8초 뒤에 시작**(응답 405ms)해 캔버스가 그동안 비어 보인다.
-  API 지연이 아니라 클라이언트 시작 지연(fabric 청크 lazy-load·SW 등 원인 미확인). 첫 방문 때는 4초 내였다.
+- **에디터 진입 ~12초 공백 — 원인 확정·수정(`ea1610e`)**. 프로파일: 내비게이션 1.6초 완료 후 11.1초까지 네트워크 0건, long task 0건
+  → hydration 이 멈춰 있었다. 청크를 `fetch()` 로 재요청하니 21개 전부 **403 `text/html` "Vercel Security Checkpoint"**
+  (`x-vercel-mitigated: challenge`, 방화벽 설정 없음 → Vercel 자동 완화가 이 자동화 브라우저 세션을 챌린지). 챌린지 통과 전까지
+  청크 요청이 HTML 로 떨어져 Next 가 재시도하다 ~10초 뒤 hydration 됐다. **일반 사용자 재현 조건 아님**(자동화·캐시 삭제·빠른 연속 내비게이션).
+  **드러난 진짜 결함**: `public/sw.js` `_next/static` cache-first 핸들러가 `res.ok` 확인 없이 응답을 캐시해 403 HTML 이 불변 청크 URL 로
+  캐시됐다(21건 확인·정리). 그 상태면 이후 모든 로드에서 스크립트 대신 HTML 이 실행돼 앱이 깨지고 SW 버전 bump 전까지 영구.
+  → 2xx + 비-HTML 만 캐시 + `CACHE_NAME` v3→**v4**(오염 가능 캐시 폐기).
 
 ### 0-17. Storige 삭제 404 구분 + 인계 문서 정리 + Storige 세션 교신 (2026-09-30)
 
@@ -951,7 +956,7 @@ Cron (6종, 전부 활성): process-emails */5 · attendance-reset 0 15 · stori
                     orphan-photos 0 20 · expire-pending-orders 30 * · reap-pdf-jobs */10 (UTC)
                     전부 Bearer CRON_SECRET 필요(미설정이면 fail-closed)
 정적 라우트:    /terms, /privacy, /refund, /offline, /robots.txt, /sitemap.xml, /_not-found
-PWA Service Worker: CACHE_NAME v3 (Stale-While-Revalidate 공개 페이지 — 전략은 그대로,
+PWA Service Worker: CACHE_NAME **v4**(2026-10-05, `_next/static` 는 2xx·비-HTML 만 캐시) (Stale-While-Revalidate 공개 페이지 — 전략은 그대로,
                     Next 16 배포 스큐 대비로 캐시 이름만 v2 → v3, §0-12)
 Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 ```
@@ -1069,7 +1074,7 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ## 테스트 현황
 
-**기준선 — `main`(`99f3702`) 에서 2026-10-05 실측** (타입·린트·유닛. 나머지 행은 표기된 시점 값)
+**기준선 — `main`(`ea1610e`) 에서 2026-10-05 실측** (타입·린트·유닛. 나머지 행은 표기된 시점 값)
 
 ```
 타입·린트:                pnpm typecheck 0 에러 · pnpm lint(eslint .) 0 error / 0 warning

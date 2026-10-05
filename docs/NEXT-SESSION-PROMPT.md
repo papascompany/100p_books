@@ -2,7 +2,7 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 **2026-10-05** · `main` = `origin/main` = `99f3702` · CI 3잡 green · Vercel prod success · 운영 `e2e:auth` 5 passed
+> 갱신 **2026-10-05** · `main` = `origin/main` = `ea1610e` · CI 3잡 green · Vercel prod success · 운영 `e2e:auth` 5 passed
 > ✅ 마이그레이션 `0001~0033` 전부 운영 적용(STATUS §0-14, postcheck 27/27) · QA-1 피해 0 · 고아 사진 0.
 > ✅ 09-28~30: Dependabot PR 전부 정리 · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
 >    `middleware`→`proxy.ts` · PDF 원본 재검증 · 에디터 그림자 mm 통일 · **fabric 7.4.0**(§0-16) · **prod audit 0** ·
@@ -33,7 +33,7 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
 - 레포 `papascompany/100p_books` (PUBLIC). main push → **Vercel auto-deploy** 정상.
 - **브랜치 상태 (2026-09-30)** — `main` = `origin/main`. **미병합 브랜치·worktree 없음**,
   `git fetch --prune` 후 원격 브랜치는 `main` 하나뿐(옛 dependabot·funnel 추적 참조 16개 정리됨).
-  운영 코드 최신은 `99f3702`(UI 결함 5건 + 에디터 레이아웃 후속 4건, §0-18) — 그 아래로 §0-17(Storige DELETE 404)·§0-16(fabric 7.4.0)·§0-15 순.
+  운영 코드 최신은 `ea1610e`(SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건, §0-18) — 그 아래로 §0-17(Storige DELETE 404)·§0-16(fabric 7.4.0)·§0-15 순.
   `4346c0b` 은 **Next 16.3.5 + React 19.3.0 전환**이고 그 부모가 `34a5897` 이다(현재 next 는 16.3.6).
   `integ/wave2` 를 `bacadc1` 위로 rebase 해 ff 병합했으므로 **rebase 이전 SHA
   (`552f6e1`·`c6deee9`·`5161cc9`·`67c8f2f`·`692c888`·`3d4b24e`·`69df5d2`·`f4af049`)는 존재하지 않는다.**
@@ -97,7 +97,7 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
 
 ### 1. 검증 명령 (전부 로컬에서 동작)
 
-**기준선은 `main`(`99f3702`)에서 2026-10-05 실측한 값이다**(루트 `CLAUDE.md` 테스트 절과 동일).
+**기준선은 `main`(`ea1610e`)에서 2026-10-05 실측한 값이다**(루트 `CLAUDE.md` 테스트 절과 동일).
 
 | 대상 | 명령 | 현재 기준선 |
 |---|---|---|
@@ -150,7 +150,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
    `createServerSupabase` async 화(+호출부 41곳 await), 페이지 `params`/`searchParams` await,
    `withAdmin` 이 `ctx.params` 를 바깥에서 await(관리자 라우트 21개 무수정),
    `revalidateTag(..., { expire: 0 })`, ESLint flat config, `serverExternalPackages` 이관,
-   `images.minimumCacheTTL: 60` 명시, `agentRules: false`, `sw.js` CACHE_NAME v3, `tsconfig` `jsx: react-jsx`.
+   `images.minimumCacheTTL: 60` 명시, `agentRules: false`, `sw.js` CACHE_NAME v3(→ 10-05 v4), `tsconfig` `jsx: react-jsx`.
    **당시 의도적으로 제외한 것**: `middleware`→`proxy` 전환(→ 09-28 `ee054c5` 완료),
    `@supabase/ssr`·`supabase-js` 업그레이드(→ 09-28 §0-15 완료), React Compiler, Cache Components,
    AVIF 재활성화(이 셋은 여전히 미착수 — 되돌리지 말고 후속 웨이브에서 판단).
@@ -349,6 +349,10 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
     `max-w-full` — 모바일 면 확대는 inline width 가 박스를 넘어야 하므로 조건을 풀지 말 것.
     **우측 속성 패널은 `lg:` 부터만 렌더**(`99f3702`) — 768~1023px 의 속성 편집은 Toolbar→바텀시트 경로가 맡으므로
     그 시트(`toolSheet`)를 `lg` 미만에서 막지 말 것.
+29. **SW 의 `_next/static` 캐시는 2xx + 비-HTML 만**(`ea1610e`, `CACHE_NAME` v4). Vercel 자동 완화가 청크 요청에 403
+    "Security Checkpoint" HTML 을 돌려줄 수 있고(`x-vercel-mitigated: challenge`), 그것이 불변 URL 에 캐시되면 앱이 영구히 깨진다.
+    `res.ok` 가드를 지우지 말고, 캐시 전략을 바꾸면 `CACHE_NAME` 을 올릴 것. **자동화 브라우저로 운영 성능을 잴 때는 챌린지 여부를 먼저
+    확인할 것** — 2026-10-05 의 "에디터 12초 공백"은 이 챌린지였다(일반 사용자 조건 아님).
 
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
 
@@ -399,7 +403,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 - 에디터 변경은 객체 수만 보는 e2e 로 부족하다 — 필요 시 main worktree 대비 캔버스 픽셀 diff QA(§0-16 방식).
 
 **첫 작업**: `git status -sb && git log --oneline -5` 로 실제 상태를 확인하고
-(main HEAD 가 `99f3702` 이후인지), `STATUS.md`(§0-18~§0-14)와 이 문서를 읽어 현재 상태를
+(main HEAD 가 `ea1610e` 이후인지), `STATUS.md`(§0-18~§0-14)와 이 문서를 읽어 현재 상태를
 한 문단으로 보고한다. **추천 목록을 만들지 말고**, 사용자가 시킨 작업을 바로 진행한다.
 운영 액션이 궁금하면 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md) 를 가리키는 것으로 끝.
 
