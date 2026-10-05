@@ -353,6 +353,11 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
     "Security Checkpoint" HTML 을 돌려줄 수 있고(`x-vercel-mitigated: challenge`), 그것이 불변 URL 에 캐시되면 앱이 영구히 깨진다.
     `res.ok` 가드를 지우지 말고, 캐시 전략을 바꾸면 `CACHE_NAME` 을 올릴 것. **자동화 브라우저로 운영 성능을 잴 때는 챌린지 여부를 먼저
     확인할 것** — 2026-10-05 의 "에디터 12초 공백"은 이 챌린지였다(일반 사용자 조건 아님).
+    **System Mitigations 챌린지는 `firewall/events`·`attack-status` API 와 함수 로그에 남지 않는다**(10-05 실측 0건).
+    사용자 신고 시 증거는 그 브라우저 응답의 `x-vercel-mitigated: challenge` 헤더뿐이다. 상태 확인은 읽기 전용 CLI 로:
+    `vercel firewall overview` · `vercel firewall rules list` · `vercel firewall system-bypass list`.
+    `attack-mode`·관리 규칙·`system-bypass add`·`system-mitigations pause` 는 운영 설정 변경이라 **오너 승인 후에만**
+    (pause 는 DDoS 방어 24시간 해제 — 운영 금지).
 
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
 

@@ -53,6 +53,12 @@
   **드러난 진짜 결함**: `public/sw.js` `_next/static` cache-first 핸들러가 `res.ok` 확인 없이 응답을 캐시해 403 HTML 이 불변 청크 URL 로
   캐시됐다(21건 확인·정리). 그 상태면 이후 모든 로드에서 스크립트 대신 HTML 이 실행돼 앱이 깨지고 SW 버전 bump 전까지 영구.
   → 2xx + 비-HTML 만 캐시 + `CACHE_NAME` v3→**v4**(오염 가능 캐시 폐기).
+- **Vercel 방화벽 상태 CLI 확인(읽기 전용, 설정 변경 없음)** — `vercel firewall overview`: Firewall 미설정 · Attack Mode Off ·
+  System Mitigations Active · System Bypass 0 · 커스텀 규칙 0. `vercel api /v1/security/firewall/events`(3일) **0건**,
+  `/attack-status`(3일) **0건**, 운영 403 로그(6시간) 0건. → 이번 챌린지(청크 21개 403)는 **System Mitigations 의 단발성 챌린지라
+  프로젝트 이벤트 기록에 남지 않는다**. 이 Mac 의 curl(일반 UA)은 `/`·`/login`·`/gallery`·청크 모두 200, `x-vercel-mitigated` 없음 →
+  일반 요청은 챌린지 대상 아님. 내장 브라우저도 이후 자동 해제(청크 200 `application/javascript`), SW `100p-v4` 25개 항목 전부 정상(오염 0)
+  → `ea1610e` 실브라우저 동작 확인. 결론: **조치할 Vercel 설정 없음**.
 
 ### 0-17. Storige 삭제 404 구분 + 인계 문서 정리 + Storige 세션 교신 (2026-09-30)
 

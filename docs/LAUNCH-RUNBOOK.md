@@ -510,5 +510,5 @@ read -rs CRON_SECRET && curl -s -H "Authorization: Bearer $CRON_SECRET" "https:/
 | 성능 추가 개선 | 현재 Performance 88 · LCP 3.6s. 다음 레버는 전송량(이미지/JS) |
 | 랜딩 CMS 수치·후기 문구 | `/admin/content` 의 "5,000+ 제작·4.9★·후기 3건"은 실제 주문 0·후기 0 상태와 다르다 — 표시 광고 관점에서 **오너가 문구를 결정**(2026-10-05 점검) |
 | 내 포토북 카드 썸네일 | 표지에 사진 객체가 있을 때만 썸네일, 없으면 아이콘 — 첫 페이지 사진 폴백 개선 후보. 제목도 전부 "Untitled" |
-| ~~에디터 진입 후 캔버스 공백 ~12초~~ | ✅ 2026-10-05 원인 확정 — Vercel 자동 완화(Security Checkpoint 403)가 자동화 브라우저의 청크 요청을 챌린지해 hydration 지연. 일반 사용자 조건 아님. 함께 드러난 **SW 403 캐시 오염 결함은 `ea1610e` 로 수정**(v4). 운영에서 사용자 챌린지가 의심되면 `x-vercel-mitigated` 헤더·SW 캐시 content-type 을 확인할 것 |
+| ~~에디터 진입 후 캔버스 공백 ~12초~~ | ✅ 2026-10-05 원인 확정 — Vercel 자동 완화(Security Checkpoint 403)가 자동화 브라우저의 청크 요청을 챌린지해 hydration 지연. 일반 사용자 조건 아님. 함께 드러난 **SW 403 캐시 오염 결함은 `ea1610e` 로 수정**(v4). 운영에서 사용자 챌린지가 의심되면 `x-vercel-mitigated` 헤더·SW 캐시 content-type 을 확인할 것. Vercel 설정은 CLI 로 확인 결과 변경 불요(Attack Mode Off·규칙 0·이벤트 0, 2026-10-05) |
 | 표지 수동 저장 시 PATCH 2회 | 수동 클릭과 자동저장 debounce 가 겹쳐 `PATCH /api/cover` 가 2회 나간다(무해, 중복 요청) |
