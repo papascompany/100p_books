@@ -410,6 +410,10 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         resizeTimer = setTimeout(applyFit, 150);
       });
       ro.observe(wrapper);
+      // 최초 fit 을 observer 콜백에 맡기지 않는다 — 데스크톱 첫 로드에서 wrapper 크기가 그 뒤로
+      // 변하지 않으면 debounce 콜백 전에 캔버스가 자연 폭(stagePxSize.w)으로 남아 박스를 넘쳤다
+      // (표지 스프레드 868px, 2026-10-05 운영 실측: 리사이즈 뒤에야 fit). 지금 바로 한 번 맞춘다.
+      applyFit();
 
       // 최초 캔버스 초기화 완료 신호 (lazy-load 시 doc 로딩 트리거)
       if (!readyCalledRef.current) {
