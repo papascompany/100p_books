@@ -1150,7 +1150,13 @@ export default function CoverEditor({
           {/* 모바일에선 선택한 면(앞·책등·뒤)을 화면 폭에 맞춰 확대하고 가로 스크롤로 이동. */}
           <div ref={scrollBoxRef} className="relative w-full overflow-x-auto">
             <div
-              className="relative inline-block min-w-full"
+              className={cn(
+                "relative inline-block min-w-full",
+                // 데스크톱(면 단위 확대 아님): inline-block 이 스프레드 원폭(868px)으로 늘어나
+                // FabricStage 가 축소되지 않고 박스 안 가로 스크롤로 남았다(1524px 미만 전부).
+                // max-w-full 로 박스 폭에 fit. 모바일 면 확대는 inline width 가 박스를 넘어야 한다.
+                stageBoxWidth === null && "max-w-full",
+              )}
               style={stageBoxWidth !== null ? { width: stageBoxWidth } : undefined}
             >
               <FabricStage
