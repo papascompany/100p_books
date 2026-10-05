@@ -26,6 +26,36 @@
 
 ## 🆕 최근 작업 (2026-09-17 ~ 10-05)
 
+### 0-19. 결제 키가 남은 pending 주문 복구 도구 + PDF 100페이지 부하 측정 (2026-10-05)
+
+**① 관리자 결제 수렴 도구** — `lib/orders/reconcile-pending.ts` + `GET/POST /api/admin/orders/[id]/reconcile-payment` +
+주문 상세 "결제 상태 확인·수렴" 버튼(pending + 결제 키가 묶인 주문만). confirm 이 캡처 후 확정에 실패하면 주문이 키가 묶인
+pending 으로 남고, 토스 웹훅 URL 이 미등록인 동안에는 수렴 수단이 없었다(런북 백로그 · STATUS §0-11 D).
+- 판정은 웹훅과 같은 겹: 묶인 결제 키로 토스 재조회 → paymentKey·orderId·totalAmount 대조 → 조건부 쓰기.
+  DONE → pending→paid 클레임(status·키·금액·toss_order_id 일치) + `finalizePaidOrder`(trigger `admin_reconcile`, paid_at=토스 `approvedAt`) ·
+  ABORTED/EXPIRED → 선점 해제 + 키 해제 · CANCELED → 선점 해제(키 유지) + pending→cancelled ·
+  READY/IN_PROGRESS → 대기 · PARTIAL_CANCELED·미지·불일치 → 수동 · 조회 실패 → 아무것도 안 함.
+- **결제 키 조회 404 는 "결제 키 바인딩 30분 경과 + 토스 주문번호 조회도 결제 없음" 일 때만 해제**(적대 리뷰 HIGH 반영) —
+  confirm 이 승인 응답을 기다리는 동안에도 조회는 404 라, 바로 키를 풀면 뒤늦은 DONE 이 키 없는 pending 에 남고
+  주문서 재사용이 toss_order_id 를 덮어 이중 과금으로 이어질 수 있었다.
+- GET 미리보기 → POST `{expect}` 는 실행 직전 토스를 다시 조회해 계획이 같을 때만 실행(아니면 409 `PLAN_CHANGED`).
+  성공·실패·거부·예외 전부 감사 로그(`order.payment_reconciled` / `_failed` / `_rejected`). vercel.json 300s/1769MB(finalize 가 PDF 빌드).
+- 테스트: lib 22 + 라우트 8(전체 vitest 88파일 1,483 / 1 skip · typecheck 0 · lint 0/0 · build 성공). 웹훅 라우트는 건드리지 않았다(판정 표 차이는 CANCELED 하나 — 웹훅은 pending 유지).
+- 적대 리뷰 LOW 중 미반영: cancel 계획의 포인트 원장 memo 가 "결제 미완료 — 선점 해제"(abort 모드)로 남는다(금액 효과는 같음, 표시 문제).
+  후속 후보: confirm 의 cancelled 분기에 `pending && key=null` 재클레임(웹훅 `:378` 방식) — 리뷰 권고 (c), 이번 범위 밖.
+
+**② PDF 100페이지 부하 측정**(로컬 M1 Pro · Node 24 · 4032×3024 JPEG 100장 · 20×20 최대 판형 · 운영 코드 경로, Supabase fetch 만 스텁).
+측정 머신 부하가 커서(load 50~105) 벽시계는 흔들렸고 판단은 CPU 시간·저부하 RSS 기준.
+| 시나리오 | CPU s | 최대 RSS MB | 내지 PDF MB | 판정(300s / 1769MB) |
+|---|---|---|---|---|
+| 폴라로이드 100p + 표지 | 약 25 | 651~701 | 101.7 | **통과**(Vercel 환산 약 50~65s, 메모리 약 40%) |
+| collage-4 (사진 100장) | 20~25 | 약 1,000 | 18~33 | 통과(약 59%) |
+| **collage-6 스트레스**(슬롯 600) | 84 | **1,648~1,749** | 129.5 | **위험**(메모리 93~99%) |
+- 비용의 대부분은 원본 전체 해상도 디코드 + 캔버스 `toBuffer`(래스터화·JPEG). pdf-lib 임베드·저장은 무시 가능.
+- 최대 메모리는 페이지 수가 아니라 "동시 렌더 4페이지(`RENDER_CONCURRENCY`) × 페이지당 사진 수 × 원본 디코드 크기" 로 정해진다.
+  업로드는 썸네일만 줄이고 원본(최대 20MB·200MP)을 그대로 두므로 48MP 원본이면 collage-6 은 OOM 이 확실하다는 외삽(미측정).
+- 내지 PDF 101.7MB → Storige 90MB 임계를 넘어 presigned 경로. 후속 권고는 런북 백로그(PDF 메모리) 참조. 측정 하네스는 scratch 에만 두었다.
+
 ### 0-18. 운영 브라우저 점검 + UI 결함 5건 수정 (2026-10-05) — `b8783ea`
 
 관리자 계정으로 운영 사이트를 내장 브라우저로 점검(랜딩 → 마이페이지 → 내지/표지 편집 → 주문서 결제 직전 → 관리자 콘솔, 375px·811px·다크).
@@ -1025,13 +1055,13 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 |---|---|---|
 | 1 | ~~Next.js 16 마이그레이션~~ | ✅ **완료·운영 배포**(`4346c0b`, §0-12). 후속 중 `proxy.ts`·supabase 업그레이드·react-hooks 0/0·Dependabot 재검토는 ✅(09-28~30). **남은 후속**: AVIF 재검토, Lighthouse 비교 방법 재정의 |
 | 2 | ~~Fabric.js 7.x 마이그레이션~~ | ✅ 2026-09-30 7.4.0(§0-16) — prod audit 0 |
-| 3 | 결제 키가 남은 pending 주문의 관리자 복구 도구 | §0-11 D |
+| 3 | ~~결제 키가 남은 pending 주문의 관리자 복구 도구~~ | ✅ 2026-10-05 §0-19 — 주문 상세 "결제 상태 확인·수렴" |
 | 4 | ~~선물 미리보기 GET 의 `expired` 쓰기 부작용 제거~~ | ✅ `c931801`(§0-13) |
 | 5 | ~~잠긴 포토북 내지 목록의 TopBar 제목 입력 비활성화~~ | ✅ `a41e195`(§0-13) |
-| 6 | `thumb_key` 고아 객체 cron 회수 경로 검증 | `orphan-photos` 실동작 미확인 |
+| 6 | ~~`thumb_key` 고아 객체 cron 회수 경로 검증~~ | ✅ `c931801` 두 버킷 각각 스캔·실제 참조로만 판정, 삭제 건수 로그 `2d403ae`(§0-13) |
 | 7 | ~~`lib/pdf/photos.ts` 원본 재검증(sniff/sharp)~~ | ✅ 2026-09-28 `40fd966` `lib/pdf/validate-original.ts` |
 | 8 | 에러 추적 SDK 도입 | 현재는 Vercel 로그 + `digest` 만 |
-| 9 | PDF 100페이지 부하 검증 | 현재 1페이지 + photo+shadow 케이스만 |
+| 9 | ~~PDF 100페이지 부하 검증~~ | ✅ 2026-10-05 측정(§0-19) — 폴라로이드 통과, **collage-6 메모리 위험** → 런북 백로그 "PDF 렌더 메모리" |
 | 10 | 인증 E2E 의 CI 편입 | staging Supabase 신설이 선행 조건 |
 | 11 | PDF SSE 진행률 Redis 전환 | 멀티 인스턴스 라우팅 안정화 |
 | 12 | PDF CMYK / ICC 프로파일 | 인쇄소 요구 시 |
@@ -1085,7 +1115,7 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 ```
 타입·린트:                pnpm typecheck 0 에러 · pnpm lint(eslint .) 0 error / 0 warning
                           (react-hooks v7 4규칙 error — §0-15)
-유닛 테스트 (Vitest):     86 파일 / 1,453 passed / 1 skipped
+유닛 테스트 (Vitest):     88 파일 / 1,483 passed / 1 skipped
 E2E 스모크 (Playwright):  desktop+mobile chromium 12/12 통과
 접근성 (axe-core):       WCAG 2.1 AA 25 passed / 1 skipped · 위반 0
 PDF 회귀(페이지수+해시): pnpm test:pdf — 4 케이스 / 394ms (darwin-arm64)

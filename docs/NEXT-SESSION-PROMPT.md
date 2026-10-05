@@ -103,7 +103,7 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
 |---|---|---|
 | 타입 | `pnpm typecheck` | 0 에러 |
 | 린트 | `pnpm lint` | **0 error / 0 warning** — `eslint .`(저장소 전체), react-hooks v7 4규칙은 **error**(§0-15) |
-| 유닛 | `pnpm test` | **86 파일 / 1,453 passed / 1 skipped** |
+| 유닛 | `pnpm test` | **88 파일 / 1,483 passed / 1 skipped** |
 | PDF 회귀 | `pnpm test:pdf` | 4 케이스 OK (394ms, darwin-arm64 — baseline 무수정) |
 | 접근성 | `pnpm test:a11y` | 25 passed / 1 skipped (WCAG 2.1 AA 위반 0) |
 | E2E 스모크 | `pnpm e2e` | 12 passed |
@@ -126,6 +126,10 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 ```
 
 ### 2. 완료된 것 — 재작업 금지 (증거 커밋 포함)
+
+**2026-10-05 (결제 수렴 도구 · PDF 100p 측정)** — 상세는 `STATUS.md` §0-19
+- 주문 상세 "결제 상태 확인·수렴"(`lib/orders/reconcile-pending.ts`, `/api/admin/orders/[id]/reconcile-payment`) — 함정 30 번.
+- PDF 100p: 폴라로이드 통과 · **collage-6 메모리 93~99%**(런북 백로그 "PDF 렌더 메모리").
 
 **2026-10-05 (운영 브라우저 점검·UI 결함 5건)** — 상세는 `STATUS.md` §0-18
 - hydration 날짜 KST 고정(`lib/date/kst.ts`) · 에디터 `min-w-0`/표지 헤더 `flex-wrap` · coral 800~950 · `/admin/emails` 문구(`b8783ea`)
@@ -358,6 +362,13 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
     `vercel firewall overview` · `vercel firewall rules list` · `vercel firewall system-bypass list`.
     `attack-mode`·관리 규칙·`system-bypass add`·`system-mitigations pause` 는 운영 설정 변경이라 **오너 승인 후에만**
     (pause 는 DDoS 방어 24시간 해제 — 운영 금지).
+
+30. **결제 수렴 도구(`lib/orders/reconcile-pending.ts`)의 404 해제 조건을 풀지 말 것.** 결제 키 조회 404 는
+    "아직 승인 전" 일 수 있다(confirm 이 승인 응답 대기 중). 해제는 **바인딩 후 30분(`RELEASE_MIN_BOUND_AGE_MS`) 경과 +
+    토스 주문번호 조회도 no_payment** 일 때만이다. 바로 풀면 뒤늦은 DONE 이 키 없는 pending 에 남고 주문서 재사용이
+    toss_order_id 를 덮어 이중 과금이 된다(10-05 적대 리뷰 HIGH). 또 POST 는 실행 직전 재조회한 계획이 미리보기와 같을 때만
+    실행한다(`PLAN_CHANGED`) — 미리보기 결과로 바로 쓰는 단축을 만들지 말 것. 이 라우트는 finalize 로 PDF 빌드를 돌리므로
+    `lib/pdf/job-reaper.test.ts` JOB_ROUTES 와 vercel.json(300s/1769MB)에 함께 등록돼 있다.
 
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
 
