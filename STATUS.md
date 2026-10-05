@@ -141,6 +141,12 @@ pending 으로 남고, 토스 웹훅 URL 이 미등록인 동안에는 수렴 �
   ⚠️ 100p 키를 회전·재발급할 때 두 키가 같은 사이트로 묶여 있는지 Storige 와 확인할 것 — 어긋나면 대용량 PDF 검증이 404 → `ERROR`
   (게이트는 FIXABLE/FAILED 만 막으므로 무검증 발주가 된다).
 - Storige 주문 연결 편집 세션 관리자 작업 원칙(09-30) ACK — 100p 는 편집 세션(`edit-sessions`·`/embed`) 미사용이라 대상 0건.
+- **Storige 이후 배포 통지(2026-10-05 UTC, 모두 회신 불요·100p 영향 없음)** — Storige 세션 통지 기준, 100p 코드 대조:
+  · **Wave 4**(05:39~05:47Z, worker·api, CONTRACT_FREEZE v1.11): 합성 작업 입력 오류 즉시 실패·FAILED errorCode, 편집기 세션 생성 처리.
+    100p 가 쓰는 upload·validate(external)·download·DELETE 와 `FILE_NOT_FOUND` 404 본문 불변.
+  · **Wave 5**(07:01~07:02Z, 편집기 `/embed` 만, v1.12): 호스트가 보낸 쪽수 범위가 제본 최소·최대 쪽수를 대신. 서버·DB·파일 API 불변 — 100p 는 `/embed` 미사용.
+  · **Wave 6**(11:59~12:02Z, 편집기·관리자·api): 양장 표지 편집기 출력 모드(템플릿 데이터 조건부) + 편집 완료 표지 검증 연결.
+    worker·파일 API·validate(external) 경로·응답 불변 — "편집 완료 표지 검증" 은 Storige 편집 세션용이고 100p 는 자체 렌더 PDF 를 업로드해 검증받는다. Storige 스모크 정상.
 - 인계 문서 stale 정리(`7101c38`) — lint 0/0·`proxy.ts`·fabric 7 함정·Dependabot 열린 PR 0. `git fetch --prune` 으로 원격 추적 참조 16개 정리(원격 브랜치 `main` 하나).
 
 ### 0-16. fabric 6.9.1 → 7.4.0 전환 (2026-09-30) — prod audit 0

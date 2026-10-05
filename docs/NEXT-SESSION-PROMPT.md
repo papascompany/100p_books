@@ -9,7 +9,7 @@
 >    **fabric 7.4.0**(§0-16) · Storige DELETE 404 구분(§0-17).
 > ✅ 10-05: 운영 브라우저 점검 → UI 결함 5건 + 에디터 레이아웃 4건 · SW 캐시 오염(v4) · Vercel 방화벽 CLI 확인(§0-18) ·
 >    **결제 키 pending 수렴 도구**(§0-19) · **PDF 100p 측정 → 사진 슬롯 축소 디코드, collage-6 RSS 약 -45%**(§0-20).
-> ✅ Storige 측 Wave 2(P4·JOB_STALLED)·Wave 4·Wave 5 운영 배포 — 100p 영향 없음 확인(§0-17·§0-19 기록).
+> ✅ Storige 측 Wave 2(P4·JOB_STALLED)·Wave 4·5·6 운영 배포(10-05) — 100p 영향 없음 확인(STATUS §0-17·§0-19 기록).
 > 남은 운영 액션·오너 결정·백로그는 전부 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md), 실시간 상태는 `/admin` "서비스 런치 체크".
 > **"다음 추천" 목록을 새로 만들지 말 것 — 운영 액션·백로그의 유일한 정본은 런북이다** (사용자 지시, 2026-08-09).
 
