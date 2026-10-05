@@ -46,7 +46,7 @@ Next 16 전환 경위는 STATUS.md §0-12.
   렌더 변경이 **의도된** 경우에만 `pnpm test:pdf:update` 로 갱신하고 diff 를 리뷰에 포함한다.
 - `e2e:auth` 를 제외한 위 전부는 `.github/workflows/ci.yml`(3잡: verify / e2e / a11y)에서
   **main push 와 PR 마다** 자동 실행된다. 피처 브랜치 단독 push 로는 돌지 않는다.
-- 현재 기준선(main `ea1610e`, 2026-10-05): typecheck 0 · lint **0 error / 0 warning** — react-hooks v7 4규칙(set-state-in-effect·immutability·refs·purity)은 **error**(사유 적은 억제 3건 + `assignFabricProps` 의도적 우회 1건) ·
+- 현재 기준선(main `2360f3c`, 2026-10-05): typecheck 0 · lint **0 error / 0 warning** — react-hooks v7 4규칙(set-state-in-effect·immutability·refs·purity)은 **error**(사유 적은 억제 3건 + `assignFabricProps` 의도적 우회 1건) ·
   vitest 89파일 1,490 pass / 1 skip · test:pdf 5 · e2e 12 · a11y 25(+1 의도된 skip) · build 성공 · `pnpm audit --prod` 0.
 - fabric 7(2026-09-30 전환): 기본 origin 이 center(우리는 원래 전부 center 명시) · `findTarget` 은 `{target,…}`
   정보 객체를 반환하고 이벤트 밖에서는 좌표가 어긋난다 → 판정은 `lib/fabric/gestures.ts` 의 `targetAt()` 방식 ·

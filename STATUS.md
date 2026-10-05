@@ -8,15 +8,16 @@
 > 이중 사용 창, `0032`(클라이언트 직접 쓰기 봉쇄)로 `profiles.role` 권한 상승 표면이 닫혔다.
 > postcheck 요약(`docs/sql/0032-postcheck-summary.sql`) 운영 실행 **27행 전부 `pass=true`**(2026-09-28).
 >
-> 최종 업데이트: 2026-09-30
+> 최종 업데이트: 2026-10-05
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `ea1610e`(2026-10-05) — SW 캐시 오염 수정(v4) · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
+> 운영 빌드: `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
 > `proxy.ts` · 보안 overrides(**prod audit 0**) · Next 16.3.6. 그 이전 `2d403ae` = Next 16 전환(§0-12)+리뷰 후속(§0-13).
 > 그 직전 `34a5897` 까지 2026-09-17~21 보안·결제·편집 무결성 작업 전량 반영(§0-11).
 > **미병합 브랜치 없음.**
 > 운영 URL `pnpm e2e:auth` 5 passed (골든 플로우 + 편집 무결성 QA-1/4/2) —
-> `bacadc1`·`34a5897`·`4346c0b` 세 배포본에서 각각 실측.
+> `bacadc1`·`34a5897`·`4346c0b`·0032 적용 후(09-28) 배포본에서 실측. 10-05 변경분(결제 수렴 도구·PDF 축소 디코드)은
+> e2e:auth 미실행 — 유닛·CI·PDF 회귀(darwin+linux)로 검증.
 > 다음 세션 인계: [docs/NEXT-SESSION-PROMPT.md](docs/NEXT-SESSION-PROMPT.md) (붙여넣기 블록 그대로 사용)
 > **정본 로컬 경로**: `/Users/yohan/Developer/claude/100p_books` (Documents 사본은 node_modules 제거됨)
 > **성능 수치 정본**: §0-5 (2026-08-07, prod 5회 측정). §0-4 는 그 직전 상태, §M8·테스트 현황의
@@ -1004,8 +1005,8 @@ Core Web Vitals(LCP/CLS/INP-대용 TBT) 모두 통과. Speed Index/TTI 는 클�
 ## 현재 배포 상태
 
 ```
-운영 빌드:  main = 2d403ae (2026-09-24) — 미병합 브랜치 없음 (§0-12·§0-13)
-Next.js:  16.3.5 / React 19.3.0  (2026-09-21 전환·배포 — §0-12). next advisory 0건
+운영 빌드:  main = 2360f3c (2026-10-05) — 미병합 브랜치·worktree 없음 (§0-14~§0-20)
+Next.js:  16.3.6 / React 19.3.0  (2026-09-21 16.x 전환 — §0-12). pnpm audit --prod 0건
           proxy.ts(Node.js 런타임, 2026-09-28 전환) · Turbopack 빌드
 Supabase: vprifnztvlduhpuwgdau (Seoul / papascompany org)
 Vercel:   yohans-projects-de3234df / icn1 리전
@@ -1014,8 +1015,9 @@ Cron (6종, 전부 활성): process-emails */5 · attendance-reset 0 15 · stori
                     orphan-photos 0 20 · expire-pending-orders 30 * · reap-pdf-jobs */10 (UTC)
                     전부 Bearer CRON_SECRET 필요(미설정이면 fail-closed)
 정적 라우트:    /terms, /privacy, /refund, /offline, /robots.txt, /sitemap.xml, /_not-found
-PWA Service Worker: CACHE_NAME **v4**(2026-10-05, `_next/static` 는 2xx·비-HTML 만 캐시) (Stale-While-Revalidate 공개 페이지 — 전략은 그대로,
-                    Next 16 배포 스큐 대비로 캐시 이름만 v2 → v3, §0-12)
+PWA Service Worker: CACHE_NAME v4 (2026-10-05 — `_next/static` 는 2xx·비-HTML 만 캐시, §0-18)
+                    공개 페이지 Stale-While-Revalidate · 보호 페이지 network-first (v2→v3 는 Next 16 배포 스큐 대비, §0-12)
+Vercel 방화벽:   Firewall 미설정 · Attack Mode Off · System Mitigations Active(기본 자동 보호) — 변경 불요(§0-18)
 Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 ```
 
@@ -1057,7 +1059,7 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ---
 
-## 다음 개발 우선순위 — 2026-09-21 갱신
+## 다음 개발 우선순위 — 2026-10-05 갱신
 
 > **운영 액션(키 발급·콘솔 클릭·SQL)과 백로그의 유일한 정본은
 > [docs/LAUNCH-RUNBOOK.md](docs/LAUNCH-RUNBOOK.md) 다.** 여기에 목록을 다시 만들지 말 것
@@ -1065,11 +1067,12 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ### 지금 우선순위가 가장 높은 것
 
-1. ~~`0033` 운영 적용~~ — ✅ 2026-09-28 적용 확인(§0-14).
-2. ~~`0032` 운영 적용~~ — ✅ 2026-09-28 적용·검증(§0-14, postcheck 27/27 PASS).
-3. ~~QA-1 피해 조회~~ — ✅ 2026-09-28 운영 조회 피해 0건(빈 내지·표지·영향 주문 모두 0, 런북 §11).
-
-> ✅ "배포본 대상 `pnpm e2e:auth` 재실행"은 해소됐다 — `4346c0b`(Next 16) 배포본에서 5 passed.
+- 런치 차단 코드 이슈 없음. 운영 DB 마이그레이션 `0001~0033` 전부 적용, QA-1 피해 0(§0-14).
+- 남은 것은 오너 운영 액션(Resend·Upstash·카카오·토스 웹훅·Storige 통지)과 오너 결정(법정 고지·랜딩 수치 문구 등) —
+  정본은 런북 "현재 상태 요약"·"오너 결정이 필요한 항목".
+- 코드 쪽 다음 후보(2026-10-05 CTO 보고 기준): 에러 추적 SDK 도입(서비스·키 오너 결정 선행) ·
+  다중 선택 자동저장 좌표 재현 · `photo-originals` SELECT 정책 · 내 포토북 카드 썸네일/제목 · 표지 PATCH 2회 ·
+  PDF 측정 x64 확정. 상세·근거는 런북 백로그.
 
 ### 코드 백로그
 
@@ -1113,26 +1116,27 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ## 기술 스택 버전 현황
 
-> 버전은 `package.json` 의 선언 범위와 `pnpm-lock.yaml` 의 실제 잠금 버전이다(2026-09-21 확인).
+> 버전은 `package.json` 의 선언 범위와 설치된 실제 버전이다(2026-10-05 `pnpm list`·`node_modules` 확인).
 
 | 패키지 | 선언 | 잠금(실제) | 비고 |
 |---|---|---|---|
-| next | `16.3.5` | 16.3.5 | 2026-09-21 전환(§0-12). **`pnpm audit --prod` 의 next advisory 0건** — 14.x 잔존 23건이 전부 해소됐다 |
+| next | `16.3.6` | 16.3.6 | 16.x 전환 2026-09-21(§0-12), 16.3.6 패치. **`pnpm audit --prod` 0건**(§0-16) |
 | react / react-dom | `19.3.0` | 19.3.0 | 고정. `@types/react(-dom)` 19.3.0 도 `pnpm.overrides` 로 고정 |
-| eslint | `9.39.5` | 9.39.5 | **flat config**(`eslint.config.mjs`). `eslint-config-next` 16.3.5 의 `core-web-vitals`·`typescript` 프리셋 사용. Next 16 이 `next lint` 를 제거해 `pnpm lint` 가 `eslint` CLI 를 직접 부른다 |
-| fabric | `^6.4.3` | **6.9.1** | 6.9.1 의 `toJSON()` 은 **인자를 무시한다** — 스냅샷은 `lib/fabric/snapshot.ts`(QA-1). 7.x 는 API 변경이 커서 별도 마이그레이션 |
-| @napi-rs/canvas | `^0.1.55` | 0.1.x | 빌드 정상 |
-| @supabase/ssr | `0.5.2` | 0.5.2 | 고정. **Next 16 웨이브에서는 의도적으로 제외** — 후속 웨이브에서 `supabase-js` 2.45.6 과 함께 올린다(잔존 `@supabase/auth-js` low 1건) |
+| eslint | `9.39.5` | 9.39.5 | **flat config**(`eslint.config.mjs`). `eslint-config-next` 16.3.6. `pnpm lint` = `eslint .`(저장소 전체, 0/0) · react-hooks v7 4규칙 error(§0-15) |
+| fabric | `^7.4.0` | **7.4.0** | 2026-09-30 전환(§0-16). 6.9.x·7.x 의 `toJSON()` 은 **인자를 무시한다** — 스냅샷은 `lib/fabric/snapshot.ts`(QA-1). 제스처 판정은 `targetAt()` |
+| @napi-rs/canvas | `^1.0.9` | 1.0.9 | 2026-09-28(§0-15) — 그림자가 Chromium 과 일치(인쇄 그림자 짙어짐은 의도) |
+| @supabase/ssr · supabase-js | `0.12.7` · `2.117.1` | 0.12.7 · 2.117.1 | 2026-09-28(§0-15) — 쿠키 `getAll/setAll`, Database 타입 GenericSchema 화. 카카오 OAuth 실제 왕복 1회 확인은 오너 대기 |
 | pdf-lib | `^1.17.1` | 1.17.1 | 최신 |
-| resend | `^6.12.3` | 6.x | - |
+| resend | `^6.29.0` | 6.29.0 | - |
 | sharp | `^0.35.4` | **0.35.4** | 2026-09-17 승격(SEC-1). vips 8.18.6 / heif 1.23.2. `next` 가 따로 끌어오지 않는다 |
-| vitest | `^2.0.5` | 2.x | Dependabot 이 메이저 PR 을 열어둔 상태 — 프레임워크 전환이 끝났으므로 머지 정책을 다시 본다(§0-12) |
+| vitest | `^4.1.11` | 4.1.11 | 2026-09-28 Dependabot 정리로 4.x(vite 7) |
+| typescript | `^6.0.3` | 6.0.3 | 2026-09-28 |
 
 ---
 
 ## 테스트 현황
 
-**기준선 — `main`(`ea1610e`) 에서 2026-10-05 실측** (타입·린트·유닛. 나머지 행은 표기된 시점 값)
+**기준선 — `main`(`2360f3c`) 에서 2026-10-05 실측** (타입·린트·유닛. 나머지 행은 표기된 시점 값)
 
 ```
 타입·린트:                pnpm typecheck 0 에러 · pnpm lint(eslint .) 0 error / 0 warning
@@ -1140,11 +1144,12 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 유닛 테스트 (Vitest):     89 파일 / 1,490 passed / 1 skipped
 E2E 스모크 (Playwright):  desktop+mobile chromium 12/12 통과
 접근성 (axe-core):       WCAG 2.1 AA 25 passed / 1 skipped · 위반 0
-PDF 회귀(페이지수+해시): pnpm test:pdf — 5 케이스(photo-downscale 추가, 2026-10-05) / 약 500ms (darwin-arm64)
+PDF 회귀(페이지수+해시): pnpm test:pdf — 5 케이스(photo-downscale 추가, 2026-10-05) / 약 500ms
+                          darwin-arm64·linux-x64 해시 모두 baseline 등재(CI 실제 비교)
 PDF 런타임 검증:          pnpm verify:pdf — 1페이지 스모크
 인증 골든 플로우:         pnpm e2e:auth — 5 passed (운영 URL 실측, 1.8m)
                           골든 플로우 2 + 편집 무결성 회귀 3(QA-1/QA-4/QA-2)
-                          bacadc1 · 34a5897 · 4346c0b 세 배포본에서 각각 통과
+                          bacadc1 · 34a5897 · 4346c0b · 0032 적용 후(09-28) 배포본에서 통과
 빌드:                     pnpm build 성공 (Turbopack, 라우트 121개 렌더링 모드 변경 0)
 Lighthouse 모바일:        Performance 88 · LCP 3.6s · CLS 0 (2026-08-07, prod 5회 중앙값 — §0-5)
                           ⚠️ Next 16 전환 후 재측정은 미실시 — 빌드가 First Load JS 표를

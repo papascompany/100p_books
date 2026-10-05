@@ -2,21 +2,16 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 **2026-10-05** · `main` = `origin/main` = `ea1610e` · CI 3잡 green · Vercel prod success · 운영 `e2e:auth` 5 passed
-> ✅ 마이그레이션 `0001~0033` 전부 운영 적용(STATUS §0-14, postcheck 27/27) · QA-1 피해 0 · 고아 사진 0.
-> ✅ 09-28~30: Dependabot PR 전부 정리 · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
->    `middleware`→`proxy.ts` · PDF 원본 재검증 · 에디터 그림자 mm 통일 · **fabric 7.4.0**(§0-16) · **prod audit 0** ·
-   Storige DELETE 404 구분(§0-17).
-> **미병합 브랜치·worktree 없음.**
-> 남은 운영 액션은 전부 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md),
-> 실시간 상태는 `/admin` "서비스 런치 체크" 카드. **"다음 추천" 목록을 새로 만들지 말 것 —
-> 운영 액션·백로그의 유일한 정본은 런북이다** (사용자 지시, 2026-08-09).
-> 최근 세션(09-17~21): 6렌즈 감사 확정분을 샤드 병렬로 구현 — sharp 하드닝, 오픈 리다이렉트,
-> 탈퇴 잔존, 메일 cron·에러 경계·cron 인증, **편집 무결성 QA-1~4(critical)**,
-> 결제 무결성(0033), 주문 수명주기, 관리자 환불, **RLS 봉쇄 0032**,
-> 편집 잠금 완결·409 읽기 전용 전환·출석 20일 보너스 버그 수정.
-> 이어서 **Next 16 + React 19 전환**(`4346c0b`) — `next` advisory 23건이 전부 해소돼
-> prod 취약점이 60건 → 36건이 됐다.
+> 갱신 **2026-10-05** · `main` = `origin/main` = `2360f3c` · CI 3잡 green · Vercel prod success
+> **미병합 브랜치·worktree·열린 PR 없음.** 미커밋 변경 없음.
+> ✅ 마이그레이션 `0001~0033` 전부 운영 적용(STATUS §0-14) · QA-1 피해 0 · 고아 사진 0 · `pnpm audit --prod` 0.
+> ✅ 09-28~30: Dependabot 정리 · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 0/0(§0-15) · `proxy.ts` ·
+>    **fabric 7.4.0**(§0-16) · Storige DELETE 404 구분(§0-17).
+> ✅ 10-05: 운영 브라우저 점검 → UI 결함 5건 + 에디터 레이아웃 4건 · SW 캐시 오염(v4) · Vercel 방화벽 CLI 확인(§0-18) ·
+>    **결제 키 pending 수렴 도구**(§0-19) · **PDF 100p 측정 → 사진 슬롯 축소 디코드, collage-6 RSS 약 -45%**(§0-20).
+> ✅ Storige 측 Wave 2(P4·JOB_STALLED)·Wave 4·Wave 5 운영 배포 — 100p 영향 없음 확인(§0-17·§0-19 기록).
+> 남은 운영 액션·오너 결정·백로그는 전부 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md), 실시간 상태는 `/admin` "서비스 런치 체크".
+> **"다음 추천" 목록을 새로 만들지 말 것 — 운영 액션·백로그의 유일한 정본은 런북이다** (사용자 지시, 2026-08-09).
 
 ---
 
@@ -31,9 +26,10 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
 - **정본 로컬**: `/Users/yohan/Developer/claude/100p_books` (branch `main`).
   Documents 사본은 node_modules 제거됨 — 쓰지 말 것.
 - 레포 `papascompany/100p_books` (PUBLIC). main push → **Vercel auto-deploy** 정상.
-- **브랜치 상태 (2026-09-30)** — `main` = `origin/main`. **미병합 브랜치·worktree 없음**,
-  `git fetch --prune` 후 원격 브랜치는 `main` 하나뿐(옛 dependabot·funnel 추적 참조 16개 정리됨).
-  운영 코드 최신은 `ea1610e`(SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건, §0-18) — 그 아래로 §0-17(Storige DELETE 404)·§0-16(fabric 7.4.0)·§0-15 순.
+- **브랜치 상태 (2026-10-05)** — `main` = `origin/main` = `2360f3c`. **미병합 브랜치·worktree 없음**,
+  원격 브랜치는 `main` 하나뿐. 최근 코드 커밋(새 → 옛): `2360f3c` PDF 회귀 linux 해시 · `8ffb2c8` PDF 사진 슬롯 축소 디코드(§0-20) ·
+  `90d2615` 결제 키 pending 수렴 도구(§0-19) · `ea1610e` SW 캐시 v4 · `99f3702`·`7609291`·`e707538`·`b6b3d7c`·`b8783ea` UI·에디터(§0-18) ·
+  `e32edc1` Storige DELETE 404(§0-17) · `14f30d9`·`c817726` fabric 7(§0-16).
   `4346c0b` 은 **Next 16.3.5 + React 19.3.0 전환**이고 그 부모가 `34a5897` 이다(현재 next 는 16.3.6).
   `integ/wave2` 를 `bacadc1` 위로 rebase 해 ff 병합했으므로 **rebase 이전 SHA
   (`552f6e1`·`c6deee9`·`5161cc9`·`67c8f2f`·`692c888`·`3d4b24e`·`69df5d2`·`f4af049`)는 존재하지 않는다.**
@@ -90,24 +86,24 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
 로컬 `.env.local` 에는 Supabase 3종 + TOSS 3종만 있고 **`STORIGE_*` 키가 없다** →
 Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(미설정 시 503/SKIPPED).
 
-- 첫 작업 전 루트 `STATUS.md`(§0-18~§0-14) + 이 문서를 읽고 현재 상태를 사용자에게 보고할 것.
+- 첫 작업 전 루트 `STATUS.md`(§0-20~§0-14) + 이 문서를 읽고 현재 상태를 사용자에게 보고할 것.
   ⚠️ **성능 수치 정본은 `STATUS.md` §0-5(2026-08-07, prod 5회 중앙값)** 다.
   STATUS.md 안의 "Performance 97 · LCP 1.5s"(§M8 QA 표)는 **2026-05-13 옛 측정치**이니
   baseline 으로 쓰지 말 것.
 
 ### 1. 검증 명령 (전부 로컬에서 동작)
 
-**기준선은 `main`(`ea1610e`)에서 2026-10-05 실측한 값이다**(루트 `CLAUDE.md` 테스트 절과 동일).
+**기준선은 `main`(`2360f3c`)에서 2026-10-05 실측한 값이다**(루트 `CLAUDE.md` 테스트 절과 동일).
 
 | 대상 | 명령 | 현재 기준선 |
 |---|---|---|
 | 타입 | `pnpm typecheck` | 0 에러 |
 | 린트 | `pnpm lint` | **0 error / 0 warning** — `eslint .`(저장소 전체), react-hooks v7 4규칙은 **error**(§0-15) |
 | 유닛 | `pnpm test` | **89 파일 / 1,490 passed / 1 skipped** |
-| PDF 회귀 | `pnpm test:pdf` | 5 케이스 OK (약 500ms, darwin-arm64 — `photo-downscale` 추가 2026-10-05) |
+| PDF 회귀 | `pnpm test:pdf` | 5 케이스 OK (약 500ms) — `photo-downscale` 추가(2026-10-05), darwin·linux 해시 모두 등재 |
 | 접근성 | `pnpm test:a11y` | 25 passed / 1 skipped (WCAG 2.1 AA 위반 0) |
 | E2E 스모크 | `pnpm e2e` | 12 passed |
-| **인증 + 편집 무결성** | `pnpm e2e:auth` | **5 passed** — 골든 플로우 2 + 편집 무결성 회귀 3(QA-1/QA-4/QA-2). fabric 7 전환 검증(§0-16)·운영 URL(0032 적용 후, 09-28)에서 실측 |
+| **인증 + 편집 무결성** | `pnpm e2e:auth` | **5 passed** — 골든 플로우 2 + 편집 무결성 회귀 3(QA-1/QA-4/QA-2). 최근 실측: 운영 URL(09-28)·fabric 7 로컬 운영 빌드(09-30). **10-05 변경분은 미실행** |
 | 빌드 | `pnpm build` | 성공 (**Turbopack**, `--webpack` 불요. 라우트 121개 렌더링 모드 변경 0) |
 
 > `pnpm lint` 는 **`eslint .`(저장소 전체, 0 error / 0 warning)** — react-hooks v7 4규칙은 error.
@@ -380,33 +376,20 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
 
-**2026-09-30 기준 오너 확인 대기**: ① 카카오 로그인 실제 1회(supabase 업그레이드 후 PKCE 쿠키 키 변경) ·
-② 실제 iPhone Safari 에서 에디터 핀치 후 더블탭(빈 곳=줌 리셋, 글자 위=유지) · ③ Supabase 조직 멤버 계정 확인.
+**런치 차단 항목 없음**(`/admin` 런치 체크 "차단 항목 없음 — 서비스 가능", 2026-10-05 확인). 서비스 경로
+(이메일 가입 → 업로드 → 편집 → 주문 → 결제 → 인쇄검증)는 전부 동작한다.
 
-**2026-09-28 기준 오너 대기 항목(순서대로)**
-1. ~~`0033` 재적용~~ — ✅ 09-28 적용 확인(`verify-0033.ts`: service `NOT_FOUND`, anon `42501`).
-2. ~~`0032` 적용~~ — ✅ 09-28 적용(precheck 33행 정상 → 적용 → `verify-0032.ts` 12/12 · `e2e:auth` 5 passed). postcheck 요약 27/27 PASS.
-3. ~~QA-1 피해 조회(§11)~~ — ✅ 09-28 피해 0건. ~~고아 사진 dryRun(§12)~~ — ✅ 09-28 orphans 0 / scanned 114.
-4. 100p Supabase 조직 멤버 계정 확인(대시보드 → Organization → Team) — CLI 재로그인하면 운영 DB 직접 확인 가능.
+**오너 운영 액션(런북 §1·§3·§4·§5·§7)**: 토스 웹훅 URL 등록 · Resend 키(메일 6종 큐 대기 중) · Upstash(rate limit fail-open) ·
+카카오 콘솔 설정 · Storige 통지 전달.
+**오너 확인 대기**: ① 카카오 로그인 실제 1회(PKCE 쿠키 키 변경) · ② 실제 iPhone Safari 핀치 후 더블탭 · ③ Supabase 조직 멤버 계정
+· ④ 결제 수렴 버튼은 운영 주문 0건이라 실사용 미확인(첫 해당 주문 때).
+**오너 결정 대기(런북 "오너 결정")**: 법정 고지·고객 문의 창구(런치 전 필수급) · 랜딩 CMS 수치·후기 문구("5,000+·4.9★" — 실제 0건) ·
+선물 수령 이메일 대조 · 탈퇴 회원 제작 자료 보관 · 출석 20일 보너스 소급 · 에러 추적 SDK 서비스 선택.
 
-**여기에 목록을 다시 만들지 말 것.** 키 발급·콘솔 클릭·SQL 등 남은 운영 액션과 백로그는
-전부 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md)에 있고, 실시간 상태는
-`/admin` "서비스 런치 체크" 카드가 보여준다. 항목이 해소되면 런북에서 지우고,
-새 운영 이슈가 생기면 런북에 추가한다.
+**여기에 목록을 다시 만들지 말 것.** 항목이 해소되면 런북에서 지우고, 새 운영 이슈는 런북에 추가한다.
 
-**2026-09-21 기준 서비스 경로는 전부 동작한다.** 단 사용자에게 먼저 알려야 할 것이 셋 있다:
-
-1. ~~런북 §9 — `0033` 적용~~ — ✅ 2026-09-28 적용 확인.
-2. ~~런북 §10 — `0032` 적용~~ — ✅ 2026-09-28 적용(postcheck 27/27 PASS).
-3. ~~런북 §11 — QA-1 피해 조회~~ — ✅ 2026-09-28 피해 0건.
-
-**검증 후속(운영 액션 아님, 런북 백로그에도 등재)**
-
-- **Vercel Preview 런타임 검증 불가** — Preview 환경변수가 0종이라 PDF 네이티브 바이너리·
-  토스 결제·카카오 콜백을 프리뷰에서 실증할 수 없다. Next 16 전환분도 운영 배포본으로만 검증했다.
-- **Lighthouse 비교 보류** — Next 16 이 빌드에서 First Load JS 표를 내지 않아 기준선(§0-5,
-  2026-08-07 Performance 88 · LCP 3.6s)과 **같은 방식의 비교가 불가능**하다. 측정 방법을 먼저 정할 것.
-- `pnpm e2e:auth` 재실행은 **완료**됐다 — 운영 URL 최근 실측은 0032 적용 후(09-28) 5 passed, fabric 7 전환분은 로컬 운영 빌드 대상 5 passed(§0-16).
+**검증 후속(런북 백로그에도 등재)**: Vercel Preview 런타임 검증 불가(Preview env 0종) · Lighthouse 비교 방법 재정의 ·
+PDF 측정 x64 확정(collage-6 17p·48MP 원본) · 10-05 변경분 대상 `e2e:auth` 재실행.
 
 운영 규칙: **환불은 전액만**(부분 취소는 앱이 의도적으로 무시), **`CRON_SECRET` 을 지우지 말 것.**
 
@@ -425,9 +408,20 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
   ChunkLoadError·거짓 통과가 난다(2026-09-28 실측). e2e 는 `PLAYWRIGHT_BASE_URL=http://localhost:<port>` 로 새 서버에.
 - 병렬 구현은 worktree 격리(포트 분리 3101~3103, e2e:auth 는 통합 후 CTO 1회) → 트랙별 적대 검토 → 통합 게이트.
 - 에디터 변경은 객체 수만 보는 e2e 로 부족하다 — 필요 시 main worktree 대비 캔버스 픽셀 diff QA(§0-16 방식).
+- **렌더·성능 변경은 A/B 로 잰다**: 직전 커밋을 scratch 의 임시 `git worktree`(node_modules 심볼릭 링크)로 띄워 같은 시점에
+  번갈아 측정한다(§0-20). 측정 하네스·사진은 scratch 에만 두고 저장소에 넣지 않는다 — scratch 는 며칠 뒤 비워질 수 있으니
+  결과 수치는 STATUS 에 남길 것. 측정 중 머신 부하(`uptime`)를 함께 기록할 것.
+- **zsh 에서 `for x in "a b"; set -- $x` 는 단어로 나뉘지 않는다** — 반복 인자는 명시적으로 나열할 것(10-05 A/B 1차 무효의 원인).
+- **운영 브라우저 점검은 내장 브라우저 + 관리자 로그인 세션으로 한다**(사용자가 로그인해 둔 경우). 결제 버튼은 누르지 말 것.
+  자동화가 빠르게 내비게이션하면 Vercel 챌린지가 걸릴 수 있다(함정 29) — 성능 판단 전에 `x-vercel-mitigated` 를 먼저 볼 것.
+- **Storige 세션 교신**: 다른 Claude 세션(Storige 편집기·워커)이 cross-session 메시지로 계약 변경을 통지·질의한다.
+  코드 근거(파일:줄)로 사실만 답하고, 계약 변경이 100p 에 영향이 있으면 사용자에게 먼저 알린다. 회신은 메시지의 `from` 주소로.
+  100p 가 쓰는 Storige 경로: upload/external(≤90MB)·presigned-upload-public+complete(>90MB)·download/external·
+  DELETE /files/:id/external(편집기 키), validate/external·GET worker-jobs/external/:id(워커 키). 편집 세션·합성 API 는 미사용.
+- **결제 경로 변경은 적대 리뷰(o5-security-reviewer)를 반드시 거친다** — 10-05 결제 수렴 도구에서 HIGH(이중 과금 경로)를 잡았다.
 
 **첫 작업**: `git status -sb && git log --oneline -5` 로 실제 상태를 확인하고
-(main HEAD 가 `ea1610e` 이후인지), `STATUS.md`(§0-18~§0-14)와 이 문서를 읽어 현재 상태를
+(main HEAD 가 `2360f3c` 이후인지), `STATUS.md`(§0-20~§0-14)와 이 문서를 읽어 현재 상태를
 한 문단으로 보고한다. **추천 목록을 만들지 말고**, 사용자가 시킨 작업을 바로 진행한다.
 운영 액션이 궁금하면 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md) 를 가리키는 것으로 끝.
 
