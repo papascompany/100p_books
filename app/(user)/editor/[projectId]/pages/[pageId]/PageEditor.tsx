@@ -1024,7 +1024,7 @@ export default function PageEditor({
         {readOnly ? null : (
         <aside
           aria-label="도구 / 리소스"
-          className="hidden md:flex md:w-72 md:shrink-0 md:flex-col md:gap-3"
+          className="hidden md:flex md:w-56 lg:w-72 md:shrink-0 md:flex-col md:gap-3"
         >
           <Toolbar
             onPick={handleToolPick}
@@ -1097,7 +1097,7 @@ export default function PageEditor({
         {readOnly ? null : (
           <aside
             aria-label="속성"
-            className="hidden md:block md:w-72 md:shrink-0"
+            className="hidden md:block md:w-56 lg:w-72 md:shrink-0"
           >
             <SelectionPanel
               selection={selection}
