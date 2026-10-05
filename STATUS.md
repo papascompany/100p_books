@@ -11,7 +11,7 @@
 > 최종 업데이트: 2026-09-30
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `b8783ea`(2026-10-05) — UI 결함 5건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
+> 운영 빌드: `7609291`(2026-10-05) — UI 결함 5건 + 에디터 레이아웃 후속 3건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
 > `proxy.ts` · 보안 overrides(**prod audit 0**) · Next 16.3.6. 그 이전 `2d403ae` = Next 16 전환(§0-12)+리뷰 후속(§0-13).
 > 그 직전 `34a5897` 까지 2026-09-17~21 보안·결제·편집 무결성 작업 전량 반영(§0-11).
 > **미병합 브랜치 없음.**
@@ -38,7 +38,12 @@
 - `/admin/emails` 안내 문구 stale(cancelled 마킹·Phase 12) → 현재 동작(pending 보존·5분 cron·백오프)으로.
 - 코드 외 발견은 런북 백로그에 등재(랜딩 CMS 수치·카드 썸네일·표지 PATCH 2회). `/attendance`·`/mypage/points` 로딩 지연은 단독 탭 재측정에서 미재현(2초 내 렌더).
 - 점검 중 오너 프로젝트 `42ba9dd6` 에 기본 표지를 저장했다(데이터 추가뿐). 검증: typecheck 0 · lint 0/0 · vitest 86파일 1,453 · build 성공.
-  **레이아웃·다크 수정의 시각 확인은 배포 후 브라우저 재측정으로** 남아 있다.
+  배포 후 재측정(811px·375px·다크) 전부 확인 — 아래 후속 3건까지 포함.
+- **후속(같은 날, 오너 지시)**: `b6b3d7c` md 구간 측면 패널 `w-56`(lg 부터 `w-72`) → 811px 캔버스 155→283px ·
+  `e707538` 표지 스프레드 박스 `max-w-full`(데스크톱 1524px 미만에서 inline-block 이 원폭 868px 로 늘어나 내부 가로 스크롤) ·
+  `7609291` **FabricStage 최초 fit 을 `observe` 직후 직접 호출** — 데스크톱 첫 로드에서 wrapper 크기가 변하지 않으면
+  ResizeObserver 콜백이 오지 않아 캔버스가 자연 폭으로 남던 잠복 결함(이전엔 inline-block 이 원폭이라 scale 1 로 가려져 있었다).
+  배포본 실측: 1440px 784/784 · 1024px 368/368 · 811px 내지 283/283 · 375px 앞표지 세그먼트 확대(676/351, scrollLeft 325) 유지. CI 3건 모두 green.
 
 ### 0-17. Storige 삭제 404 구분 + 인계 문서 정리 + Storige 세션 교신 (2026-09-30)
 
@@ -1060,7 +1065,7 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ## 테스트 현황
 
-**기준선 — `main`(`b8783ea`) 에서 2026-10-05 실측** (타입·린트·유닛. 나머지 행은 표기된 시점 값)
+**기준선 — `main`(`7609291`) 에서 2026-10-05 실측** (타입·린트·유닛. 나머지 행은 표기된 시점 값)
 
 ```
 타입·린트:                pnpm typecheck 0 에러 · pnpm lint(eslint .) 0 error / 0 warning
