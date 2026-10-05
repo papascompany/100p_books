@@ -2,7 +2,7 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 **2026-09-30** · `main` = `origin/main` = `e32edc1` · CI 3잡 green · Vercel prod success · 운영 `e2e:auth` 5 passed
+> 갱신 **2026-10-05** · `main` = `origin/main` = `b8783ea` · CI 3잡 green · Vercel prod success · 운영 `e2e:auth` 5 passed
 > ✅ 마이그레이션 `0001~0033` 전부 운영 적용(STATUS §0-14, postcheck 27/27) · QA-1 피해 0 · 고아 사진 0.
 > ✅ 09-28~30: Dependabot PR 전부 정리 · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
 >    `middleware`→`proxy.ts` · PDF 원본 재검증 · 에디터 그림자 mm 통일 · **fabric 7.4.0**(§0-16) · **prod audit 0** ·
@@ -33,7 +33,7 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
 - 레포 `papascompany/100p_books` (PUBLIC). main push → **Vercel auto-deploy** 정상.
 - **브랜치 상태 (2026-09-30)** — `main` = `origin/main`. **미병합 브랜치·worktree 없음**,
   `git fetch --prune` 후 원격 브랜치는 `main` 하나뿐(옛 dependabot·funnel 추적 참조 16개 정리됨).
-  운영 코드 최신은 `e32edc1`(Storige DELETE 404 구분, §0-17) — 그 아래로 §0-16(fabric 7.4.0)·§0-15·§0-14 순.
+  운영 코드 최신은 `b8783ea`(UI 결함 5건, §0-18) — 그 아래로 §0-17(Storige DELETE 404)·§0-16(fabric 7.4.0)·§0-15 순.
   `4346c0b` 은 **Next 16.3.5 + React 19.3.0 전환**이고 그 부모가 `34a5897` 이다(현재 next 는 16.3.6).
   `integ/wave2` 를 `bacadc1` 위로 rebase 해 ff 병합했으므로 **rebase 이전 SHA
   (`552f6e1`·`c6deee9`·`5161cc9`·`67c8f2f`·`692c888`·`3d4b24e`·`69df5d2`·`f4af049`)는 존재하지 않는다.**
@@ -90,20 +90,20 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
 로컬 `.env.local` 에는 Supabase 3종 + TOSS 3종만 있고 **`STORIGE_*` 키가 없다** →
 Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(미설정 시 503/SKIPPED).
 
-- 첫 작업 전 루트 `STATUS.md`(§0-17~§0-14) + 이 문서를 읽고 현재 상태를 사용자에게 보고할 것.
+- 첫 작업 전 루트 `STATUS.md`(§0-18~§0-14) + 이 문서를 읽고 현재 상태를 사용자에게 보고할 것.
   ⚠️ **성능 수치 정본은 `STATUS.md` §0-5(2026-08-07, prod 5회 중앙값)** 다.
   STATUS.md 안의 "Performance 97 · LCP 1.5s"(§M8 QA 표)는 **2026-05-13 옛 측정치**이니
   baseline 으로 쓰지 말 것.
 
 ### 1. 검증 명령 (전부 로컬에서 동작)
 
-**기준선은 `main`(`e32edc1`)에서 2026-09-30 실측한 값이다**(루트 `CLAUDE.md` 테스트 절과 동일).
+**기준선은 `main`(`b8783ea`)에서 2026-10-05 실측한 값이다**(루트 `CLAUDE.md` 테스트 절과 동일).
 
 | 대상 | 명령 | 현재 기준선 |
 |---|---|---|
 | 타입 | `pnpm typecheck` | 0 에러 |
 | 린트 | `pnpm lint` | **0 error / 0 warning** — `eslint .`(저장소 전체), react-hooks v7 4규칙은 **error**(§0-15) |
-| 유닛 | `pnpm test` | **85 파일 / 1,449 passed / 1 skipped** |
+| 유닛 | `pnpm test` | **86 파일 / 1,453 passed / 1 skipped** |
 | PDF 회귀 | `pnpm test:pdf` | 4 케이스 OK (394ms, darwin-arm64 — baseline 무수정) |
 | 접근성 | `pnpm test:a11y` | 25 passed / 1 skipped (WCAG 2.1 AA 위반 0) |
 | E2E 스모크 | `pnpm e2e` | 12 passed |
@@ -126,6 +126,9 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 ```
 
 ### 2. 완료된 것 — 재작업 금지 (증거 커밋 포함)
+
+**2026-10-05 (운영 브라우저 점검·UI 결함 5건)** — 상세는 `STATUS.md` §0-18
+- hydration 날짜 KST 고정(`lib/date/kst.ts`) · 에디터 `min-w-0`/표지 헤더 `flex-wrap` · coral 800~950 · `/admin/emails` 문구(`b8783ea`). **배포 후 811px·375px·다크 재측정 미완.**
 
 **2026-09-30 (Storige 삭제 판정)** — 상세는 `STATUS.md` §0-17
 - `deleteFile` 404 는 본문 `code:"FILE_NOT_FOUND"` 일 때만 성공(`e32edc1`) — 함정 25 번.
@@ -334,6 +337,12 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
     **Storige P4(대용량 업로드 사이트 귀속)** 는 2026-10-03 04:58Z 운영 적용됐다(§0-17) — 100p 편집기·워커 키가 같은 사이트 행이라
     검증이 통과한다. **키 회전 시 두 키의 사이트 일치를 Storige 와 확인할 것** — 어긋나면 대용량 PDF 검증이 404 → `ERROR` → 무검증 발주.
 
+26. **SSR 로 그려지는 날짜 문자열은 `lib/date/kst.ts` 로 만든다.** `getDate()` 등 로컬 getter 는 서버(UTC)와 브라우저(KST)가
+    다른 날짜를 내 hydration #418 이 난다(`/mypage/photos`, 2026-10-05 실측). `relativeTime`(내 포토북 카드)은 `Date.now()` 기반이라
+    같은 위험이 있으나 미재현 — 증상이 보이면 같은 방식으로 고친다.
+27. **다크 모드 전용 색은 팔레트에 정의돼 있는지 확인한다.** Tailwind 3 는 미정의 shade(`coral-950` 등)를 조용히 버려 클래스가 생성되지 않는다 —
+    라이트 배경 위에 다크 글자색만 적용돼 대비가 깨진다. `/order` 결제 요약이 실제 사례였다.
+
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
 
 **2026-09-30 기준 오너 확인 대기**: ① 카카오 로그인 실제 1회(supabase 업그레이드 후 PKCE 쿠키 키 변경) ·
@@ -383,7 +392,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 - 에디터 변경은 객체 수만 보는 e2e 로 부족하다 — 필요 시 main worktree 대비 캔버스 픽셀 diff QA(§0-16 방식).
 
 **첫 작업**: `git status -sb && git log --oneline -5` 로 실제 상태를 확인하고
-(main HEAD 가 `e32edc1` 이후인지), `STATUS.md`(§0-17~§0-14)와 이 문서를 읽어 현재 상태를
+(main HEAD 가 `b8783ea` 이후인지), `STATUS.md`(§0-18~§0-14)와 이 문서를 읽어 현재 상태를
 한 문단으로 보고한다. **추천 목록을 만들지 말고**, 사용자가 시킨 작업을 바로 진행한다.
 운영 액션이 궁금하면 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md) 를 가리키는 것으로 끝.
 

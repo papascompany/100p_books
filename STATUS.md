@@ -11,7 +11,7 @@
 > 최종 업데이트: 2026-09-30
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `e32edc1`(2026-09-30) — Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
+> 운영 빌드: `b8783ea`(2026-10-05) — UI 결함 5건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
 > `proxy.ts` · 보안 overrides(**prod audit 0**) · Next 16.3.6. 그 이전 `2d403ae` = Next 16 전환(§0-12)+리뷰 후속(§0-13).
 > 그 직전 `34a5897` 까지 2026-09-17~21 보안·결제·편집 무결성 작업 전량 반영(§0-11).
 > **미병합 브랜치 없음.**
@@ -24,7 +24,21 @@
 
 ---
 
-## 🆕 최근 작업 (2026-09-17 ~ 09-30)
+## 🆕 최근 작업 (2026-09-17 ~ 10-05)
+
+### 0-18. 운영 브라우저 점검 + UI 결함 5건 수정 (2026-10-05) — `b8783ea`
+
+관리자 계정으로 운영 사이트를 내장 브라우저로 점검(랜딩 → 마이페이지 → 내지/표지 편집 → 주문서 결제 직전 → 관리자 콘솔, 375px·811px·다크).
+결제는 실행하지 않았다. 서비스 경로·게이트(표지 미준비 → 주문 차단)·관리자 화면은 전부 정상. 수정한 결함:
+- **`/mypage/photos` React #418 hydration** — `formatDateShort` 가 로컬 getter 로 날짜를 만들어 서버(UTC)/브라우저(KST) 출력이 달랐다
+  → `lib/date/kst.ts` `formatDateShortKst`(Asia/Seoul 고정, 테스트 4). SSR 텍스트의 날짜는 앞으로 이 헬퍼를 쓸 것.
+- **에디터 768~1100px 가로 overflow** — 내지·표지 `<main>` 에 `min-w-0` 이 없어 3단(288+캔버스+288)이 811px 에서 1063/1500px 로 넘치고 우측 속성 패널이 잘렸다.
+- **표지 에디터 375px 뷰포트 확장(455px)** — 헤더 버튼 묶음(443px) 줄바꿈 불가 → `flex-wrap`.
+- **coral 800/900/950 미정의** — `dark:bg-coral-950/20` 등 10곳(주문서 결제 요약·공유 페이지·ShareDialog 등)이 클래스를 못 만들어 다크에서 라이트 배경+밝은 글자였다 → 팔레트 추가.
+- `/admin/emails` 안내 문구 stale(cancelled 마킹·Phase 12) → 현재 동작(pending 보존·5분 cron·백오프)으로.
+- 코드 외 발견은 런북 백로그에 등재(랜딩 CMS 수치·카드 썸네일·표지 PATCH 2회). `/attendance`·`/mypage/points` 로딩 지연은 단독 탭 재측정에서 미재현(2초 내 렌더).
+- 점검 중 오너 프로젝트 `42ba9dd6` 에 기본 표지를 저장했다(데이터 추가뿐). 검증: typecheck 0 · lint 0/0 · vitest 86파일 1,453 · build 성공.
+  **레이아웃·다크 수정의 시각 확인은 배포 후 브라우저 재측정으로** 남아 있다.
 
 ### 0-17. Storige 삭제 404 구분 + 인계 문서 정리 + Storige 세션 교신 (2026-09-30)
 
@@ -989,13 +1003,13 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 | # | 항목 | 메모 |
 |---|---|---|
-| 1 | ~~Next.js 16 마이그레이션~~ | ✅ **완료·운영 배포**(`4346c0b`, §0-12). 후속: `middleware`→`proxy`, `@supabase/ssr`·`supabase-js` 업그레이드, react-hooks v7 경고 38건, AVIF 재검토, Lighthouse 비교 방법 재정의, Dependabot 메이저 ignore 규칙 재검토 |
-| 2 | **Fabric.js 7.x 마이그레이션** | SVG Stored XSS 2건(`<7.2.0`, `<7.4.0`). 현재 앱에 사용자 SVG 로드 경로는 없다. fabric 의 선택적 `canvas` 백엔드가 `tar` advisory 12건(critical 1 포함)을 끌고 온다 |
+| 1 | ~~Next.js 16 마이그레이션~~ | ✅ **완료·운영 배포**(`4346c0b`, §0-12). 후속 중 `proxy.ts`·supabase 업그레이드·react-hooks 0/0·Dependabot 재검토는 ✅(09-28~30). **남은 후속**: AVIF 재검토, Lighthouse 비교 방법 재정의 |
+| 2 | ~~Fabric.js 7.x 마이그레이션~~ | ✅ 2026-09-30 7.4.0(§0-16) — prod audit 0 |
 | 3 | 결제 키가 남은 pending 주문의 관리자 복구 도구 | §0-11 D |
-| 4 | 선물 미리보기 GET 의 `expired` 쓰기 부작용 제거 | claim 경로로 한정 (적대 리뷰 비차단 후속) |
-| 5 | 잠긴 포토북 내지 목록의 TopBar 제목 입력 비활성화 | UI 일관성 — 데이터 위험 없음 |
+| 4 | ~~선물 미리보기 GET 의 `expired` 쓰기 부작용 제거~~ | ✅ `c931801`(§0-13) |
+| 5 | ~~잠긴 포토북 내지 목록의 TopBar 제목 입력 비활성화~~ | ✅ `a41e195`(§0-13) |
 | 6 | `thumb_key` 고아 객체 cron 회수 경로 검증 | `orphan-photos` 실동작 미확인 |
-| 7 | `lib/pdf/photos.ts` 원본 재검증(sniff/sharp) | 심층 방어 |
+| 7 | ~~`lib/pdf/photos.ts` 원본 재검증(sniff/sharp)~~ | ✅ 2026-09-28 `40fd966` `lib/pdf/validate-original.ts` |
 | 8 | 에러 추적 SDK 도입 | 현재는 Vercel 로그 + `digest` 만 |
 | 9 | PDF 100페이지 부하 검증 | 현재 1페이지 + photo+shadow 케이스만 |
 | 10 | 인증 E2E 의 CI 편입 | staging Supabase 신설이 선행 조건 |
@@ -1046,12 +1060,12 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ## 테스트 현황
 
-**기준선 — `main`(`e32edc1`) 에서 2026-09-30 실측** (타입·린트·유닛. 나머지 행은 표기된 시점 값)
+**기준선 — `main`(`b8783ea`) 에서 2026-10-05 실측** (타입·린트·유닛. 나머지 행은 표기된 시점 값)
 
 ```
 타입·린트:                pnpm typecheck 0 에러 · pnpm lint(eslint .) 0 error / 0 warning
                           (react-hooks v7 4규칙 error — §0-15)
-유닛 테스트 (Vitest):     85 파일 / 1,449 passed / 1 skipped
+유닛 테스트 (Vitest):     86 파일 / 1,453 passed / 1 skipped
 E2E 스모크 (Playwright):  desktop+mobile chromium 12/12 통과
 접근성 (axe-core):       WCAG 2.1 AA 25 passed / 1 skipped · 위반 0
 PDF 회귀(페이지수+해시): pnpm test:pdf — 4 케이스 / 394ms (darwin-arm64)

@@ -460,7 +460,8 @@ read -rs CRON_SECRET && curl -s -H "Authorization: Bearer $CRON_SECRET" "https:/
   고객 문의 채널이 없다. **사업자 정보와 대표 연락처(또는 채널)를 주시면 코드 작업은 짧다.**
 - **탈퇴 회원의 주문된 제작 자료 보관 범위** — 현재는 거래기록 보존 목적으로 남긴다
   (미주문 프로젝트·사진·공유 링크는 탈퇴 시 파기). 보관 기간·범위는 오너 정책 결정 사항이다.
-- **Dependabot PR 머지 정책** — `next` 15.5.24 보안 PR 은 **16.3.5 직행 전환으로 해소**됐다.
+- ~~**Dependabot PR 머지 정책**~~ — ✅ 2026-09-30 해소: 열린 PR 0건, ignore 규칙 유효 확인(아래 백로그 행). (이하 기록용)
+  `next` 15.5.24 보안 PR 은 **16.3.5 직행 전환으로 해소**됐다.
   지금 열려 있는 것은 actions 메이저, `@napi-rs/canvas` 1.x, `lucide-react` 1.x, `nanoid` 6,
   `typescript` 6, `postcss` 패치, npm-minor-patch 그룹 등이다. **머지 전에
   `.github/dependabot.yml` 의 메이저 ignore 규칙(14/18 기준으로 작성됨)을 16/19 기준으로
@@ -486,13 +487,13 @@ read -rs CRON_SECRET && curl -s -H "Authorization: Bearer $CRON_SECRET" "https:/
 | ~~`lib/pdf/photos.ts` 원본 재검증 부재~~ | ✅ 2026-09-28 해소 — `lib/pdf/validate-original.ts` 가 `loadImage` 전에 크기·매직 바이트(JPEG/PNG/WebP)·하드닝 sharp 헤더·픽셀 한도를 재검증 |
 | 관측성 | 에러 추적 SDK 미도입 — 운영 예외를 Vercel 로그 + `digest` 로만 본다 |
 | ~~Next 16 전환~~ | ✅ **2026-09-21 완료·운영 배포**(`4346c0b`). 아래 5개가 그 후속이다 |
-| Next 16 후속 ① `middleware` → `proxy` 전환 | 이번 웨이브에서 의도적으로 제외했다. **`middleware.ts` 유지 중이고 빌드 deprecation 경고 1건은 정상** |
-| Next 16 후속 ② `@supabase/ssr`·`supabase-js` 업그레이드 | 0.5.2 / 2.45.6 고정. 잔존 `ws` 2건 + `@supabase/auth-js` 1건이 여기 묶여 있다(SECURITY.md) |
-| Next 16 후속 ③ `react-hooks` v7 경고 38건 | 전환 방침상 warn 유지 중. 규칙별 수정·error 승격 판단 |
+| ~~Next 16 후속 ① `middleware` → `proxy` 전환~~ | ✅ 2026-09-28 `ee054c5` — `proxy.ts`(Node.js 런타임 고정), deprecation 경고 해소 |
+| ~~Next 16 후속 ② `@supabase/ssr`·`supabase-js` 업그레이드~~ | ✅ 2026-09-28 — 2.117.1 / 0.12.7(STATUS §0-15). 카카오 OAuth 실제 왕복 1회 확인만 남음(아래 행) |
+| ~~Next 16 후속 ③ `react-hooks` v7 경고 38건~~ | ✅ 2026-09-28 — lint 0/0, 4규칙 error 승격(STATUS §0-15) |
 | Next 16 후속 ④ AVIF 재활성화 판단 | `GHSA-2xp9-vwfh-vxw4` 는 16.3.5 에서 해소됐지만 `images.formats` 는 webp 유지. 인코딩 비용·품질 회귀 측정 후 결정 |
 | Next 16 후속 ⑤ Lighthouse 비교 방법 재정의 | Next 16 이 First Load JS 표를 내지 않아 기준선(2026-08-07 Performance 88 · LCP 3.6s)과 **같은 방식의 비교가 불가능**하다 |
 | Vercel Preview 런타임 검증 | Preview 환경변수 0종이라 PDF 네이티브 바이너리·토스 결제·카카오 콜백을 프리뷰에서 실증할 수 없다. 필요하면 Production 값 복제가 선행 |
-| Dependabot 메이저 ignore 규칙 재검토 | `.github/dependabot.yml` 의 `next`/`react`/`react-dom`/`@types/react*`/`eslint`/`eslint-config-next` 메이저 ignore 는 14/18 기준으로 쓴 것이다. 16/19 기준으로 다시 볼 것. 2026-09-28 PR 정리 완료(minor/patch·actions v7·nanoid 6·lucide 1·TS 6·vitest 4 반영) — 남은 PR 은 `@napi-rs/canvas` 1.x 하나 |
+| ~~Dependabot 메이저 ignore 규칙 재검토~~ | ✅ 2026-09-30 재검토 — ignore 는 버전 번호가 아니라 semver-major 단위라 16/19 후에도 유효. 열린 PR 0건(`@napi-rs/canvas` 1.0.9 도 반영) |
 | ~~에디터 그림자 크기가 사진 해상도에 따라 달라짐~~ | ✅ 2026-09-28 해소 — `buildPhotoShadow`(lib/fabric/serialize.ts)가 mm 메타에서 `nonScaling: true` 그림자를 만든다(뷰포트 줌만 반영) |
 | ~~그림자 토글 px↔mm 불일치~~ | ✅ 2026-09-28 해소 — 토글도 같은 `buildPhotoShadow` 로 저장 mm 에서 그린다 |
 | 카카오 OAuth 실제 왕복 확인 | supabase-js 2.117·ssr 0.12 로 PKCE verifier 쿠키 키가 flow 별로 바뀌었다(legacy 키 폴백 있음). `e2e:auth` 는 비밀번호 로그인이라 OAuth 콜백은 수동 1회 확인 필요 |
@@ -507,3 +508,6 @@ read -rs CRON_SECRET && curl -s -H "Authorization: Bearer $CRON_SECRET" "https:/
 | 데모 모드 | "구현 시작" 지시 시: 데모 계정 + `DEMO_*` env + 원클릭 로그인 |
 | Storige C-2 배포 통지 시 | PDF 검증 E2E 재실증(로컬 `.env.local`에 STORIGE 키 필요) |
 | 성능 추가 개선 | 현재 Performance 88 · LCP 3.6s. 다음 레버는 전송량(이미지/JS) |
+| 랜딩 CMS 수치·후기 문구 | `/admin/content` 의 "5,000+ 제작·4.9★·후기 3건"은 실제 주문 0·후기 0 상태와 다르다 — 표시 광고 관점에서 **오너가 문구를 결정**(2026-10-05 점검) |
+| 내 포토북 카드 썸네일 | 표지에 사진 객체가 있을 때만 썸네일, 없으면 아이콘 — 첫 페이지 사진 폴백 개선 후보. 제목도 전부 "Untitled" |
+| 표지 수동 저장 시 PATCH 2회 | 수동 클릭과 자동저장 debounce 가 겹쳐 `PATCH /api/cover` 가 2회 나간다(무해, 중복 요청) |
