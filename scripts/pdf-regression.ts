@@ -27,6 +27,7 @@ import { GlobalFonts } from "@napi-rs/canvas";
 import { PDFDocument } from "pdf-lib";
 
 import type { BookSize } from "@/lib/db/types";
+import { loadHardenedSharp } from "@/lib/image/sharp-safe";
 import { calcCoverDimensions } from "@/lib/layout/cover";
 import { PAGEDOC_VERSION, type PageDoc } from "@/lib/layout/types";
 import { buildCoverPdf, buildInteriorPdf } from "@/lib/pdf/build";
@@ -176,11 +177,66 @@ const textDoc: PageDoc = {
   ],
 };
 
+/**
+ * 케이스 4 — 슬롯보다 큰 사진(3000×2000) — lib/pdf/photo-downscale.ts 의 축소 디코드 경로.
+ * cover(가운데 잘라내기) + contain(비율 유지) 슬롯을 함께 둔다. 위 photo-shadow 케이스의 사진은
+ * 슬롯보다 작아 업스케일(기존 경로)만 탄다 — 축소 경로의 위치·잘라내기 회귀는 이 케이스가 잡는다(2026-10-05).
+ */
+const largePhotoDoc: PageDoc = {
+  ...basePage,
+  pageNo: 4,
+  objects: [
+    {
+      type: "photo",
+      objectId: "p-cover",
+      photoId: "large-photo-1",
+      leftMm: 10,
+      topMm: 10,
+      widthMm: 60,
+      heightMm: 60,
+      rotation: 0,
+      cropMode: "cover",
+      borderRadiusMm: 4,
+      shadow: { blurMm: 3, offsetYMm: 1.5, color: "rgba(0,0,0,0.35)" },
+    },
+    {
+      type: "photo",
+      objectId: "p-contain",
+      photoId: "large-photo-1",
+      leftMm: 75,
+      topMm: 10,
+      widthMm: 60,
+      heightMm: 60,
+      rotation: 8,
+      cropMode: "contain",
+    },
+  ],
+};
+
 const INTERIOR_CASES: Array<{ name: string; doc: PageDoc }> = [
   { name: "shapes", doc: shapesDoc },
   { name: "photo-shadow", doc: photoDoc },
   { name: "text", doc: textDoc },
+  { name: "photo-downscale", doc: largePhotoDoc },
 ];
+
+/** 3000×2000 JPEG — 4분할 색 블록(잘라내기 위치가 틀리면 해시가 바뀐다). 결정적 입력. */
+async function buildLargePhoto(): Promise<Buffer> {
+  const sharp = await loadHardenedSharp();
+  const block = (r: number, g: number, b: number) =>
+    sharp({ create: { width: 1500, height: 1000, channels: 3, background: { r, g, b } } })
+      .png()
+      .toBuffer();
+  return sharp({ create: { width: 3000, height: 2000, channels: 3, background: { r: 0, g: 0, b: 0 } } })
+    .composite([
+      { input: await block(220, 60, 60), left: 0, top: 0 },
+      { input: await block(60, 160, 220), left: 1500, top: 0 },
+      { input: await block(240, 200, 60), left: 0, top: 1000 },
+      { input: await block(70, 180, 90), left: 1500, top: 1000 },
+    ])
+    .jpeg({ quality: 90 })
+    .toBuffer();
+}
 
 const COVER_PAGE_COUNT = 100;
 
@@ -347,9 +403,11 @@ async function main(): Promise<void> {
   registerTestFont();
   const baseline = loadBaseline();
 
+  const largePhoto = await buildLargePhoto();
   const renderCtx = {
     resolveImageUrl: async (photoId: string): Promise<Buffer> => {
       if (photoId === "dummy-photo-1") return DUMMY_PNG;
+      if (photoId === "large-photo-1") return largePhoto;
       throw new Error(`[pdf-regression] 예상치 못한 photoId: ${photoId}`);
     },
   };
@@ -362,7 +420,7 @@ async function main(): Promise<void> {
   const coverDoc = buildCoverDoc();
   checkPixels("cover", await renderPageToJpeg(coverDoc, renderCtx), baseline);
 
-  // ── 2) 내지 PDF 구조 (3페이지) ──────────────────────────────────
+  // ── 2) 내지 PDF 구조 (INTERIOR_CASES 페이지 수) ─────────────────
   const interiorPdf = await buildInteriorPdf({
     pages: INTERIOR_CASES.map((c) => c.doc),
     bookSize: BOOK_SIZE,

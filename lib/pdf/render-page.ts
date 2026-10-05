@@ -20,6 +20,7 @@ import type {
 } from "@/lib/layout/types";
 
 import { mmToPx, ptToPx, PAGE_JPEG_QUALITY, PRINT_DPI } from "./constants";
+import { decodePhotoForSlot, type SlotImage } from "./photo-downscale";
 import { wrapMixedText } from "./text-wrap";
 
 /**
@@ -188,10 +189,11 @@ async function drawPhoto(
   const hPx = mmToPx(obj.heightMm, dpi);
   const radiusPx = mmToPx(obj.borderRadiusMm ?? 0, dpi);
 
-  let img: LoadedImage;
+  // 슬롯에 그려지는 크기까지 먼저 줄여 디코드한다(lib/pdf/photo-downscale.ts — collage-6 메모리 한도 대응).
+  let img: SlotImage;
   try {
     const buf = await ctx.resolveImageUrl(obj.photoId);
-    img = await loadImage(buf);
+    img = (await decodePhotoForSlot(buf, { wPx, hPx }, obj.cropMode)).image;
   } catch (e) {
     // 이미지 로드 실패 → placeholder
     drawPhotoPlaceholder(cx, xPx, yPx, wPx, hPx, radiusPx, obj.rotation);
