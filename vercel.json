@@ -18,6 +18,10 @@
       "maxDuration": 300,
       "memory": 1769
     },
+    "app/api/admin/orders/[id]/reconcile-payment/route.ts": {
+      "maxDuration": 300,
+      "memory": 1769
+    },
     "app/api/pdf/build/route.ts": {
       "maxDuration": 300,
       "memory": 1769

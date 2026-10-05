@@ -59,9 +59,12 @@ export default function OrderActions({
   trackingCarrier,
   pdfJob,
   validationBlocks,
+  paymentBound = false,
 }: {
   orderId: string;
   status: OrderStatus;
+  /** 결제 키가 묶인 주문인가 — pending 과 함께면 "결제 상태 확인·수렴" 을 노출한다. */
+  paymentBound?: boolean;
   trackingNo: string | null;
   trackingCarrier: string | null;
   pdfJob?: PdfJobBrief | null;
@@ -172,6 +175,68 @@ export default function OrderActions({
     }
   };
 
+  // 결제 키가 묶인 pending — 토스 재조회 계획을 미리 보고(GET), 확인 뒤 실행(POST).
+  // 실행 시 서버가 토스를 다시 조회하고, 미리보기와 계획이 다르면 409 PLAN_CHANGED 로 거부한다.
+  const reconcilePayment = async () => {
+    setBusy(true);
+    try {
+      const pr = await fetch(`/api/admin/orders/${orderId}/reconcile-payment`, { cache: "no-store" });
+      const pj = await pr.json().catch(() => null);
+      if (!pr.ok || !pj?.ok) {
+        toast({
+          variant: "destructive",
+          title: "결제 상태 확인 실패",
+          description: pj?.error?.message ?? "알 수 없는 오류",
+        });
+        return;
+      }
+      const plan = pj.data.plan as {
+        kind: string;
+        tossStatus?: string | null;
+        reason?: string;
+        message?: string;
+      };
+      const toss = plan.tossStatus ? `토스 ${plan.tossStatus}` : "토스에 승인된 결제 없음";
+      if (!pj.data.actionable) {
+        const why =
+          plan.kind === "wait"
+            ? "결제 승인이 진행 중입니다. 토스가 30분 뒤 만료로 닫으면 다시 확인하세요."
+            : plan.kind === "unavailable"
+              ? `토스 조회 실패: ${plan.message ?? ""}`
+              : plan.kind === "not_applicable"
+                ? "결제 키가 묶인 대기 주문이 아닙니다."
+                : (plan.reason ?? "자동 처리 대상이 아닙니다.");
+        toast({ title: `수렴 대상 아님 (${toss})`, description: why });
+        return;
+      }
+      const action =
+        plan.kind === "finalize"
+          ? "주문을 '결제 완료'로 확정하고 후처리(포인트 차감·PDF 빌드·확인 메일)를 실행합니다."
+          : plan.kind === "release"
+            ? "선점된 포인트·할인을 되돌리고 결제 키 연결을 해제합니다(주문은 결제 대기로 남음)."
+            : "선점된 포인트·할인을 되돌리고 주문을 '취소됨'으로 닫습니다(토스에서 이미 전액 취소된 결제).";
+      if (!confirm(`${toss}\n\n${action}\n\n계속하시겠습니까?`)) return;
+      const r = await fetch(`/api/admin/orders/${orderId}/reconcile-payment`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ expect: plan.kind }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.ok) {
+        toast({
+          variant: "destructive",
+          title: "결제 수렴 실패",
+          description: j?.error?.message ?? "알 수 없는 오류",
+        });
+        return;
+      }
+      toast({ variant: "success", title: "결제 상태 수렴 완료", description: action });
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const retryPdfJob = async () => {
     if (!confirm("실패한 PDF 빌드 잡을 재시도합니다. 계속하시겠습니까?")) return;
     setBusy(true);
@@ -254,6 +319,18 @@ export default function OrderActions({
             type="button"
           >
             전액 환불
+          </Button>
+        ) : null}
+        {status === "pending" && paymentBound ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={reconcilePayment}
+            disabled={busy}
+            type="button"
+            title="토스 결제 원장을 다시 조회해 확정·해제·취소 중 하나로 정리합니다"
+          >
+            결제 상태 확인·수렴
           </Button>
         ) : null}
         <Button

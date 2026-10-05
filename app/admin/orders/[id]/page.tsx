@@ -250,6 +250,7 @@ export default async function AdminOrderDetailPage(props: {
           trackingNo={o.tracking_no}
           trackingCarrier={o.tracking_carrier}
           validationBlocks={getValidationBlocks(o.storige_validation)}
+          paymentBound={o.toss_payment_key !== null}
           pdfJob={
             latestJob
               ? {

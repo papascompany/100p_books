@@ -53,7 +53,7 @@ export const FINALIZE_LEASE_MS = 2 * 60 * 1000;
  */
 export const FINALIZE_RECOVERY_MAX_AGE_MS = 72 * 60 * 60 * 1000;
 
-export type FinalizeTrigger = "confirm" | "confirm_retry" | "webhook";
+export type FinalizeTrigger = "confirm" | "confirm_retry" | "webhook" | "admin_reconcile";
 
 /**
  * 주문 확인 메일 발송 함수 — 라우트가 `enqueueEmail` 을 넘긴다.

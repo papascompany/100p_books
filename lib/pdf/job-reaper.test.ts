@@ -36,13 +36,15 @@ describe("임계값 — 잡을 실행하는 라우트의 maxDuration 드리프�
   /**
    * pdf_build_jobs 를 running 으로 만드는 라우트 = lib/pdf/job-runner 호출처.
    *   payments/confirm(enqueuePdfJob·runPdfJob), pdf/build(enqueueAndRunPdfJob),
-   *   admin/jobs·admin/orders/[id]/retry-pdf(retryFailedJob).
+   *   admin/jobs·admin/orders/[id]/retry-pdf(retryFailedJob), admin/orders/[id]/reconcile-payment(finalize).
    */
   const JOB_ROUTES = [
     "app/api/payments/confirm/route.ts",
     "app/api/pdf/build/route.ts",
     "app/api/admin/jobs/route.ts",
     "app/api/admin/orders/[id]/retry-pdf/route.ts",
+    // 결제 수렴(finalize) 이 runPdfJob 을 waitUntil 로 실행한다(2026-10-05).
+    "app/api/admin/orders/[id]/reconcile-payment/route.ts",
   ];
 
   it("각 라우트의 maxDuration(route export·vercel.json) ≤ PDF_JOB_MAX_RUNTIME_SEC", () => {
