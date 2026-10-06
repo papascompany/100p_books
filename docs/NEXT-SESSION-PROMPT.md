@@ -418,6 +418,13 @@ PDF 측정 x64 확정(collage-6 17p·48MP 원본) · 10-05 변경분 대상 `e2e
   코드 근거(파일:줄)로 사실만 답하고, 계약 변경이 100p 에 영향이 있으면 사용자에게 먼저 알린다. 회신은 메시지의 `from` 주소로.
   100p 가 쓰는 Storige 경로: upload/external(≤90MB)·presigned-upload-public+complete(>90MB)·download/external·
   DELETE /files/:id/external(편집기 키), validate/external·GET worker-jobs/external/:id(워커 키). 편집 세션·합성 API 는 미사용.
+  **통지 처리 순서(사용자 지시, 2026-10-07 — 통지마다 따로 묻지 않고 진행)**:
+  ① 통지 내용을 위 경로·키·응답 파싱(`lib/storige/client.ts`)과 대조해 100p 영향을 판정한다.
+  ② **영향이 있으면** 기록·커밋 전에 사용자에게 먼저 알리고 처리 방향을 묻는다.
+  ③ **영향이 없으면** `STATUS.md` §0-17 의 "Storige 이후 배포 통지" 묶음에 Wave·배포 시각(UTC)·변경 요지·영향 없음 근거를 한 항목으로
+     추가하고, 이 문서 상단 요약의 Storige 줄도 맞춘 뒤 → `git fetch` 로 다른 세션 변경과 겹치지 않는지 확인 →
+     `docs: Storige Wave N … 배포 통지 기록 — 100p 영향 없음` 으로 커밋·푸시 → CI 3잡·Vercel 결과까지 확인해 보고한다.
+  ④ 회신 요청이 있으면 코드 근거로 사실만 답한다. 회신이 계약·운영에 영향을 주는 내용(예: 경로 폐기 동의, 키 회전)이면 보내기 전에 사용자에게 먼저 알린다.
 - **결제 경로 변경은 적대 리뷰(o5-security-reviewer)를 반드시 거친다** — 10-05 결제 수렴 도구에서 HIGH(이중 과금 경로)를 잡았다.
 
 **첫 작업**: `git status -sb && git log --oneline -5` 로 실제 상태를 확인하고
