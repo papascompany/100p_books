@@ -150,6 +150,11 @@ pending 으로 남고, 토스 웹훅 URL 이 미등록인 동안에는 수렴 �
   · **Wave 8 1단계**(2026-10-06 UTC, worker 08:09:11Z · api 08:12:05Z + nginx 재시작, DB 변경 없음, CONTRACT_FREEZE v1.14 서술 정정만):
     Storige 내부 CI 복구 · api·worker 의존성 보안 패치(sharp 0.35·mysql2·multer 등, 메이저 승격 없음). 검증 판정 로직·라우트·인증·응답·분류 불변.
     이어질 2a 는 Storige 편집기 결합 세트(표지+내지 펼침면) 세션의 내지 검증 기대 크기 수정 — 편집 세션 미사용인 100p 경로는 무관.
+  · **JOB_LINK_STRICT 플래그 사전 안내**(2026-10-08 14:2xZ UTC 예정, DB 변경 없음, CONTRACT_FREEZE v1.8 에 적힌 동작): 인증 없는 호출자가
+    작업 생성 요청에 `editSessionId` 를 실으면 404 `SESSION_NOT_FOUND` 로 거절(사이트 키 호출은 이전부터 같은 규칙). 편집기 AI 탭 숨김 동반.
+    100p 영향 없음 — 코드 대조: 저장소에 `editSessionId` 사용처 0건, `validate/external` 본문은 `ValidateOpts`(fileId·fileType·orderOptions)뿐이고
+    워커 키(사이트 키)로 호출(`lib/storige/client.ts:459-467`). Storige 실측도 관측 기간(10-01 09:51Z~10-08) 해당 요청 0건.
+    적용 시점 = api 재생성 완료 시각(완료 통지 예정) · 롤백 = env 원복 + api 재생성(수 분).
 - 인계 문서 stale 정리(`7101c38`) — lint 0/0·`proxy.ts`·fabric 7 함정·Dependabot 열린 PR 0. `git fetch --prune` 으로 원격 추적 참조 16개 정리(원격 브랜치 `main` 하나).
 
 ### 0-16. fabric 6.9.1 → 7.4.0 전환 (2026-09-30) — prod audit 0
