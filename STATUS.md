@@ -155,6 +155,10 @@ pending 으로 남고, 토스 웹훅 URL 이 미등록인 동안에는 수렴 �
     100p 영향 없음 — 코드 대조: 저장소에 `editSessionId` 사용처 0건, `validate/external` 본문은 `ValidateOpts`(fileId·fileType·orderOptions)뿐이고
     워커 키(사이트 키)로 호출(`lib/storige/client.ts:459-467`). Storige 실측도 관측 기간(10-01 09:51Z~10-08) 해당 요청 0건.
     적용 시점 = api 재생성 완료 시각(완료 통지 예정) · 롤백 = env 원복 + api 재생성(수 분).
+    → **적용 완료 통지(2026-10-08 14:38Z)**: 14:37:16Z api 재생성(nginx 14:37:25Z), 사전 안내와 차이 없음. `[FLAGS] JOB_LINK_STRICT=true` ·
+    `JOB_FILE_SITE_STRICT=false`(관측 유지). api 이미지·코드 불변. Storige 스모크 health 200 · 무인증 401 · 오류 0. 롤백 시 시각·범위 통지 예정.
+    **주시 항목**: `JOB_FILE_SITE_STRICT` 가 나중에 켜지면 작업이 참조하는 파일의 사이트 귀속을 엄격히 볼 수 있다 — 100p 는 P4(10-03) 이후
+    대용량 파일만 complete 때 사이트가 기록됐다고 통지받았다. 켜기 사전 안내가 오면 90MB 이하 multipart·P4 이전 파일의 귀속 여부를 Storige 에 확인할 것.
 - 인계 문서 stale 정리(`7101c38`) — lint 0/0·`proxy.ts`·fabric 7 함정·Dependabot 열린 PR 0. `git fetch --prune` 으로 원격 추적 참조 16개 정리(원격 브랜치 `main` 하나).
 
 ### 0-16. fabric 6.9.1 → 7.4.0 전환 (2026-09-30) — prod audit 0
