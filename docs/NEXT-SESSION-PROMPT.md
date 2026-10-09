@@ -2,8 +2,11 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 **2026-10-05** · `main` = `origin/main` = `2360f3c` · CI 3잡 green · Vercel prod success
-> **미병합 브랜치·worktree·열린 PR 없음.** 미커밋 변경 없음.
+> 갱신 **2026-10-09**(세션 교대) · 운영 코드 기준 `2360f3c`(§0-20) · 그 뒤 커밋은 전부 docs(최신은 STATUS §0-21 커밋) · CI 3잡 green · Vercel prod success
+> **미병합 브랜치·worktree·열린 PR 없음.**
+> ⚠️ **2026-10-09 네트워크 이상**: `https://github.com` 만 TLS 인증서 불일치(`api.github.com` 정상) → HTTPS `git fetch/push` 실패.
+>    새 세션 첫 작업에서 `git fetch` 가 되는지 먼저 확인하고, 안 되면 SSH(`git@github.com:papascompany/100p_books.git`)로 시도·사용자에게 알릴 것.
+>    로컬 `main` 이 원격보다 앞서 있으면(`ahead N`) 이 세션의 마지막 docs 커밋이 아직 push 되지 않은 것이다 — 연결이 돌아오면 push.
 > ✅ 마이그레이션 `0001~0033` 전부 운영 적용(STATUS §0-14) · QA-1 피해 0 · 고아 사진 0 · `pnpm audit --prod` 0.
 > ✅ 09-28~30: Dependabot 정리 · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 0/0(§0-15) · `proxy.ts` ·
 >    **fabric 7.4.0**(§0-16) · Storige DELETE 404 구분(§0-17).
@@ -86,7 +89,7 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
 로컬 `.env.local` 에는 Supabase 3종 + TOSS 3종만 있고 **`STORIGE_*` 키가 없다** →
 Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(미설정 시 503/SKIPPED).
 
-- 첫 작업 전 루트 `STATUS.md`(§0-20~§0-14) + 이 문서를 읽고 현재 상태를 사용자에게 보고할 것.
+- 첫 작업 전 루트 `STATUS.md`(§0-21~§0-14) + 이 문서를 읽고 현재 상태를 사용자에게 보고할 것.
   ⚠️ **성능 수치 정본은 `STATUS.md` §0-5(2026-08-07, prod 5회 중앙값)** 다.
   STATUS.md 안의 "Performance 97 · LCP 1.5s"(§M8 QA 표)는 **2026-05-13 옛 측정치**이니
   baseline 으로 쓰지 말 것.
@@ -426,9 +429,14 @@ PDF 측정 x64 확정(collage-6 17p·48MP 원본) · 10-05 변경분 대상 `e2e
      `docs: Storige Wave N … 배포 통지 기록 — 100p 영향 없음` 으로 커밋·푸시 → CI 3잡·Vercel 결과까지 확인해 보고한다.
   ④ 회신 요청이 있으면 코드 근거로 사실만 답한다. 회신이 계약·운영에 영향을 주는 내용(예: 경로 폐기 동의, 키 회전)이면 보내기 전에 사용자에게 먼저 알린다.
 - **결제 경로 변경은 적대 리뷰(o5-security-reviewer)를 반드시 거친다** — 10-05 결제 수렴 도구에서 HIGH(이중 과금 경로)를 잡았다.
+- **세션 교대 시 다른 세션에 알린다**: Storige(`20261004 Storige 템플릿 변환관리 시작`)는 통지를 **세션 이름으로** 보낸다 — 옛 세션 이름으로 온
+  통지는 새 세션에 도착하지 않는다. 새 세션은 시작하면 `ListAgents` 로 자기 이름을 확인해 Storige 세션과 북모아 세션
+  (`20261007 북모아 개발 계속` · `20261005 북모아 관리자 개발 계속`)에 "100p 담당 세션이 바뀌었다 — 통지는 이 세션으로" 를 한 번 보낼 것.
+  보낼 때 meta 정보(세션 이름)만 담고, 계약·운영 변경 동의 같은 내용은 넣지 않는다.
 
-**첫 작업**: `git status -sb && git log --oneline -5` 로 실제 상태를 확인하고
-(main HEAD 가 `2360f3c` 이후인지), `STATUS.md`(§0-20~§0-14)와 이 문서를 읽어 현재 상태를
+**첫 작업**: ① `git status -sb && git log --oneline -5 && git fetch` 로 실제 상태와 GitHub 연결을 확인하고
+(main HEAD 가 `2360f3c` 이후인지, `ahead` 면 미푸시 docs 커밋), ② `ListAgents` 로 자기 세션 이름을 확인해 Storige·북모아 세션에
+교대 통지(위 "세션 교대" 규칙)를 보낸 뒤, ③ `STATUS.md`(§0-21~§0-14)와 이 문서를 읽어 현재 상태를
 한 문단으로 보고한다. **추천 목록을 만들지 말고**, 사용자가 시킨 작업을 바로 진행한다.
 운영 액션이 궁금하면 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md) 를 가리키는 것으로 끝.
 

@@ -8,7 +8,7 @@
 > 이중 사용 창, `0032`(클라이언트 직접 쓰기 봉쇄)로 `profiles.role` 권한 상승 표면이 닫혔다.
 > postcheck 요약(`docs/sql/0032-postcheck-summary.sql`) 운영 실행 **27행 전부 `pass=true`**(2026-09-28).
 >
-> 최종 업데이트: 2026-10-05
+> 최종 업데이트: 2026-10-09
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
 > 운영 빌드: `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
@@ -25,7 +25,17 @@
 
 ---
 
-## 🆕 최근 작업 (2026-09-17 ~ 10-05)
+## 🆕 최근 작업 (2026-09-17 ~ 10-09)
+
+### 0-21. 세션 교대 정리 (2026-10-09) — 코드 변경 없음
+
+- 10-06~10-09 는 **문서 작업만** 했다: Storige 배포 통지 기록(Wave 6 · Wave 8 1단계 · JOB_LINK_STRICT 사전 안내·적용 완료 — §0-17),
+  인계 문서에 Storige 통지 처리 순서 명시(`620477f`). 운영 코드 기준은 그대로 `2360f3c`(§0-20), 이후 커밋은 전부 docs.
+- **Storige 통지 주시 항목**: `JOB_FILE_SITE_STRICT`(현재 false) — 켜기 안내가 오면 90MB 이하·P4 이전 파일의 사이트 귀속을 확인(§0-17).
+- **네트워크 이상(2026-10-09 관찰)**: 이 Mac 에서 `https://github.com` 만 TLS 인증서 이름 불일치(`SSL: no alternative certificate subject name`),
+  `api.github.com` 은 정상 → `git fetch/push`(HTTPS) 실패, `gh` 조회는 가능. Wi-Fi·VPN·프록시·보안 소프트웨어의 HTTPS 가로채기 의심.
+  push 는 SSH(`git@github.com:papascompany/100p_books.git`)로 우회 시도한다(결과는 인계 문서 상단).
+- 세션 `20260930 100p_books 서브에이전트 진행` 을 닫고 새 세션으로 교대 — Storige·북모아 세션에 교대 통지.
 
 ### 0-20. PDF 렌더 메모리 — 사진을 슬롯 크기로 줄여 디코드 (2026-10-05) — collage-6 RSS 약 -45%
 
