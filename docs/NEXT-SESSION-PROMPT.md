@@ -4,9 +4,10 @@
 >
 > 갱신 **2026-10-09**(세션 교대) · 운영 코드 기준 `2360f3c`(§0-20) · 그 뒤 커밋은 전부 docs(최신은 STATUS §0-21 커밋) · CI 3잡 green · Vercel prod success
 > **미병합 브랜치·worktree·열린 PR 없음.**
-> ⚠️ **2026-10-09 네트워크 이상**: `https://github.com` 만 TLS 인증서 불일치(`api.github.com` 정상) → HTTPS `git fetch/push` 실패.
->    새 세션 첫 작업에서 `git fetch` 가 되는지 먼저 확인하고, 안 되면 SSH(`git@github.com:papascompany/100p_books.git`)로 시도·사용자에게 알릴 것.
->    로컬 `main` 이 원격보다 앞서 있으면(`ahead N`) 이 세션의 마지막 docs 커밋이 아직 push 되지 않은 것이다 — 연결이 돌아오면 push.
+> ✅ **2026-10-09 네트워크 이상 해소**: 같은 날 새 세션(`20261008 100p_books CTO 세션 인수인계`) 첫 작업에서 `git fetch` 가 처음 1회 TLS 오류 뒤
+>    수 분 만에 정상화돼(인증서 Sectigo·SAN github.com 확인) 미푸시 docs 커밋 `e4719bd` 를 HTTPS 로 push 했다 — `main` = `origin/main`.
+>    SSH 우회는 **불가**(이 Mac 의 ed25519 키가 GitHub 계정에 미등록, `Permission denied (publickey)`). 재발 시 HTTPS 재시도가 우선이고,
+>    SSH 를 쓰려면 오너가 공개키를 GitHub 에 등록해야 한다. 교대 통지는 Storige·북모아 개발·북모아 관리자 세션 3곳에 전송 완료(10-09).
 > ✅ 마이그레이션 `0001~0033` 전부 운영 적용(STATUS §0-14) · QA-1 피해 0 · 고아 사진 0 · `pnpm audit --prod` 0.
 > ✅ 09-28~30: Dependabot 정리 · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 0/0(§0-15) · `proxy.ts` ·
 >    **fabric 7.4.0**(§0-16) · Storige DELETE 404 구분(§0-17).

@@ -35,6 +35,7 @@
 - **네트워크 이상(2026-10-09 관찰)**: 이 Mac 에서 `https://github.com` 만 TLS 인증서 이름 불일치(`SSL: no alternative certificate subject name`),
   `api.github.com` 은 정상 → `git fetch/push`(HTTPS) 실패, `gh` 조회는 가능. Wi-Fi·VPN·프록시·보안 소프트웨어의 HTTPS 가로채기 의심.
   push 는 SSH(`git@github.com:papascompany/100p_books.git`)로 우회 시도한다(결과는 인계 문서 상단).
+  → **같은 날 해소**: 새 세션 첫 `git fetch` 1회 TLS 오류 뒤 수 분 만에 정상(Sectigo 인증서·SAN github.com) → `e4719bd` HTTPS push 완료. SSH 는 키 미등록으로 불가.
 - 세션 `20260930 100p_books 서브에이전트 진행` 을 닫고 새 세션으로 교대 — Storige·북모아 세션에 교대 통지.
 
 ### 0-20. PDF 렌더 메모리 — 사진을 슬롯 크기로 줄여 디코드 (2026-10-05) — collage-6 RSS 약 -45%
