@@ -16,7 +16,7 @@ const PatchSchema = z
   .object({
     name: z.string().trim().min(1).max(80).optional(),
     active: z.boolean().optional(),
-    meta: z.record(z.unknown()).nullable().optional(),
+    meta: z.record(z.string(), z.unknown()).nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, "변경할 필드가 없습니다.");
 
