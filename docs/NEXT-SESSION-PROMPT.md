@@ -2,13 +2,13 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 **2026-10-09**(세션 교대) · 운영 코드 기준 `2360f3c`(§0-20) · 그 뒤 커밋은 전부 docs(최신은 STATUS §0-21 커밋) · CI 3잡 green · Vercel prod success
+> 갱신 **2026-10-12** · 운영 코드 기준 **`5aed177`**(Dependabot 5건 통합 — next 16.4.0·zod 4·zustand 5·vitest 5·jsdom 30, STATUS §0-23) · CI 3잡 green · Vercel prod success · 운영 URL e2e 12·e2e:auth 5 통과
 > **미병합 브랜치·worktree·열린 PR 없음.**
 > ✅ **2026-10-09 네트워크 이상 해소**: 같은 날 새 세션(`20261008 100p_books CTO 세션 인수인계`) 첫 작업에서 `git fetch` 가 처음 1회 TLS 오류 뒤
 >    수 분 만에 정상화돼(인증서 Sectigo·SAN github.com 확인) 미푸시 docs 커밋 `e4719bd` 를 HTTPS 로 push 했다 — `main` = `origin/main`.
 >    SSH 우회는 **불가**(이 Mac 의 ed25519 키가 GitHub 계정에 미등록, `Permission denied (publickey)`). 재발 시 HTTPS 재시도가 우선이고,
 >    SSH 를 쓰려면 오너가 공개키를 GitHub 에 등록해야 한다. 교대 통지는 Storige·북모아 개발·북모아 관리자 세션 3곳에 전송 완료(10-09).
-> ✅ 마이그레이션 `0001~0033` 전부 운영 적용(STATUS §0-14) · QA-1 피해 0 · 고아 사진 0 · `pnpm audit --prod` 0.
+> ✅ 마이그레이션 `0001~0033` 전부 운영 적용(STATUS §0-14) · QA-1 피해 0 · 고아 사진 0 · `pnpm audit --prod` 2(tailwind 경유 빌드 도구, 회귀 아님 — 런북 백로그·STATUS §0-23).
 > ✅ 09-28~30: Dependabot 정리 · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 0/0(§0-15) · `proxy.ts` ·
 >    **fabric 7.4.0**(§0-16) · Storige DELETE 404 구분(§0-17).
 > ✅ 10-05: 운영 브라우저 점검 → UI 결함 5건 + 에디터 레이아웃 4건 · SW 캐시 오염(v4) · Vercel 방화벽 CLI 확인(§0-18) ·
@@ -30,18 +30,19 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
 - **정본 로컬**: `/Users/yohan/Developer/claude/100p_books` (branch `main`).
   Documents 사본은 node_modules 제거됨 — 쓰지 말 것.
 - 레포 `papascompany/100p_books` (PUBLIC). main push → **Vercel auto-deploy** 정상.
-- **브랜치 상태 (2026-10-05)** — `main` = `origin/main` = `2360f3c`. **미병합 브랜치·worktree 없음**,
-  원격 브랜치는 `main` 하나뿐. 최근 코드 커밋(새 → 옛): `2360f3c` PDF 회귀 linux 해시 · `8ffb2c8` PDF 사진 슬롯 축소 디코드(§0-20) ·
+- **브랜치 상태 (2026-10-12)** — `main` = `origin/main` = `5aed177`(이후 docs 커밋 가능). **미병합 브랜치·worktree 없음**,
+  원격 브랜치는 `main` 하나뿐(Dependabot 브랜치는 PR 이 닫히면 사라진다). 최근 코드 커밋(새 → 옛): `5aed177` zod 4(#22) · `2839ba9` jsdom 30(#23) ·
+  `29ad54d` vitest 5(#21) · `f0085a5` zustand 5(#24) · `f0b89e2` minor/patch 16종·next 16.4.0(#25) — 통합 PR #26(§0-23) · `2360f3c` PDF 회귀 linux 해시 · `8ffb2c8` PDF 사진 슬롯 축소 디코드(§0-20) ·
   `90d2615` 결제 키 pending 수렴 도구(§0-19) · `ea1610e` SW 캐시 v4 · `99f3702`·`7609291`·`e707538`·`b6b3d7c`·`b8783ea` UI·에디터(§0-18) ·
   `e32edc1` Storige DELETE 404(§0-17) · `14f30d9`·`c817726` fabric 7(§0-16).
-  `4346c0b` 은 **Next 16.3.5 + React 19.3.0 전환**이고 그 부모가 `34a5897` 이다(현재 next 는 16.3.6).
+  `4346c0b` 은 **Next 16.3.5 + React 19.3.0 전환**이고 그 부모가 `34a5897` 이다(현재 next 는 16.4.0).
   `integ/wave2` 를 `bacadc1` 위로 rebase 해 ff 병합했으므로 **rebase 이전 SHA
   (`552f6e1`·`c6deee9`·`5161cc9`·`67c8f2f`·`692c888`·`3d4b24e`·`69df5d2`·`f4af049`)는 존재하지 않는다.**
   현재 main 의 해당 커밋은 `31eaabf`·`88163d0`·`488cccb`·`061273a`·`be00e1b`·`b47834c`·`aed8404`·`513ba21`
   이고, 그 위에 INT-ui `34a5897` 이 올라가 있다.
 - **main 브랜치 보호가 켜져 있다**(2026-09-17): CI 3잡 필수 체크, force-push·삭제 금지,
   관리자 우회 허용(`enforce_admins=false`). Dependabot alerts·security updates 활성화.
-  **열린 PR 0건**(2026-09-30) — Dependabot PR 은 09-28~30 에 전부 병합·종료했다(§0-15·§0-16).
+  **열린 PR 0건 목표** — Dependabot PR 은 09-28~30(§0-15·§0-16)·10-12(#21~#25 → 통합 PR #26, §0-23)에 정리했다. 10-12 병합 직후 #21~#25 는 Dependabot 재검사가 닫을 예정이었다 — 열려 있으면 닫을 것.
   `dependabot.yml` 의 ignore 는 버전 번호가 아니라 `next`·`react*`·`fabric`·`eslint*`·`@types/node` 의
   **semver-major 업데이트** 단위라 Next 16/React 19 전환 후에도 그대로 유효하다.
 - **로컬에서 전체 검증이 가능하다**:
@@ -97,7 +98,7 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
 
 ### 1. 검증 명령 (전부 로컬에서 동작)
 
-**기준선은 `main`(`2360f3c`)에서 2026-10-05 실측한 값이다**(루트 `CLAUDE.md` 테스트 절과 동일).
+**기준선은 `main`(`5aed177`)에서 2026-10-12 실측한 값이다**(유닛 수는 10-05 와 동일)(루트 `CLAUDE.md` 테스트 절과 동일).
 
 | 대상 | 명령 | 현재 기준선 |
 |---|---|---|

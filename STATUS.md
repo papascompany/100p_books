@@ -8,10 +8,10 @@
 > 이중 사용 창, `0032`(클라이언트 직접 쓰기 봉쇄)로 `profiles.role` 권한 상승 표면이 닫혔다.
 > postcheck 요약(`docs/sql/0032-postcheck-summary.sql`) 운영 실행 **27행 전부 `pass=true`**(2026-09-28).
 >
-> 최종 업데이트: 2026-10-09
+> 최종 업데이트: 2026-10-12
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
+> 운영 빌드: `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
 > `proxy.ts` · 보안 overrides(**prod audit 0**) · Next 16.3.6. 그 이전 `2d403ae` = Next 16 전환(§0-12)+리뷰 후속(§0-13).
 > 그 직전 `34a5897` 까지 2026-09-17~21 보안·결제·편집 무결성 작업 전량 반영(§0-11).
 > **미병합 브랜치 없음.**
@@ -26,6 +26,25 @@
 ---
 
 ## 🆕 최근 작업 (2026-09-17 ~ 10-12)
+
+### 0-23. Dependabot 5건 통합 병합 (2026-10-12) — PR #26, 운영 배포 완료
+
+- Dependabot #21~#25 를 통합 브랜치 `deps/2026-10-12` 에 PR 1건 = 커밋 1개로 순서대로 적용 → PR #26 CI 5체크 green → rebase 병합(main `5aed177`).
+  커밋: `f0b89e2` #25 minor/patch 16종(next·eslint-config-next 16.4.0 · canvas 1.0.10 · sharp 0.35.5 · supabase-js 2.117.3 · radix 4종 · playwright 1.64 등) ·
+  `f0085a5` #24 zustand 5.0.15 · `29ad54d` #21 vitest 5.0.3 · `2839ba9` #23 jsdom 30.1.2 · `5aed177` #22 zod 4.6.6.
+- **코드 변경은 zod 1줄**: `app/api/admin/resources/[id]/route.ts` `z.record(z.string(), z.unknown())`(v4 는 키 스키마 필수). 원 PR #22 CI 실패 원인.
+- zod 4 런타임 변경 대조: `.uuid()` 32곳 → v4 RFC 엄격 검사지만 대상 id·share/gift 토큰·잡 id 가 전부 `gen_random_uuid()`, 수기 uuid 리터럴 0건 ·
+  객체 단위 `.default()` 2곳(share 생성·rebuild-pdf)은 결과 동일 · 제거 옵션 사용 0건 · `.flatten()` 동작(details 기본 문구만 변경, 클라 미표시).
+- zustand 5: selector 가 전부 단일 필드(참조 안정)·default export 미사용 → 무한 렌더 해당 없음.
+  vitest 5: clearMocks 기본 true 에도 실패 0, 파일·테스트 수 불변. jsdom 30: Node ^24.15 필요 — CI setup-node 24·로컬 26 충족(dev 전용).
+  Next 16.4: 엄격 라우트 매칭 기본화·Turbopack CSS Module 이름 축약 — 빌드 경고 0, PDF 해시 불변.
+- #21·#23·#24 의 원래 CI 는 10-05 이전 main(85파일) 기준이라 현 main 에서 재검증했다.
+- 검증: 단계마다 typecheck 0 · lint 0/0 · vitest 89파일 1,490 / 1 skip · test:pdf 5(해시 불변) · build ·
+  통합본 로컬 운영 빌드 `e2e:auth` 5 passed · **병합 후 운영 URL e2e 스모크 12 passed · `e2e:auth` 5 passed**(load 75 상태에서도 통과) · Vercel prod Ready.
+- **`pnpm audit --prod` 0 → 2건(high 1 · moderate 1) — 회귀 아님**: `tailwindcss-animate` → `tailwindcss` 3.4 경유 `braces` 3.0.3(GHSA-vfj7-8cjw-p6xm, 패치 없음)·
+  `postcss-selector-parser` 6.1.4(GHSA-rj75-hqrm-r3gf, ≥7.1.6). 병합 전후 잠금 버전 동일 — 새로 공개된 권고. 빌드 시 우리 소스만 처리해 외부 입력 노출 없음. 런북 백로그 등재.
+- 로컬: Playwright 1.64 용 Chromium(v1248)을 `pnpm exec playwright install chromium` 으로 설치했다.
+- Dependabot PR #21~#25 는 병합 직후 아직 OPEN — Dependabot 재검사(실행 중)가 닫는다. 남아 있으면 #26 을 근거로 닫을 것.
 
 ### 0-22. 10-05 변경분 대상 `e2e:auth` 재실행 (2026-10-12) — 5 passed, 코드 변경 없음
 
@@ -1155,20 +1174,22 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ## 기술 스택 버전 현황
 
-> 버전은 `package.json` 의 선언 범위와 설치된 실제 버전이다(2026-10-05 `pnpm list`·`node_modules` 확인).
+> 버전은 `package.json` 의 선언 범위와 설치된 실제 버전이다(2026-10-05 확인, **2026-10-12 Dependabot 통합 반영 — §0-23**).
 
 | 패키지 | 선언 | 잠금(실제) | 비고 |
 |---|---|---|---|
-| next | `16.3.6` | 16.3.6 | 16.x 전환 2026-09-21(§0-12), 16.3.6 패치. **`pnpm audit --prod` 0건**(§0-16) |
+| next | `16.4.0` | 16.4.0 | 16.x 전환 2026-09-21(§0-12), 16.4.0 2026-10-12(§0-23). `pnpm audit --prod` 2건(tailwind 경유 빌드 도구, §0-23) |
 | react / react-dom | `19.3.0` | 19.3.0 | 고정. `@types/react(-dom)` 19.3.0 도 `pnpm.overrides` 로 고정 |
-| eslint | `9.39.5` | 9.39.5 | **flat config**(`eslint.config.mjs`). `eslint-config-next` 16.3.6. `pnpm lint` = `eslint .`(저장소 전체, 0/0) · react-hooks v7 4규칙 error(§0-15) |
+| eslint | `9.39.5` | 9.39.5 | **flat config**(`eslint.config.mjs`). `eslint-config-next` 16.4.0. `pnpm lint` = `eslint .`(저장소 전체, 0/0) · react-hooks v7 4규칙 error(§0-15) |
 | fabric | `^7.4.0` | **7.4.0** | 2026-09-30 전환(§0-16). 6.9.x·7.x 의 `toJSON()` 은 **인자를 무시한다** — 스냅샷은 `lib/fabric/snapshot.ts`(QA-1). 제스처 판정은 `targetAt()` |
-| @napi-rs/canvas | `^1.0.9` | 1.0.9 | 2026-09-28(§0-15) — 그림자가 Chromium 과 일치(인쇄 그림자 짙어짐은 의도) |
-| @supabase/ssr · supabase-js | `0.12.7` · `2.117.1` | 0.12.7 · 2.117.1 | 2026-09-28(§0-15) — 쿠키 `getAll/setAll`, Database 타입 GenericSchema 화. 카카오 OAuth 실제 왕복 1회 확인은 오너 대기 |
+| @napi-rs/canvas | `^1.0.10` | 1.0.10 | 2026-09-28(§0-15) — 그림자가 Chromium 과 일치(인쇄 그림자 짙어짐은 의도) |
+| @supabase/ssr · supabase-js | `0.12.7` · `2.117.3` | 0.12.7 · 2.117.3 | 2026-09-28(§0-15) — 쿠키 `getAll/setAll`, Database 타입 GenericSchema 화. 카카오 OAuth 실제 왕복 1회 확인은 오너 대기 |
 | pdf-lib | `^1.17.1` | 1.17.1 | 최신 |
-| resend | `^6.29.0` | 6.29.0 | - |
-| sharp | `^0.35.4` | **0.35.4** | 2026-09-17 승격(SEC-1). vips 8.18.6 / heif 1.23.2. `next` 가 따로 끌어오지 않는다 |
-| vitest | `^4.1.11` | 4.1.11 | 2026-09-28 Dependabot 정리로 4.x(vite 7) |
+| resend | `^6.32.1` | 6.32.1 | - |
+| zod | `^4.6.5` | 4.6.6 | 2026-10-12 v4(§0-23). `z.record` 는 키 스키마 필수 · `.uuid()` 는 RFC 엄격 |
+| zustand | `^5.0.15` | 5.0.15 | 2026-10-12 v5. selector 는 참조 안정 값만 반환할 것(새 객체 반환 시 무한 렌더 — `useShallow`) |
+| sharp | `^0.35.5` | **0.35.5** | 2026-09-17 승격(SEC-1). vips 8.18.6 / heif 1.23.2. `next` 가 따로 끌어오지 않는다 |
+| vitest · jsdom | `^5.0.3` · `^30.1.1` | 5.0.3 · 30.1.2 | 2026-10-12(§0-23). vitest 5 는 clearMocks 기본 true · vite ^6.4\|\|^7\|\|^8 필수 peer. jsdom 30 은 Node ^24.15 |
 | typescript | `^6.0.3` | 6.0.3 | 2026-09-28 |
 
 ---
@@ -1188,7 +1209,7 @@ PDF 회귀(페이지수+해시): pnpm test:pdf — 5 케이스(photo-downscale �
 PDF 런타임 검증:          pnpm verify:pdf — 1페이지 스모크
 인증 골든 플로우:         pnpm e2e:auth — 5 passed (운영 URL 실측, 1.8m)
                           골든 플로우 2 + 편집 무결성 회귀 3(QA-1/QA-4/QA-2)
-                          bacadc1 · 34a5897 · 4346c0b · 0032 적용 후(09-28) 배포본에서 통과
+                          bacadc1 · 34a5897 · 4346c0b · 0032 적용 후(09-28) · 10-12(2360f3c, 5aed177) 배포본에서 통과
 빌드:                     pnpm build 성공 (Turbopack, 라우트 121개 렌더링 모드 변경 0)
 Lighthouse 모바일:        Performance 88 · LCP 3.6s · CLS 0 (2026-08-07, prod 5회 중앙값 — §0-5)
                           ⚠️ Next 16 전환 후 재측정은 미실시 — 빌드가 First Load JS 표를

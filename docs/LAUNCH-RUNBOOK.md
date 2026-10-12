@@ -512,6 +512,7 @@ read -rs CRON_SECRET && curl -s -H "Authorization: Bearer $CRON_SECRET" "https:/
 | ~~포인트 홀드/예약 설계~~ | ✅ `0033` reserve/release 로 구조적 해소 — 2026-09-28 운영 적용 |
 | 100% 할인 코드 | 100원 미만 주문은 `AMOUNT_BELOW_MINIMUM` 차단 — 무료 주문 경로 없음 |
 | 인증 E2E 의 CI 편입 | staging Supabase 신설이 선행 조건. 그 전까지 릴리스 전 로컬 1회 |
+| `pnpm audit --prod` 2건(tailwind 경유) | 2026-10-12 — `tailwindcss-animate` → `tailwindcss` 3.4 경유 `braces` 3.0.3(high, GHSA-vfj7-8cjw-p6xm, **패치 없음**)·`postcss-selector-parser` 6.1.4(moderate, ≥7.1.6). 빌드 시 우리 소스만 처리해 외부 입력 노출 없음. 해소 경로: `tailwindcss-animate` 를 devDependencies 로 옮기기(prod 트리에서 제외) 또는 Tailwind 4 전환. 회귀 아님(STATUS §0-23) |
 | 프로젝트 소프트 삭제 | 현재 하드 삭제(스키마 변경 필요). 주문이 연결된 프로젝트는 409 `HAS_ORDERS` 로 막힌다 |
 | 데모 모드 | "구현 시작" 지시 시: 데모 계정 + `DEMO_*` env + 원클릭 로그인 |
 | Storige C-2 배포 통지 시 | PDF 검증 E2E 재실증(로컬 `.env.local`에 STORIGE 키 필요) |
