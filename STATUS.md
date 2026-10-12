@@ -202,6 +202,12 @@ pending 으로 남고, 토스 웹훅 URL 이 미등록인 동안에는 수렴 �
     `JOB_FILE_SITE_STRICT=false`(관측 유지). api 이미지·코드 불변. Storige 스모크 health 200 · 무인증 401 · 오류 0. 롤백 시 시각·범위 통지 예정.
     **주시 항목**: `JOB_FILE_SITE_STRICT` 가 나중에 켜지면 작업이 참조하는 파일의 사이트 귀속을 엄격히 볼 수 있다 — 100p 는 P4(10-03) 이후
     대용량 파일만 complete 때 사이트가 기록됐다고 통지받았다. 켜기 사전 안내가 오면 90MB 이하 multipart·P4 이전 파일의 귀속 여부를 Storige 에 확인할 것.
+  · **Wave 9 서버 정비 사전 고지**(2026-10-12 15:2xZ~약 16:00Z UTC, DB 변경 없음, ACK 불요): api·worker 재시작(각 수십 초, 그 사이 요청 실패 가능).
+    파일 upload/external·presigned-upload-public→complete·검증·download external API 의 응답·상태 코드·웹훅 불변. 바뀌는 것은 v1 도서 확정 실패 응답의
+    `errorDetail` 형식(FREEZE v1.17) — **100p 는 미사용**(코드 대조: Storige 호출은 `lib/storige/client.ts` 의 `/files/*`·`/worker-jobs/*` 뿐, v1·도서 확정 경로 0건 —
+    Storige 도 HEAD `cff268a` 에서 grep 0건 확인). 재시작 구간의 일시 실패는 PDF 빌드 잡 재시도(max_attempts)·retention cron 다음 날 재시도가 흡수하고,
+    운영 결제 주문 0건이라 해당 시간대 빌드 대상도 없다. `JOB_FILE_SITE_STRICT` 는 계속 false — 켜기 전 사전 안내·ACK 예정(완료 통지 때 경로별 사이트 귀속 규칙 요약 제공 예정).
+    **100p 영향 없음.** 완료 통지 대기.
 - 인계 문서 stale 정리(`7101c38`) — lint 0/0·`proxy.ts`·fabric 7 함정·Dependabot 열린 PR 0. `git fetch --prune` 으로 원격 추적 참조 16개 정리(원격 브랜치 `main` 하나).
 
 ### 0-16. fabric 6.9.1 → 7.4.0 전환 (2026-09-30) — prod audit 0
