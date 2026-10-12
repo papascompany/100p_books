@@ -90,7 +90,7 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
 로컬 `.env.local` 에는 Supabase 3종 + TOSS 3종만 있고 **`STORIGE_*` 키가 없다** →
 Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(미설정 시 503/SKIPPED).
 
-- 첫 작업 전 루트 `STATUS.md`(§0-21~§0-14) + 이 문서를 읽고 현재 상태를 사용자에게 보고할 것.
+- 첫 작업 전 루트 `STATUS.md`(§0-22~§0-14) + 이 문서를 읽고 현재 상태를 사용자에게 보고할 것.
   ⚠️ **성능 수치 정본은 `STATUS.md` §0-5(2026-08-07, prod 5회 중앙값)** 다.
   STATUS.md 안의 "Performance 97 · LCP 1.5s"(§M8 QA 표)는 **2026-05-13 옛 측정치**이니
   baseline 으로 쓰지 말 것.
@@ -107,7 +107,7 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
 | PDF 회귀 | `pnpm test:pdf` | 5 케이스 OK (약 500ms) — `photo-downscale` 추가(2026-10-05), darwin·linux 해시 모두 등재 |
 | 접근성 | `pnpm test:a11y` | 25 passed / 1 skipped (WCAG 2.1 AA 위반 0) |
 | E2E 스모크 | `pnpm e2e` | 12 passed |
-| **인증 + 편집 무결성** | `pnpm e2e:auth` | **5 passed** — 골든 플로우 2 + 편집 무결성 회귀 3(QA-1/QA-4/QA-2). 최근 실측: 운영 URL(09-28)·fabric 7 로컬 운영 빌드(09-30). **10-05 변경분은 미실행** |
+| **인증 + 편집 무결성** | `pnpm e2e:auth` | **5 passed** — 골든 플로우 2 + 편집 무결성 회귀 3(QA-1/QA-4/QA-2). 최근 실측: **운영 URL 10-12(10-05 변경분 포함 배포본, STATUS §0-22)** · 09-28 · fabric 7 로컬 운영 빌드(09-30). 결제 직전에서 멈추므로 결제·PDF 빌드 경로는 범위 밖 |
 | 빌드 | `pnpm build` | 성공 (**Turbopack**, `--webpack` 불요. 라우트 121개 렌더링 모드 변경 0) |
 
 > `pnpm lint` 는 **`eslint .`(저장소 전체, 0 error / 0 warning)** — react-hooks v7 4규칙은 error.
@@ -393,7 +393,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 **여기에 목록을 다시 만들지 말 것.** 항목이 해소되면 런북에서 지우고, 새 운영 이슈는 런북에 추가한다.
 
 **검증 후속(런북 백로그에도 등재)**: Vercel Preview 런타임 검증 불가(Preview env 0종) · Lighthouse 비교 방법 재정의 ·
-PDF 측정 x64 확정(collage-6 17p·48MP 원본) · 10-05 변경분 대상 `e2e:auth` 재실행.
+PDF 측정 x64 확정(collage-6 17p·48MP 원본). (10-05 변경분 대상 `e2e:auth` 재실행은 10-12 완료 — 5 passed, STATUS §0-22.)
 
 운영 규칙: **환불은 전액만**(부분 취소는 앱이 의도적으로 무시), **`CRON_SECRET` 을 지우지 말 것.**
 
@@ -437,7 +437,7 @@ PDF 측정 x64 확정(collage-6 17p·48MP 원본) · 10-05 변경분 대상 `e2e
 
 **첫 작업**: ① `git status -sb && git log --oneline -5 && git fetch` 로 실제 상태와 GitHub 연결을 확인하고
 (main HEAD 가 `2360f3c` 이후인지, `ahead` 면 미푸시 docs 커밋), ② `ListAgents` 로 자기 세션 이름을 확인해 Storige·북모아 세션에
-교대 통지(위 "세션 교대" 규칙)를 보낸 뒤, ③ `STATUS.md`(§0-21~§0-14)와 이 문서를 읽어 현재 상태를
+교대 통지(위 "세션 교대" 규칙)를 보낸 뒤, ③ `STATUS.md`(§0-22~§0-14)와 이 문서를 읽어 현재 상태를
 한 문단으로 보고한다. **추천 목록을 만들지 말고**, 사용자가 시킨 작업을 바로 진행한다.
 운영 액션이 궁금하면 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md) 를 가리키는 것으로 끝.
 

@@ -212,7 +212,7 @@ pnpm e2e:auth
 lint **0 error / 41 warning**(38건이 `react-hooks` v7 신규 규칙 — 전환 방침상 warn 유지) ·
 vitest **78 파일 / 1,371 passed / 1 skipped**(`2d403ae` 에서는 82 파일 / 1,427) · `test:pdf` 4 케이스 · e2e 12 · a11y 25 ·
 build 성공(Turbopack) · `e2e:auth` **5 passed**(골든 플로우 2 + 편집 무결성 3 — 운영 URL 실측.
-`bacadc1`·`34a5897`·`4346c0b` 세 배포본에서 각각 통과).
+`bacadc1`·`34a5897`·`4346c0b` 세 배포본에서 각각 통과. **2026-10-12 운영 배포본(코드 `2360f3c`, 10-05 변경분 포함)에서도 5 passed** — STATUS §0-22).
 
 (`e2e:auth` 는 **운영 Supabase** 에 임시 계정·프로젝트를 만들어 업로드→편집→표지→주문서까지
 실제로 돌리고 `afterAll` 에서 정리한다. CI 에는 넣지 않는다.
