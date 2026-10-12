@@ -11,7 +11,7 @@
 > 최종 업데이트: 2026-10-12
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
+> 운영 빌드: `44edc75`(2026-10-12, tailwindcss-animate devDeps 이동 → prod audit 0) · `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
 > `proxy.ts` · 보안 overrides(**prod audit 0**) · Next 16.3.6. 그 이전 `2d403ae` = Next 16 전환(§0-12)+리뷰 후속(§0-13).
 > 그 직전 `34a5897` 까지 2026-09-17~21 보안·결제·편집 무결성 작업 전량 반영(§0-11).
 > **미병합 브랜치 없음.**
@@ -42,7 +42,10 @@
 - 검증: 단계마다 typecheck 0 · lint 0/0 · vitest 89파일 1,490 / 1 skip · test:pdf 5(해시 불변) · build ·
   통합본 로컬 운영 빌드 `e2e:auth` 5 passed · **병합 후 운영 URL e2e 스모크 12 passed · `e2e:auth` 5 passed**(load 75 상태에서도 통과) · Vercel prod Ready.
 - **`pnpm audit --prod` 0 → 2건(high 1 · moderate 1) — 회귀 아님**: `tailwindcss-animate` → `tailwindcss` 3.4 경유 `braces` 3.0.3(GHSA-vfj7-8cjw-p6xm, 패치 없음)·
-  `postcss-selector-parser` 6.1.4(GHSA-rj75-hqrm-r3gf, ≥7.1.6). 병합 전후 잠금 버전 동일 — 새로 공개된 권고. 빌드 시 우리 소스만 처리해 외부 입력 노출 없음. 런북 백로그 등재.
+  `postcss-selector-parser` 6.1.4(GHSA-rj75-hqrm-r3gf, ≥7.1.6). 병합 전후 잠금 버전 동일 — 새로 공개된 권고. 빌드 시 우리 소스만 처리해 외부 입력 노출 없음.
+  → **같은 날 해소(`44edc75`)**: `tailwind.config.ts` 전용 빌드 플러그인 `tailwindcss-animate` 를 devDependencies 로 이동 → prod 트리에서 tailwindcss 제외 → **audit --prod 0**.
+    Vercel installCommand(`pnpm install --frozen-lockfile`)는 devDependencies 포함 설치라 빌드 영향 없음. 빌드 CSS 를 운영본과 비교 — 크기 동일(87,797B), 차이는 폰트 파일명 해시뿐.
+    **주의**: 런타임 import 가 없는 빌드 도구는 devDependencies 에 둘 것 — dependencies 에 두면 그 하위 트리가 prod audit 에 잡힌다.
 - 로컬: Playwright 1.64 용 Chromium(v1248)을 `pnpm exec playwright install chromium` 으로 설치했다.
 - Dependabot PR #21~#25 는 병합 직후 아직 OPEN — Dependabot 재검사(실행 중)가 닫는다. 남아 있으면 #26 을 근거로 닫을 것.
 
@@ -1178,7 +1181,7 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 | 패키지 | 선언 | 잠금(실제) | 비고 |
 |---|---|---|---|
-| next | `16.4.0` | 16.4.0 | 16.x 전환 2026-09-21(§0-12), 16.4.0 2026-10-12(§0-23). `pnpm audit --prod` 2건(tailwind 경유 빌드 도구, §0-23) |
+| next | `16.4.0` | 16.4.0 | 16.x 전환 2026-09-21(§0-12), 16.4.0 2026-10-12(§0-23). **`pnpm audit --prod` 0건**(10-12 `44edc75`, §0-23) |
 | react / react-dom | `19.3.0` | 19.3.0 | 고정. `@types/react(-dom)` 19.3.0 도 `pnpm.overrides` 로 고정 |
 | eslint | `9.39.5` | 9.39.5 | **flat config**(`eslint.config.mjs`). `eslint-config-next` 16.4.0. `pnpm lint` = `eslint .`(저장소 전체, 0/0) · react-hooks v7 4규칙 error(§0-15) |
 | fabric | `^7.4.0` | **7.4.0** | 2026-09-30 전환(§0-16). 6.9.x·7.x 의 `toJSON()` 은 **인자를 무시한다** — 스냅샷은 `lib/fabric/snapshot.ts`(QA-1). 제스처 판정은 `targetAt()` |
