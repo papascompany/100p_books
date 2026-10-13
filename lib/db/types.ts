@@ -218,12 +218,12 @@ export type StorigeValidationResult = {
   /** worker-job status: COMPLETED | FIXABLE | FAILED | PROCESSING | ERROR 등. */
   status: string;
   jobId?: string;
-  /** worker-job 정본 result.isValid — 검증 통과 여부. */
+  /** 검증 잡 result.result.isValid — 검증 통과 여부(`extractValidationResult`). */
   isValid?: boolean;
   /**
-   * worker-job 정본 result.errors — 검증 실패 상세(코드/메시지/autoFixable 등).
-   * 과거 result.issues 로 읽었으나 워커 산출(ValidationResultDto)에 존재하지 않는
-   * 키였다(2026-07 Storige 실코드 확증 — 정본 shape = { isValid, errors, warnings, metadata }).
+   * 검증 잡 result.result.errors — 검증 실패 상세(코드/메시지/autoFixable 등).
+   * 워커가 ValidationResultDto({ isValid, errors, warnings, metadata })를 `{ result }` 로 감싸 저장한다.
+   * 과거 result.issues(2026-07 이전)·result.errors(2026-10 이전, 한 단계 얕음)로 읽어 늘 비어 있었다.
    */
   errors?: unknown[];
   warnings?: unknown[];

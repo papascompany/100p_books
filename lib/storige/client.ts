@@ -93,8 +93,9 @@ export class StorigeError extends Error {
 }
 
 /**
- * presigned 엔드포인트가 driver=local 로 503 { code:'STORIGE_NOT_S3' } 를 반환.
+ * presigned 엔드포인트가 driver=local 로 503 { code:'STORAGE_NOT_S3' } 를 반환.
  * uploadPdf 가 잡아 기존 multipart 경로로 폴백할 수 있게 별도 타입으로 구분.
+ * (클래스의 code 값 'STORIGE_NOT_S3' 는 100p 내부 식별자다 — 서버 판정은 `isNotS3Body`.)
  */
 export class StorigeNotS3Error extends StorigeError {
   override code = "STORIGE_NOT_S3";
@@ -197,7 +198,7 @@ export async function uploadPdf(
         filename: opts.filename,
       });
     } catch (e) {
-      // driver=local(STORIGE_NOT_S3) 이면 기존 multipart 로 폴백.
+      // driver=local(서버 code STORAGE_NOT_S3) 이면 기존 multipart 로 폴백.
       // 단, multer 100MB 캡을 넘으면 폴백해도 거부되므로 명확한 에러로 표면화.
       if (!(e instanceof StorigeNotS3Error)) throw e;
       if (buf.byteLength > 100 * 1024 * 1024) {
@@ -281,7 +282,7 @@ interface PresignResponse {
  *   1) POST {BASE}/files/presigned-upload-public  (@Public — X-API-Key 없음)
  *        body { type, expectedSize, originalName, contentType:'application/pdf' }
  *        → { fileId, uploadUrl, uploadToken }
- *        driver=local 이면 503 { code:'STORIGE_NOT_S3' } → 기존 multipart 경로로 폴백.
+ *        driver=local 이면 503 { code:'STORAGE_NOT_S3' } → 기존 multipart 경로로 폴백.
  *   2) PUT <uploadUrl>  (API 미경유 — R2 직결)
  *        헤더 Content-Type: application/pdf (서명 type 일치 필수).
  *   3) POST {BASE}/files/{fileId}/complete  body { uploadToken }
@@ -325,7 +326,7 @@ export async function uploadPdfPresigned(
   if (!presignResp.ok) {
     const body = await safeText(presignResp);
     // driver=local — presigned 미지원. 호출자(uploadPdf)가 처리할 수 있게 명확한 503.
-    if (presignResp.status === 503 && body.includes("STORIGE_NOT_S3")) {
+    if (presignResp.status === 503 && isNotS3Body(body)) {
       throw new StorigeNotS3Error();
     }
     throw new StorigeError(
@@ -481,15 +482,10 @@ export async function requestValidation(opts: ValidateOpts): Promise<string> {
 interface WorkerJob {
   id: string;
   status: string; // PENDING | PROCESSING | COMPLETED | FIXABLE | FAILED ...
-  // worker-job 정본 result shape = { isValid, errors, warnings, metadata }
-  // (Storige apps/worker pdf-validator.service.ts — 2026-07 실코드 확증). 'issues' 키는
-  // check-mergeable(별도 dry-run) 전용이라 validate 잡 result 엔 없다 → errors 를 읽어야 한다.
-  result?: {
-    isValid?: boolean;
-    errors?: unknown[];
-    warnings?: unknown[];
-    metadata?: unknown;
-  } & Record<string, unknown>;
+  // 검증 잡 result = { result: { isValid, errors, warnings, metadata } } (이중 중첩 —
+  // ValidationResultDto 를 워커가 { result } 로 감싸 저장). 'issues' 키는 check-mergeable 전용이라 없다.
+  // 꺼낼 때는 반드시 extractValidationResult() 를 쓸 것.
+  result?: Record<string, unknown>;
 }
 
 /** GET {BASE}/worker-jobs/external/{jobId} (워커 키 — 외부 파트너 폴링 라우트) */
@@ -558,13 +554,38 @@ export async function validatePdf(
   }
 
   if (!last) return { status: "PROCESSING", jobId };
+  const r = extractValidationResult(last.result);
   return {
     status: (last.status ?? "PROCESSING").toUpperCase(),
     jobId,
-    isValid: last.result?.isValid,
-    errors: last.result?.errors,
-    warnings: last.result?.warnings,
+    isValid: r?.isValid,
+    errors: r?.errors,
+    warnings: r?.warnings,
   };
+}
+
+type ValidationPayload = { isValid?: boolean; errors?: unknown[]; warnings?: unknown[] };
+
+function isValidationPayload(v: unknown): v is ValidationPayload {
+  if (!v || typeof v !== "object") return false;
+  const o = v as Record<string, unknown>;
+  return typeof o.isValid === "boolean" || Array.isArray(o.errors) || Array.isArray(o.warnings);
+}
+
+/**
+ * 검증 잡 result 에서 { isValid, errors, warnings } 를 꺼낸다.
+ * Storige 워커는 ValidationResultDto 를 `{ result }` 로 감싸 저장하므로 실제 위치는
+ * `job.result.result`(이중 중첩)다 — Storige `validation.processor.ts` updateJobStatus(…, { result }),
+ * `worker-jobs.service.ts` 주석 "updateDto.result.result = ValidationResultDto"(2026-10-13 확인).
+ * 2026-10 이전 100p 는 한 단계 얕게 읽어 isValid·errors·warnings 가 늘 비어 있었다(발주 게이트는 status 만 봐서 무영향).
+ * Storige 와 같은 방어로 단일 중첩도 받는다.
+ */
+export function extractValidationResult(result: unknown): ValidationPayload | undefined {
+  if (!result || typeof result !== "object") return undefined;
+  const nested = (result as Record<string, unknown>).result;
+  if (isValidationPayload(nested)) return nested;
+  if (isValidationPayload(result)) return result;
+  return undefined;
 }
 
 // =====================================================================
@@ -669,6 +690,15 @@ async function abortPresignedUpload(fileId: string): Promise<void> {
   } catch {
     // 정리 실패는 무시 — 원래 업로드 실패가 우선.
   }
+}
+
+/**
+ * presign 503 본문이 "s3 드라이버 아님" 인지. Storige 서버 코드는 `STORAGE_NOT_S3`
+ * (`presigned-upload.service.ts`)인데 100p 는 2026-10 까지 `STORIGE_NOT_S3` 로 잘못 찾아 폴백이 죽어 있었다.
+ * 옛 철자도 함께 인정한다.
+ */
+export function isNotS3Body(body: string): boolean {
+  return body.includes("STORAGE_NOT_S3") || body.includes("STORIGE_NOT_S3");
 }
 
 function isFileNotFoundBody(body: string): boolean {
