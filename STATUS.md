@@ -43,6 +43,8 @@
   `isNotS3Body()` 가 두 철자 모두 인정. 인계 문서의 "깨지 말아야 할 의존" 문구도 정정.
 - 회귀 테스트 5건(`lib/storige/client.test.ts`). 게이트: typecheck 0 · lint 0/0 · vitest 89파일 **1,495** / 1 skip · test:pdf 5 · build.
 - 필드 한정 후에도 `result` 중첩 구조는 불변(Storige 확인). FILE_CORRUPTED details 제거는 이제 관리자 화면 오류 문구에 그대로 보인다(표시뿐).
+- **Storige 확인(10-13 07:2xZ)**: ACK·FYI 처리 기록 완료. 약속 — 검증 잡 `result.result` 이중 구조 유지(바꿀 땐 별도 사전 통지) ·
+  presign 503 code `STORAGE_NOT_S3` 불변 · 전환 사전 통지(시각 포함)는 이 세션 창구로. **전환 통지 대기.**
 
 ### 0-23. Dependabot 5건 통합 병합 (2026-10-12) — PR #26, 운영 배포 완료
 
