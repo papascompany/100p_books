@@ -8,10 +8,10 @@
 > 이중 사용 창, `0032`(클라이언트 직접 쓰기 봉쇄)로 `profiles.role` 권한 상승 표면이 닫혔다.
 > postcheck 요약(`docs/sql/0032-postcheck-summary.sql`) 운영 실행 **27행 전부 `pass=true`**(2026-09-28).
 >
-> 최종 업데이트: 2026-10-12
+> 최종 업데이트: 2026-10-13
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `44edc75`(2026-10-12, tailwindcss-animate devDeps 이동 → prod audit 0) · `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
+> 운영 빌드: `0804742`(2026-10-13, Storige 검증 결과 중첩 파싱·STORAGE_NOT_S3 — §0-24) · `44edc75`(2026-10-12, tailwindcss-animate devDeps 이동 → prod audit 0) · `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
 > `proxy.ts` · 보안 overrides(**prod audit 0**) · Next 16.3.6. 그 이전 `2d403ae` = Next 16 전환(§0-12)+리뷰 후속(§0-13).
 > 그 직전 `34a5897` 까지 2026-09-17~21 보안·결제·편집 무결성 작업 전량 반영(§0-11).
 > **미병합 브랜치 없음.**
@@ -25,7 +25,24 @@
 
 ---
 
-## 🆕 최근 작업 (2026-09-17 ~ 10-12)
+## 🆕 최근 작업 (2026-09-17 ~ 10-13)
+
+### 0-24. Storige 잡 응답 필드 한정 질의 대응 + 잠복 결함 2건 수정 (2026-10-13) — `0804742`
+
+- **Storige 질의(10-13 06:4xZ, 계약 변경 예정)**: 잡 응답(`GET worker-jobs/external/:id`·`validate/external` 생성 응답)을
+  id·jobType·status·editSessionId·sessionId·outputFileId·outputFileUrl·options(contentTrim·siteWebhook·editSessionId)·result·errorCode·errorMessage·errorDetail·createdAt·completedAt
+  으로 한정. FILE_CORRUPTED 검증 항목은 고정 문구·details 제거, 처리 오류 원문 대신 안내 문구. 전환은 Storige 설정 변경, **사전 통지(시각 포함) 후 3영업일 이상 뒤**, 문제 시 즉시 원복.
+  100p 판정: 읽는 키는 생성 응답 `id`, 조회 응답 `id`·`status`·`result` 뿐 — 전부 남는다. 빠지는 키 의존 0건, errorCode·errorMessage·errorDetail 미사용,
+  모르는/빠진 키는 무시(단 `id` 없으면 오류, `status` 없으면 PROCESSING 처리). → **영향 없음, ACK**(오너 승인 후 회신).
+- **Storige FYI 로 드러난 100p 잠복 결함 2건 — Storige 소스로 확인 후 수정(`0804742`)**:
+  ① 검증 잡 result 는 워커가 ValidationResultDto 를 `{ result }` 로 감싸 저장해 실제 위치가 `result.result.{isValid,errors,warnings}` 다
+  (Storige `validation.processor.ts` updateJobStatus · `worker-jobs.service.ts` 주석). 100p 는 한 단계 얕게 읽어 세 값이 **늘 비어** 저장됐다 —
+  관리자 주문 상세에 오류·경고 내용이 안 보였고 차단 메시지의 "에러 N건"이 빠졌다. **발주 차단은 status 만 봐서 무영향.** `extractValidationResult()` 가
+  이중 중첩을 읽고 단일 중첩도 받는다. 기존 `orders.storige_validation` 행은 그대로(재빌드 시 채워짐) — 운영 결제 주문 0건이라 소급 대상 없음.
+  ② presign 503 판정이 `STORIGE_NOT_S3` 를 찾았지만 서버 code 는 `STORAGE_NOT_S3` → driver=local 이면 multipart 폴백이 죽어 있었다(운영 s3 라 미발현).
+  `isNotS3Body()` 가 두 철자 모두 인정. 인계 문서의 "깨지 말아야 할 의존" 문구도 정정.
+- 회귀 테스트 5건(`lib/storige/client.test.ts`). 게이트: typecheck 0 · lint 0/0 · vitest 89파일 **1,495** / 1 skip · test:pdf 5 · build.
+- 필드 한정 후에도 `result` 중첩 구조는 불변(Storige 확인). FILE_CORRUPTED details 제거는 이제 관리자 화면 오류 문구에 그대로 보인다(표시뿐).
 
 ### 0-23. Dependabot 5건 통합 병합 (2026-10-12) — PR #26, 운영 배포 완료
 
@@ -173,6 +190,7 @@ pending 으로 남고, 토스 웹훅 URL 이 미등록인 동안에는 수렴 �
   100p PDF 는 MediaBox(판형+블리드)만 있어 **기존 MediaBox 판정 그대로**임을 Storige 가 확인했고, 같은 형태 픽스처를 회귀 테스트에 넣었다.
   100p 는 `status`·`result.isValid/errors/warnings` 만 저장하고(`metadata` 미저장), 발주 게이트는 `status` 만 보며, 경고는 관리자 주문 상세 개수 표시뿐 →
   **배포 후 재확인 완료, 영향 없음**(ACK 회신). `TRIMBOX_SIZE_BASIS` 경고가 100p 주문에 보이면 PDF 형식이 바뀌었다는 신호다.
+  ⚠️ **정정(2026-10-13, §0-24)**: 이때 100p 는 검증 result 를 한 단계 얕게 읽어 isValid·errors·warnings 가 **늘 비어** 저장됐다 — 위 "경고 개수 표시"는 실제로 동작하지 않았다. `0804742` 이후 저장분부터 유효.
 - **Storige P4 — 대용량 업로드 사이트 귀속(✅ 운영 적용 2026-10-03 api 04:58Z / worker 04:55:41Z, Storige master `9e2a817`)** — 90MB 초과 presigned `complete` 때 호출 키의 사이트를
   파일에 기록하고, 이후 download·validate·DELETE 는 같은 사이트 키만 허용(다른 사이트 키는 404). 보관 영구·업로드 흐름·응답 형식 불변.
   100p 는 검증만 **워커 키**(`STORIGE_WORKER_API_KEY`)를 쓰고 나머지는 편집기 키라 404 우려를 제기했으나, Storige 확인 결과

@@ -13,7 +13,7 @@
 >    **fabric 7.4.0**(§0-16) · Storige DELETE 404 구분(§0-17).
 > ✅ 10-05: 운영 브라우저 점검 → UI 결함 5건 + 에디터 레이아웃 4건 · SW 캐시 오염(v4) · Vercel 방화벽 CLI 확인(§0-18) ·
 >    **결제 키 pending 수렴 도구**(§0-19) · **PDF 100p 측정 → 사진 슬롯 축소 디코드, collage-6 RSS 약 -45%**(§0-20).
-> ✅ Storige 측 Wave 2(P4·JOB_STALLED)·Wave 4·5·6(10-05)·Wave 8 1단계(10-06) 운영 배포 · JOB_LINK_STRICT 플래그 적용(10-08 14:37Z) · Wave 9 서버 정비(10-12 15:40Z 완료) — 100p 영향 없음 확인(`JOB_FILE_SITE_STRICT` 는 아직 false — 10-12 Storige 회신: 켜도 100p 사이트·미지정 파일 모두 통과, 켜기 전 안내+ACK+최소 3영업일. 안내 오면 집계 확인 후 ACK)(STATUS §0-17·§0-19 기록).
+> ✅ Storige 측 Wave 2(P4·JOB_STALLED)·Wave 4·5·6(10-05)·Wave 8 1단계(10-06) 운영 배포 · JOB_LINK_STRICT 플래그 적용(10-08 14:37Z) · Wave 9 서버 정비(10-12 15:40Z 완료) — 100p 영향 없음 확인 · **잡 응답 필드 한정 예고(10-13, 사전 통지 후 3영업일+, ACK)** — 같은 날 Storige FYI 로 잠복 결함 2건 수정(STATUS §0-24)(`JOB_FILE_SITE_STRICT` 는 아직 false — 10-12 Storige 회신: 켜도 100p 사이트·미지정 파일 모두 통과, 켜기 전 안내+ACK+최소 3영업일. 안내 오면 집계 확인 후 ACK)(STATUS §0-17·§0-19 기록).
 > 남은 운영 액션·오너 결정·백로그는 전부 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md), 실시간 상태는 `/admin` "서비스 런치 체크".
 > **"다음 추천" 목록을 새로 만들지 말 것 — 운영 액션·백로그의 유일한 정본은 런북이다** (사용자 지시, 2026-08-09).
 
@@ -98,13 +98,13 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
 
 ### 1. 검증 명령 (전부 로컬에서 동작)
 
-**기준선은 `main`(`5aed177`)에서 2026-10-12 실측한 값이다**(유닛 수는 10-05 와 동일)(루트 `CLAUDE.md` 테스트 절과 동일).
+**기준선은 `main`(`5aed177`)에서 2026-10-12 실측한 값이다**(10-13 `0804742` 로 유닛 1,495)(루트 `CLAUDE.md` 테스트 절과 동일).
 
 | 대상 | 명령 | 현재 기준선 |
 |---|---|---|
 | 타입 | `pnpm typecheck` | 0 에러 |
 | 린트 | `pnpm lint` | **0 error / 0 warning** — `eslint .`(저장소 전체), react-hooks v7 4규칙은 **error**(§0-15) |
-| 유닛 | `pnpm test` | **89 파일 / 1,490 passed / 1 skipped** |
+| 유닛 | `pnpm test` | **89 파일 / 1,495 passed / 1 skipped**(10-13) |
 | PDF 회귀 | `pnpm test:pdf` | 5 케이스 OK (약 500ms) — `photo-downscale` 추가(2026-10-05), darwin·linux 해시 모두 등재 |
 | 접근성 | `pnpm test:a11y` | 25 passed / 1 skipped (WCAG 2.1 AA 위반 0) |
 | E2E 스모크 | `pnpm e2e` | 12 passed |
@@ -215,7 +215,8 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 
 1. **Storige 계약 의존** — 코드에 `FROZEN` 이라는 마커 문자열은 **없다**(grep 하면 0건이니 stale 로 오판 말 것).
    근거 주석: `lib/storige/client.ts` 상단(키 2종·90MB 임계)과 ValidateOpts.
-   깨지 말아야 할 의존: 응답 최상위 `id` 키 · `body.includes("STORIGE_NOT_S3")` 폴백 ·
+   깨지 말아야 할 의존: 응답 최상위 `id` 키 · presign 503 `STORAGE_NOT_S3` 폴백(`isNotS3Body` — 서버 철자는 STORAGE, 10-13 전까지 STORIGE 로 잘못 찾아 죽어 있었다) ·
+   검증 잡 result 의 **이중 중첩** `result.result.{isValid,errors,warnings}`(`extractValidationResult` — 10-13 전까지 한 단계 얕게 읽어 늘 비어 있었다, STATUS §0-24) ·
    90MB 라우팅 임계 · presign 응답 3키 `fileId`/`uploadUrl`/`uploadToken`.
    계약면 변경 시 `/Users/yohan/Developer/Bookmoa Storige editor/storige/docs/CONTRACT_FREEZE.md` 대조.
 2. **PDF baseline 규칙** — 텍스트 렌더는 **레포 폰트를 직접 등록**해서 잰다
