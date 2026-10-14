@@ -236,6 +236,11 @@ pending 으로 남고, 토스 웹훅 URL 이 미등록인 동안에는 수렴 �
     입력 파일 사이트를 대조하며 **100p 사이트·미지정 파일 모두 통과, 403 은 다른 사이트 귀속 파일만**.
     100p 대조: 검증은 워커 키(`lib/storige/client.ts:459`), 업로드는 편집기 키인데 두 키가 같은 100p 사이트 행이다(§0-17 P4 항목, Storige 09-30 확인)
     → 켜도 100p 경로에서 403 없음. **남은 확인은 키 회전 시 두 키의 사이트 일치뿐**(어긋나면 검증 403/404 → `ERROR` → 무검증 발주 위험, 함정 25).
+  · **Wave 10 서버 정비 사전 고지**(2026-10-14 05:45~06:15Z UTC, ACK 불요): api·worker 재시작(각 수십 초). 바뀌는 것 — v1 도서 확정 실패 응답 `errorDetail` 에
+    `jobErrorCode` 키 추가(100p 미사용) · 잡 상태 보고 라우트 `PATCH /api/worker-jobs/external/:id/status`·`PATCH /api/worker-jobs/:id/status` 내부 전용화.
+    100p 대조: Storige 호출 중 PATCH 0건(`lib/storige/client.ts` 의 유일한 PUT 은 R2 presigned 직결 업로드), v1·errorDetail·jobErrorCode 0건, 저장소 문서에도 상태 보고 라우트 언급 0건
+    (Storige 가 말한 "검토 권장 문구"는 Storige 측 파트너 안내 문서). 불변 — 잡·세션·업로드 응답·상태 코드·웹훅, 검증 `result.result`, presign 503 `STORAGE_NOT_S3`.
+    잡 응답 필드 한정(§0-24)은 이번에 켜지 않음(별도 사전 통지). **100p 영향 없음.** 완료 통지 대기.
 - 인계 문서 stale 정리(`7101c38`) — lint 0/0·`proxy.ts`·fabric 7 함정·Dependabot 열린 PR 0. `git fetch --prune` 으로 원격 추적 참조 16개 정리(원격 브랜치 `main` 하나).
 
 ### 0-16. fabric 6.9.1 → 7.4.0 전환 (2026-09-30) — prod audit 0
