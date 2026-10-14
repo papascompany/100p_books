@@ -44,7 +44,15 @@
 - 회귀 테스트 5건(`lib/storige/client.test.ts`). 게이트: typecheck 0 · lint 0/0 · vitest 89파일 **1,495** / 1 skip · test:pdf 5 · build.
 - 필드 한정 후에도 `result` 중첩 구조는 불변(Storige 확인). FILE_CORRUPTED details 제거는 이제 관리자 화면 오류 문구에 그대로 보인다(표시뿐).
 - **Storige 확인(10-13 07:2xZ)**: ACK·FYI 처리 기록 완료. 약속 — 검증 잡 `result.result` 이중 구조 유지(바꿀 땐 별도 사전 통지) ·
-  presign 503 code `STORAGE_NOT_S3` 불변 · 전환 사전 통지(시각 포함)는 이 세션 창구로. **전환 통지 대기.**
+  presign 503 code `STORAGE_NOT_S3` 불변 · 전환 사전 통지(시각 포함)는 이 세션 창구로.
+- **전환 사전 통지(2026-10-14 06:0xZ)**: **06:30Z 이후 켬**(이의 시 06:30Z 전 통지하면 보류). 약속한 "사전 통지 후 3영업일"을 100p 회신(읽는 키 모두 남음·빠지는 키 의존 0)을
+  근거로 앞당김. 대상 `GET worker-jobs/external/:id`·`validate/external` 등 생성 응답, 남는 키 14개(위와 같음, options 없으면 null).
+  검증 항목 키 code·message·details·autoFixable·fixMethod, FILE_CORRUPTED message 고정 문구('파일이 손상되었습니다. 다시 업로드해주세요.')·details 제거,
+  errorMessage 안내 문구화·errorDetail 원시값 키만. 빠지는 키 options 나머지·inputFileUrl·siteId·fileId·pdfFileId·requestId·editSession. 라우트·인증·상태 코드·status·errorCode 값·웹훅·
+  `STORAGE_NOT_S3` 불변. 되돌림 = 설정 원복(api 재시작 수십 초) 후 즉시 통지. 계약 문서 CONTRACT_FREEZE v1.20(전환 완료 통지 시각 적용).
+  100p 재대조(06:03Z, HEAD `aee69ec`): 잡 응답에서 읽는 키는 `client.ts:478`(생성 id)·`:509`(조회 id)·`:553·559`(status)·`:557`(result) 뿐,
+  관리자 화면 오류 표시는 항목의 message→code 순(`app/admin/orders/[id]/page.tsx` `messageOf`) — 둘 다 남는다. 업로드·presign 응답의 fileId 는 다른 API 라 대상 아님.
+  → **이의 없음, 회신하지 않음**(이의 시에만 회신 요청). 전환 완료 통지 대기.
 
 ### 0-23. Dependabot 5건 통합 병합 (2026-10-12) — PR #26, 운영 배포 완료
 
