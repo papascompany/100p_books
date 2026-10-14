@@ -52,7 +52,10 @@
   `STORAGE_NOT_S3` 불변. 되돌림 = 설정 원복(api 재시작 수십 초) 후 즉시 통지. 계약 문서 CONTRACT_FREEZE v1.20(전환 완료 통지 시각 적용).
   100p 재대조(06:03Z, HEAD `aee69ec`): 잡 응답에서 읽는 키는 `client.ts:478`(생성 id)·`:509`(조회 id)·`:553·559`(status)·`:557`(result) 뿐,
   관리자 화면 오류 표시는 항목의 message→code 순(`app/admin/orders/[id]/page.tsx` `messageOf`) — 둘 다 남는다. 업로드·presign 응답의 fileId 는 다른 API 라 대상 아님.
-  → **이의 없음, 회신하지 않음**(이의 시에만 회신 요청). 전환 완료 통지 대기.
+  → **이의 없음, 회신하지 않음**(이의 시에만 회신 요청).
+  → **전환 완료(2026-10-14 06:30Z, api 재시작 06:30:2xZ)**: 통지 시각 06:31Z 부터 CONTRACT_FREEZE **v1.20** 적용. Storige 확인 — 최근 검증 잡 응답 키 14개(id·status·result 포함),
+    `result.result` 유지, 스모크 정상, 전환 후 잡 라우트 4xx·5xx 0. **7일 관찰(~10-21)**. 이상 시 UTC 시각 + 잡 id 앞 8자를 Storige 에 알리면 즉시 원복·통지.
+    100p 쪽 신호: 관리자 주문 상세의 검증 상태가 PROCESSING/ERROR 로만 남거나 오류·경고 내용이 비면 이 전환을 먼저 의심할 것(운영 결제 주문 0건이라 아직 실측 없음).
 
 ### 0-23. Dependabot 5건 통합 병합 (2026-10-12) — PR #26, 운영 배포 완료
 
