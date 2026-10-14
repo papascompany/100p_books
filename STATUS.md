@@ -240,7 +240,9 @@ pending 으로 남고, 토스 웹훅 URL 이 미등록인 동안에는 수렴 �
     `jobErrorCode` 키 추가(100p 미사용) · 잡 상태 보고 라우트 `PATCH /api/worker-jobs/external/:id/status`·`PATCH /api/worker-jobs/:id/status` 내부 전용화.
     100p 대조: Storige 호출 중 PATCH 0건(`lib/storige/client.ts` 의 유일한 PUT 은 R2 presigned 직결 업로드), v1·errorDetail·jobErrorCode 0건, 저장소 문서에도 상태 보고 라우트 언급 0건
     (Storige 가 말한 "검토 권장 문구"는 Storige 측 파트너 안내 문서). 불변 — 잡·세션·업로드 응답·상태 코드·웹훅, 검증 `result.result`, presign 503 `STORAGE_NOT_S3`.
-    잡 응답 필드 한정(§0-24)은 이번에 켜지 않음(별도 사전 통지). **100p 영향 없음.** 완료 통지 대기.
+    잡 응답 필드 한정(§0-24)은 이번에 켜지 않음(별도 사전 통지). **100p 영향 없음.**
+    → **완료 통지(2026-10-14 05:47Z)**: worker 05:45Z · api 05:47Z 재시작, Storige 스모크 정상. 변화는 고지한 두 가지뿐, 계약 문서 CONTRACT_FREEZE **v1.19**.
+    잡·세션·업로드 응답·`result.result`·`STORAGE_NOT_S3` 불변, 필드 한정 미적용(전환 시각 별도 사전 통지 대기).
 - 인계 문서 stale 정리(`7101c38`) — lint 0/0·`proxy.ts`·fabric 7 함정·Dependabot 열린 PR 0. `git fetch --prune` 으로 원격 추적 참조 16개 정리(원격 브랜치 `main` 하나).
 
 ### 0-16. fabric 6.9.1 → 7.4.0 전환 (2026-09-30) — prod audit 0
