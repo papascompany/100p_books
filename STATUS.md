@@ -61,6 +61,8 @@
   → **새 창구 `20261013 Storige 편집기·워커 개발 계속`(시작 직후엔 날짜 없는 이름)(10-14) — ACK 회신 완료.** 옛 창구로는 보내지 않는다. 이상 보고는 UTC + 잡 id 앞 8자로 새 창구에.
 - **Storige FYI(10-14 09:34Z, 회신 불요)**: PLATFORM_INTEGRATION_GUIDE 정정(master `ea4ae789`) — 2.2 단계 6·4.1 흐름도·5.1 compose-mixed 행의 합성 산출물 회수 안내를
   운영 중인 output-url 재발급 경로로 맞춤. API·응답·FREEZE 불변(v1.20, `result.result` 유지). 100p 는 Storige 합성·output-url 미사용(코드의 "compose" 는 100p 내부 PDF 조립 단계명) → **영향 없음.**
+- **Storige 창구 재교대(10-15 09:1xZ)**: 새 창구 **`20261014 Storige 편집기·워커 개발 진행`** — ACK 회신 완료(100p 창구명 불변 안내). 옛 창구 2개는 창구 아님.
+  상태 불변 — 운영 api·worker `78b5c5a`, FREEZE v1.20, 필드 한정 7일 관찰(~10-21) 지금까지 이상 없음. **10-21 뒤 api 재빌드(OpenAPI 스키마 추가, 응답 동작 불변) 사전 통지 예정.**
 
 ### 0-23. Dependabot 5건 통합 병합 (2026-10-12) — PR #26, 운영 배포 완료
 
