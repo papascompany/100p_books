@@ -2,12 +2,11 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 **2026-10-12** · 운영 코드 기준 **`5aed177`**(Dependabot 5건 통합 — next 16.4.0·zod 4·zustand 5·vitest 5·jsdom 30, STATUS §0-23) · CI 3잡 green · Vercel prod success · 운영 URL e2e 12·e2e:auth 5 통과
-> **미병합 브랜치·worktree·열린 PR 없음.**
-> ✅ **2026-10-09 네트워크 이상 해소**: 같은 날 새 세션(`20261008 100p_books CTO 세션 인수인계`) 첫 작업에서 `git fetch` 가 처음 1회 TLS 오류 뒤
->    수 분 만에 정상화돼(인증서 Sectigo·SAN github.com 확인) 미푸시 docs 커밋 `e4719bd` 를 HTTPS 로 push 했다 — `main` = `origin/main`.
->    SSH 우회는 **불가**(이 Mac 의 ed25519 키가 GitHub 계정에 미등록, `Permission denied (publickey)`). 재발 시 HTTPS 재시도가 우선이고,
->    SSH 를 쓰려면 오너가 공개키를 GitHub 에 등록해야 한다. 교대 통지는 Storige·북모아 개발·북모아 관리자 세션 3곳에 전송 완료(10-09).
+> 갱신 **2026-10-16**(세션 교대) · 운영 코드 기준 **`0804742`**(Storige 검증 결과 중첩 파싱·STORAGE_NOT_S3, STATUS §0-24) — 그 아래 `44edc75`(prod audit 0)·`5aed177`(next 16.4·zod 4·zustand 5·vitest 5·jsdom 30, §0-23).
+>   이후 커밋은 전부 docs(최신 = STATUS §0-25 커밋). CI 3잡 green · Vercel prod success.
+> **미병합 브랜치·worktree 없음.** ⚠️ **열린 PR 1건: Dependabot #27**(lucide-react 1.53→1.54, npm-minor-patch 그룹) — 미검토.
+>   병합 끝난 Dependabot 원격 브랜치 6개(`origin/dependabot/...`)가 남아 있다 — 정리 여부는 사용자 판단(원격 삭제라 확인 후에만).
+> ✅ GitHub HTTPS 정상(10-09 TLS 이상은 같은 날 해소). SSH 는 이 Mac 키가 GitHub 미등록이라 불가 — 재발 시 HTTPS 재시도.
 > ✅ 마이그레이션 `0001~0033` 전부 운영 적용(STATUS §0-14) · QA-1 피해 0 · 고아 사진 0 · `pnpm audit --prod` 0(10-12 `44edc75` — STATUS §0-23).
 > ✅ 09-28~30: Dependabot 정리 · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 0/0(§0-15) · `proxy.ts` ·
 >    **fabric 7.4.0**(§0-16) · Storige DELETE 404 구분(§0-17).
@@ -30,8 +29,9 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
 - **정본 로컬**: `/Users/yohan/Developer/claude/100p_books` (branch `main`).
   Documents 사본은 node_modules 제거됨 — 쓰지 말 것.
 - 레포 `papascompany/100p_books` (PUBLIC). main push → **Vercel auto-deploy** 정상.
-- **브랜치 상태 (2026-10-12)** — `main` = `origin/main` = `5aed177`(이후 docs 커밋 가능). **미병합 브랜치·worktree 없음**,
-  원격 브랜치는 `main` 하나뿐(Dependabot 브랜치는 PR 이 닫히면 사라진다). 최근 코드 커밋(새 → 옛): `5aed177` zod 4(#22) · `2839ba9` jsdom 30(#23) ·
+- **브랜치 상태 (2026-10-16)** — `main` = `origin/main`(최신은 docs 커밋). **미병합 브랜치·worktree 없음.** 원격에는 `main` 외에 병합 끝난
+  Dependabot 브랜치 6개와 열린 PR #27 브랜치가 있다. 최근 코드 커밋(새 → 옛): `0804742` Storige 검증 결과 중첩·STORAGE_NOT_S3(§0-24) ·
+  `44edc75` tailwindcss-animate devDeps(§0-23) · `5aed177` zod 4(#22) · `2839ba9` jsdom 30(#23) ·
   `29ad54d` vitest 5(#21) · `f0085a5` zustand 5(#24) · `f0b89e2` minor/patch 16종·next 16.4.0(#25) — 통합 PR #26(§0-23) · `2360f3c` PDF 회귀 linux 해시 · `8ffb2c8` PDF 사진 슬롯 축소 디코드(§0-20) ·
   `90d2615` 결제 키 pending 수렴 도구(§0-19) · `ea1610e` SW 캐시 v4 · `99f3702`·`7609291`·`e707538`·`b6b3d7c`·`b8783ea` UI·에디터(§0-18) ·
   `e32edc1` Storige DELETE 404(§0-17) · `14f30d9`·`c817726` fabric 7(§0-16).
@@ -42,7 +42,9 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
   이고, 그 위에 INT-ui `34a5897` 이 올라가 있다.
 - **main 브랜치 보호가 켜져 있다**(2026-09-17): CI 3잡 필수 체크, force-push·삭제 금지,
   관리자 우회 허용(`enforce_admins=false`). Dependabot alerts·security updates 활성화.
-  **열린 PR 0건 목표** — Dependabot PR 은 09-28~30(§0-15·§0-16)·10-12(#21~#25 → 통합 PR #26, §0-23)에 정리했다. 10-12 병합 직후 #21~#25 는 Dependabot 재검사가 닫을 예정이었다 — 열려 있으면 닫을 것.
+  Dependabot PR 은 09-28~30(§0-15·§0-16)·10-12(#21~#25 → 통합 PR #26 rebase 병합, §0-23)에 정리했고 #21~#25 는 Dependabot 이 닫았다.
+  **이 저장소는 GitHub auto-merge 가 꺼져 있다** — PR 은 CI 통과를 확인한 뒤 `gh pr merge <n> --rebase` 로 직접 병합한다.
+  Dependabot PR 의 원래 CI 가 오래된 main 기준이면(테스트 파일 수로 대조) 현 main 위에서 다시 검증할 것(§0-23).
   `dependabot.yml` 의 ignore 는 버전 번호가 아니라 `next`·`react*`·`fabric`·`eslint*`·`@types/node` 의
   **semver-major 업데이트** 단위라 Next 16/React 19 전환 후에도 그대로 유효하다.
 - **로컬에서 전체 검증이 가능하다**:
@@ -91,7 +93,7 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
 로컬 `.env.local` 에는 Supabase 3종 + TOSS 3종만 있고 **`STORIGE_*` 키가 없다** →
 Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(미설정 시 503/SKIPPED).
 
-- 첫 작업 전 루트 `STATUS.md`(§0-22~§0-14) + 이 문서를 읽고 현재 상태를 사용자에게 보고할 것.
+- 첫 작업 전 루트 `STATUS.md`(§0-25~§0-14) + 이 문서를 읽고 현재 상태를 사용자에게 보고할 것.
   ⚠️ **성능 수치 정본은 `STATUS.md` §0-5(2026-08-07, prod 5회 중앙값)** 다.
   STATUS.md 안의 "Performance 97 · LCP 1.5s"(§M8 QA 표)는 **2026-05-13 옛 측정치**이니
   baseline 으로 쓰지 말 것.
@@ -127,6 +129,12 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 ```
 
 ### 2. 완료된 것 — 재작업 금지 (증거 커밋 포함)
+
+**2026-10-12~15 (의존성·Storige 연동 결함)** — 상세는 `STATUS.md` §0-22~§0-24
+- 10-05 변경분 대상 운영 URL `e2e:auth` 5 passed(§0-22).
+- Dependabot 5건 통합(PR #26): next 16.4.0 · zod 4(`z.record` 2인자 1곳) · zustand 5 · vitest 5 · jsdom 30 · 마이너 16종(§0-23) — 함정 32 번.
+- `tailwindcss-animate` devDependencies 이동 → `pnpm audit --prod` 0(`44edc75`) — 함정 33 번.
+- Storige 검증 결과 이중 중첩 파싱 · presign `STORAGE_NOT_S3` 철자(`0804742`) — 함정 34 번.
 
 **2026-10-05 (PDF 렌더 메모리)** — 상세는 `STATUS.md` §0-20
 - 사진을 슬롯 크기로 줄여 디코드(`lib/pdf/photo-downscale.ts`) — collage-6 RSS 약 -45% · 함정 31 번.
@@ -380,6 +388,20 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
     업스케일·EXIF orientation≠1·sharp 실패는 기존 경로다 — 이 예외를 없애면 기존 렌더 결과가 바뀐다. sharp 는 하드닝본만(함정 17).
     회귀 `photo-downscale` 케이스가 축소 경로를 고정한다(기존 `photo-shadow` 는 사진이 작아 업스케일 경로만 탄다).
 
+--- 아래는 2026-10-12~15 에 새로 확인한 함정이다 ---
+
+32. **zod 4 · zustand 5 규칙**(§0-23). zod: `z.record` 는 키 스키마 필수(`z.record(z.string(), …)`) · `.uuid()` 는 RFC 엄격(우리 id 는 전부
+    `gen_random_uuid()` 라 통과) · 객체 단위 `.default({...})` 는 기본값을 재파싱하지 않는다(내부 필드 기본값이 필요하면 `.prefault`) ·
+    `invalid_type_error`·`required_error`·`errorMap` 은 없다. zustand: selector 가 매번 새 객체·배열을 반환하면 무한 렌더 — 필드 하나를 고르거나 `useShallow`.
+    vitest 5 는 `clearMocks` 기본 true(`beforeAll`·모듈 최상위에서 쌓은 호출 기록이 테스트마다 지워진다) · `vi.mock` 은 최상위에서만.
+    Playwright 를 올리면 로컬에서 `pnpm exec playwright install chromium` 이 필요하다(안 하면 e2e 가 브라우저 없음으로 실패).
+33. **런타임 import 가 없는 빌드 도구는 devDependencies 에 둔다**(§0-23). `tailwindcss-animate` 가 dependencies 에 있어 tailwindcss 3 트리 전체가
+    prod audit 에 잡혔다(braces·postcss-selector-parser). Vercel 설치(`pnpm install --frozen-lockfile`)는 devDependencies 를 포함하므로 빌드 영향 없다.
+34. **Storige 검증 잡 result 는 이중 중첩 `result.result.{isValid,errors,warnings}` 이다**(§0-24). 반드시 `extractValidationResult()` 로 꺼낼 것 —
+    한 단계 얕게 읽으면 세 값이 조용히 비어 관리자 화면에 오류·경고가 안 보인다(10-13 전까지 실제로 그랬다, 발주 차단은 status 만 봐서 무영향).
+    presign 503 의 서버 code 는 **`STORAGE_NOT_S3`**(STORIGE 아님) — `isNotS3Body()` 가 판정한다. 둘 다 Storige 가 유지를 약속했다(10-13).
+    잡 응답은 10-14 06:30Z 부터 키 14개로 한정(FREEZE v1.20) — 100p 가 읽는 id·status·result 는 남는다. 새 필드를 읽으려면 그 목록에 있는지 먼저 확인할 것.
+
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
 
 **런치 차단 항목 없음**(`/admin` 런치 체크 "차단 항목 없음 — 서비스 가능", 2026-10-05 확인). 서비스 경로
@@ -395,7 +417,9 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 **여기에 목록을 다시 만들지 말 것.** 항목이 해소되면 런북에서 지우고, 새 운영 이슈는 런북에 추가한다.
 
 **검증 후속(런북 백로그에도 등재)**: Vercel Preview 런타임 검증 불가(Preview env 0종) · Lighthouse 비교 방법 재정의 ·
-PDF 측정 x64 확정(collage-6 17p·48MP 원본). (10-05 변경분 대상 `e2e:auth` 재실행은 10-12 완료 — 5 passed, STATUS §0-22.)
+PDF 측정 x64 확정(collage-6 17p·48MP 원본).
+**Storige 관찰 중**: 잡 응답 필드 한정(FREEZE v1.20) 7일 관찰 ~10-21 · 그 뒤 Storige api 재빌드(OpenAPI 스키마 추가, 응답 불변) 사전 통지 예정 ·
+`JOB_FILE_SITE_STRICT` 는 off(켜기 전 안내+ACK+최소 3영업일). 검증 결과 표시(§0-24 수정)는 운영 결제 주문 0건이라 아직 실측 없음.
 
 운영 규칙: **환불은 전액만**(부분 취소는 앱이 의도적으로 무시), **`CRON_SECRET` 을 지우지 말 것.**
 
@@ -432,14 +456,18 @@ PDF 측정 x64 확정(collage-6 17p·48MP 원본). (10-05 변경분 대상 `e2e:
      `docs: Storige Wave N … 배포 통지 기록 — 100p 영향 없음` 으로 커밋·푸시 → CI 3잡·Vercel 결과까지 확인해 보고한다.
   ④ 회신 요청이 있으면 코드 근거로 사실만 답한다. 회신이 계약·운영에 영향을 주는 내용(예: 경로 폐기 동의, 키 회전)이면 보내기 전에 사용자에게 먼저 알린다.
 - **결제 경로 변경은 적대 리뷰(o5-security-reviewer)를 반드시 거친다** — 10-05 결제 수렴 도구에서 HIGH(이중 과금 경로)를 잡았다.
-- **세션 교대 시 다른 세션에 알린다**: Storige(**`20261014 Storige 편집기·워커 개발 진행`** — 2026-10-15 09:1xZ 교대, ACK 완료. 옛 창구 `20261013 Storige 편집기·워커 개발 계속`·`20261004 Storige 템플릿 변환관리 시작` 은 창구 아님. Storige 세션은 시작 직후 이름 앞에 날짜를 붙여 바꾸므로 보낼 때 `ListAgents` 로 현재 이름 확인. 옛 창구 `20261004 Storige 템플릿 변환관리 시작` 으로는 보내지 말 것)는 통지를 **세션 이름으로** 보낸다 — 옛 세션 이름으로 온
-  통지는 새 세션에 도착하지 않는다. 새 세션은 시작하면 `ListAgents` 로 자기 이름을 확인해 Storige 세션과 북모아 세션
-  (`20261007 북모아 개발 계속` · `20261005 북모아 관리자 개발 계속`)에 "100p 담당 세션이 바뀌었다 — 통지는 이 세션으로" 를 한 번 보낼 것.
+- **세션 교대 시 다른 세션에 알린다**: 다른 세션은 통지를 **세션 이름으로** 보낸다 — 옛 이름으로 온 통지는 새 세션에 도착하지 않는다.
+  새 세션은 시작하면 `ListAgents` 로 자기 이름을 확인해 아래 세션에 "100p 담당 세션이 바뀌었다 — 통지는 이 세션으로" 를 한 번 보낼 것.
+  · **Storige 창구**: `20261014 Storige 편집기·워커 개발 진행`(2026-10-15 교대, 마지막 확인 10-15). 옛 창구 `20261013 Storige 편집기·워커 개발 계속`·
+    `20261004 Storige 템플릿 변환관리 시작` 은 창구 아님 — 보내지 말 것.
+  · **북모아 세션**: 이름이 자주 바뀐다(10-15 목록: `20261014 북모아 관리자 수정 개발 계속`·`20261011 북모아 관리자 수정 계속`). `ListAgents` 에서 살아 있는(interactive) 북모아 세션에 보낼 것.
+  · 세션 이름은 시작 직후 앞에 날짜가 붙어 바뀌기도 한다 — 보내기 직전에 `ListAgents` 로 현재 이름을 확인하고, 실패하면 `이름 [ref]` 로 재시도.
   보낼 때 meta 정보(세션 이름)만 담고, 계약·운영 변경 동의 같은 내용은 넣지 않는다.
+- **CI 결과 확인은 한 번씩 조회한다**(폴링·대기 루프 금지). 연속 push 로 앞 커밋의 CI 가 `cancelled` 되면 그 위 커밋의 CI 통과로 함께 검증된 것이다.
 
 **첫 작업**: ① `git status -sb && git log --oneline -5 && git fetch` 로 실제 상태와 GitHub 연결을 확인하고
-(main HEAD 가 `2360f3c` 이후인지, `ahead` 면 미푸시 docs 커밋), ② `ListAgents` 로 자기 세션 이름을 확인해 Storige·북모아 세션에
-교대 통지(위 "세션 교대" 규칙)를 보낸 뒤, ③ `STATUS.md`(§0-22~§0-14)와 이 문서를 읽어 현재 상태를
+(main HEAD 가 `0804742` 이후인지, `ahead` 면 미푸시 docs 커밋, 열린 PR 은 `gh pr list`), ② `ListAgents` 로 자기 세션 이름을 확인해 Storige·북모아 세션에
+교대 통지(위 "세션 교대" 규칙)를 보낸 뒤, ③ `STATUS.md`(§0-25~§0-14)와 이 문서를 읽어 현재 상태를
 한 문단으로 보고한다. **추천 목록을 만들지 말고**, 사용자가 시킨 작업을 바로 진행한다.
 운영 액션이 궁금하면 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md) 를 가리키는 것으로 끝.
 

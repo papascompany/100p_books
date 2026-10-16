@@ -8,7 +8,7 @@
 > 이중 사용 창, `0032`(클라이언트 직접 쓰기 봉쇄)로 `profiles.role` 권한 상승 표면이 닫혔다.
 > postcheck 요약(`docs/sql/0032-postcheck-summary.sql`) 운영 실행 **27행 전부 `pass=true`**(2026-09-28).
 >
-> 최종 업데이트: 2026-10-13
+> 최종 업데이트: 2026-10-16
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
 > 운영 빌드: `0804742`(2026-10-13, Storige 검증 결과 중첩 파싱·STORAGE_NOT_S3 — §0-24) · `44edc75`(2026-10-12, tailwindcss-animate devDeps 이동 → prod audit 0) · `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
@@ -25,7 +25,16 @@
 
 ---
 
-## 🆕 최근 작업 (2026-09-17 ~ 10-13)
+## 🆕 최근 작업 (2026-09-17 ~ 10-16)
+
+### 0-25. 세션 교대 정리 (2026-10-16) — 코드 변경 없음
+
+- 세션 `20261008 100p_books CTO 세션 인수인계`(10-09~10-16, 중간에 Fable 5.1 → Opus 5.5 전환)의 작업: §0-22(e2e:auth 재실행) · §0-23(Dependabot 5건·audit 0) ·
+  §0-24(Storige 필드 한정 대응·잠복 결함 2건 수정) · Storige Wave 9·10·연동 가이드 정정 통지 기록(§0-17) · Storige 창구 2회 교대 ACK.
+- 마감 상태: main CI 3잡·Vercel green(`f04d826` 기준) · 미병합 브랜치·worktree 없음 · **열린 PR = Dependabot #27(lucide-react 1.54) 미검토** ·
+  병합 끝난 Dependabot 원격 브랜치 6개 잔존(삭제는 사용자 판단).
+- 진행 중 외부 상태: Storige 잡 응답 필드 한정 FREEZE v1.20 관찰 ~10-21 → 이후 api 재빌드 사전 통지 예정. Storige 창구 = `20261014 Storige 편집기·워커 개발 진행`.
+- 인계 문서(`docs/NEXT-SESSION-PROMPT.md`) 갱신: 상단 요약 · 브랜치 상태 · 완료 목록(10-12~15) · 함정 32~34 · 세션 교대 규칙(현재 세션 이름) · CI 확인 방식.
 
 ### 0-24. Storige 잡 응답 필드 한정 질의 대응 + 잠복 결함 2건 수정 (2026-10-13) — `0804742`
 
