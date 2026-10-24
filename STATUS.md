@@ -270,6 +270,12 @@ pending 으로 남고, 토스 웹훅 URL 이 미등록인 동안에는 수렴 �
     잡 응답 필드 한정(§0-24)은 이번에 켜지 않음(별도 사전 통지). **100p 영향 없음.**
     → **완료 통지(2026-10-14 05:47Z)**: worker 05:45Z · api 05:47Z 재시작, Storige 스모크 정상. 변화는 고지한 두 가지뿐, 계약 문서 CONTRACT_FREEZE **v1.19**.
     잡·세션·업로드 응답·`result.result`·`STORAGE_NOT_S3` 불변, 필드 한정 미적용(전환 시각 별도 사전 통지 대기).
+  · **api·worker 재빌드 사후 통지**(2026-10-17 04:31Z 적용, 통지는 10-24 수신, 동작 변경 없음·회신 불요): 10-21 뒤 사전 통지 예정이던 재빌드분이 앞당겨 함께 배포됨.
+    ① `/api/docs` 에 파트너 잡 응답 스키마 `PartnerJobViewDto` 추가(문서만, 실제 응답 14키·`result.result` 불변) ② 관리자 미리보기 전용 `GET /api/worker-jobs/:id/output`
+    사이트 범위 검사 강화(파트너 키로는 원래 불가) ③ 업로드 크기 상한을 코드 상수로 고정(값 불변).
+    100p 대조: 잡 호출은 `POST worker-jobs/validate/external`(`lib/storige/client.ts:465`)·`GET worker-jobs/external/:id`(`:496`) 뿐 — `/output` 0건,
+    ≤90MB multipart 경로는 Storige multer 100MB 캡(`client.ts:43`) 기준이며 값 불변. **100p 영향 없음.**
+    또 FREEZE v1.20 7일 관찰은 10-21 종료 — 점검 구간 이상 없음, 누락 시간대는 10-28 전 재집계(달라지면 재통지).
 - 인계 문서 stale 정리(`7101c38`) — lint 0/0·`proxy.ts`·fabric 7 함정·Dependabot 열린 PR 0. `git fetch --prune` 으로 원격 추적 참조 16개 정리(원격 브랜치 `main` 하나).
 
 ### 0-16. fabric 6.9.1 → 7.4.0 전환 (2026-09-30) — prod audit 0
