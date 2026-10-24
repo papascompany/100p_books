@@ -8,10 +8,10 @@
 > 이중 사용 창, `0032`(클라이언트 직접 쓰기 봉쇄)로 `profiles.role` 권한 상승 표면이 닫혔다.
 > postcheck 요약(`docs/sql/0032-postcheck-summary.sql`) 운영 실행 **27행 전부 `pass=true`**(2026-09-28).
 >
-> 최종 업데이트: 2026-10-16
+> 최종 업데이트: 2026-10-24
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `0804742`(2026-10-13, Storige 검증 결과 중첩 파싱·STORAGE_NOT_S3 — §0-24) · `44edc75`(2026-10-12, tailwindcss-animate devDeps 이동 → prod audit 0) · `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
+> 운영 빌드: `af92b5a`(2026-10-24, Dependabot #28·#29 통합 PR #30 — next 16.4.2 · react 19.3.1 · canvas 1.0.11 · vite 7.3.7 · axe 4.14 a11y 수정, §0-26) · `0804742`(2026-10-13, Storige 검증 결과 중첩 파싱·STORAGE_NOT_S3 — §0-24) · `44edc75`(2026-10-12, tailwindcss-animate devDeps 이동 → prod audit 0) · `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
 > `proxy.ts` · 보안 overrides(**prod audit 0**) · Next 16.3.6. 그 이전 `2d403ae` = Next 16 전환(§0-12)+리뷰 후속(§0-13).
 > 그 직전 `34a5897` 까지 2026-09-17~21 보안·결제·편집 무결성 작업 전량 반영(§0-11).
 > **미병합 브랜치 없음.**
@@ -26,6 +26,23 @@
 ---
 
 ## 🆕 최근 작업 (2026-09-17 ~ 10-16)
+
+### 0-26. Dependabot #28·#29 통합 병합 + axe 4.14 a11y 수정 (2026-10-24) — PR #30, 운영 배포 완료
+
+- #28(minor/patch 20종)·#29(vite 7.3.6→7.3.7)를 `deps/2026-10-24` 에 순서대로 적용 → PR #30 → rebase 병합(main `ee2a546`·`c2428cf`·`af92b5a`). #28·#29 는 #30 근거 코멘트로 닫음.
+  주요 버전: next·eslint-config-next 16.4.2 · react/react-dom 19.3.1 · @napi-rs/canvas 1.0.11 · supabase-js 2.118.0 · radix 4종 · lucide-react 1.57 · zod 4.6.7 ·
+  vitest 5.0.5 · playwright 1.64.1 · **@axe-core/playwright 4.14** · @vercel/functions 3.10.1 · jsdom 30.1.3 · resend 6.33.
+- #29 는 #28 위에서 lockfile 충돌 → `pnpm update vite` 후 `package.json` 범위를 원래 `^7` 로 되돌리고 lockfile 재생성(`--frozen-lockfile` 통과).
+- **#28 a11y 23건 실패 원인 = axe 4.14 의 `label-content-name-mismatch`(WCAG 2.5.3 Label in Name) 신규 검사** — 앱 회귀 아님. 위반은 보이는 텍스트를 포함하지 않는
+  `aria-label` 3곳: 헤더 로고(`components/layout/Header.tsx`)·인증 레이아웃 로고(`app/(auth)/layout.tsx`)·홈 판형 카드(`components/home/BookSizeCards.tsx`). **규칙을 끄지 않고**
+  `aria-label` 을 제거해 보이는 텍스트가 이름이 되게 했다(`af92b5a`). 공유 페이지 로고(`app/share/[token]/page.tsx`, "100p Books 홈")는 보이는 텍스트를 포함해 위반 아님 — 미변경.
+- 검증: 로컬(darwin-arm64, load ~30) frozen install · typecheck 0 · lint 0/0 · vitest 89파일 1,495 / 1 skip · test:pdf 5(해시 불변, canvas 1.0.11) · build · e2e 12 ·
+  a11y 25 / 1 skip · **로컬 운영 빌드 `e2e:auth` 5 passed**. PR #30 CI 5체크 green — linux-x64 PDF 해시도 baseline 일치(신규 플랫폼 기록 아님). Vercel prod `af92b5a` success.
+- **보안**: 병합 전 lockfile(`b42d810`) 기준 `pnpm audit --prod` 는 이미 **4건(critical 2·high 2)** 이었다 — next 16.4.0 권고 3건(GHSA-2464-fhr4-w9xw · GHSA-673q-mjm6-r5xr critical ·
+  GHSA-p3m5-59mp-jv5r high, ≥16.4.1)과 zod 1건. 이번 병합으로 next 3건 해소. vite 3건(dev 전용)도 해소.
+  **잔여 1건(high, 병합 전부터 존재 — 회귀 아님)**: `zod@4.1.11` GHSA-mrhx-c7xc-m3w5(≥4.6.6) — 경로 `@vercel/functions > @vercel/oidc@4.0.1 > @vercel/cli-config@0.3.1 > zod`.
+  앱 코드는 `@vercel/functions` 의 `waitUntil` 만 쓴다(`lib/orders/finalize-paid.ts`). 해소 방안(override 등)은 후속. Dependabot alert 의 postcss-selector-parser(dev)도 잔존.
+- 병합 끝난 Dependabot 원격 브랜치 6개(§0-25)는 이번 확인 시점에 이미 없었다(원격 = main + #28·#29 브랜치).
 
 ### 0-25. 세션 교대 정리 (2026-10-16) — 코드 변경 없음
 

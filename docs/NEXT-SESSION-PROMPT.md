@@ -2,10 +2,10 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 **2026-10-16**(세션 교대) · 운영 코드 기준 **`0804742`**(Storige 검증 결과 중첩 파싱·STORAGE_NOT_S3, STATUS §0-24) — 그 아래 `44edc75`(prod audit 0)·`5aed177`(next 16.4·zod 4·zustand 5·vitest 5·jsdom 30, §0-23).
->   이후 커밋은 전부 docs(최신 = STATUS §0-25 커밋). CI 3잡 green · Vercel prod success.
-> **미병합 브랜치·worktree 없음.** ⚠️ **열린 PR 1건: Dependabot #27**(lucide-react 1.53→1.54, npm-minor-patch 그룹) — 미검토.
->   병합 끝난 Dependabot 원격 브랜치 6개(`origin/dependabot/...`)가 남아 있다 — 정리 여부는 사용자 판단(원격 삭제라 확인 후에만).
+> 갱신 **2026-10-24** · 운영 코드 기준 **`af92b5a`**(Dependabot #28·#29 통합 PR #30 + axe 4.14 a11y 수정, STATUS §0-26) — 그 아래 `0804742`(Storige 검증 결과 중첩 파싱, §0-24)· `44edc75`(prod audit 0)·`5aed177`(next 16.4·zod 4·zustand 5·vitest 5·jsdom 30, §0-23).
+>   CI 3잡 green · Vercel prod success.
+> **미병합 브랜치·worktree 없음 · 열린 PR 0**(#27 은 #28 로 대체돼 닫힘, #28·#29 는 #30 으로 병합 후 닫음).
+> ⚠️ `pnpm audit --prod` **high 1건 잔존**(병합 전부터): `@vercel/functions > @vercel/oidc > @vercel/cli-config > zod@4.1.11`(GHSA-mrhx-c7xc-m3w5) — 후속(STATUS §0-26).
 > ✅ GitHub HTTPS 정상(10-09 TLS 이상은 같은 날 해소). SSH 는 이 Mac 키가 GitHub 미등록이라 불가 — 재발 시 HTTPS 재시도.
 > ✅ 마이그레이션 `0001~0033` 전부 운영 적용(STATUS §0-14) · QA-1 피해 0 · 고아 사진 0 · `pnpm audit --prod` 0(10-12 `44edc75` — STATUS §0-23).
 > ✅ 09-28~30: Dependabot 정리 · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 0/0(§0-15) · `proxy.ts` ·
@@ -29,8 +29,8 @@ Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 
 - **정본 로컬**: `/Users/yohan/Developer/claude/100p_books` (branch `main`).
   Documents 사본은 node_modules 제거됨 — 쓰지 말 것.
 - 레포 `papascompany/100p_books` (PUBLIC). main push → **Vercel auto-deploy** 정상.
-- **브랜치 상태 (2026-10-16)** — `main` = `origin/main`(최신은 docs 커밋). **미병합 브랜치·worktree 없음.** 원격에는 `main` 외에 병합 끝난
-  Dependabot 브랜치 6개와 열린 PR #27 브랜치가 있다. 최근 코드 커밋(새 → 옛): `0804742` Storige 검증 결과 중첩·STORAGE_NOT_S3(§0-24) ·
+- **브랜치 상태 (2026-10-24)** — `main` = `origin/main`. **미병합 브랜치·worktree 없음 · 열린 PR 0.** 최근 코드 커밋(새 → 옛): `af92b5a` a11y aria-label(§0-26) ·
+  `c2428cf` vite 7.3.7(#29) · `ee2a546` minor/patch 20종·next 16.4.2(#28) — 통합 PR #30 · `0804742` Storige 검증 결과 중첩·STORAGE_NOT_S3(§0-24) ·
   `44edc75` tailwindcss-animate devDeps(§0-23) · `5aed177` zod 4(#22) · `2839ba9` jsdom 30(#23) ·
   `29ad54d` vitest 5(#21) · `f0085a5` zustand 5(#24) · `f0b89e2` minor/patch 16종·next 16.4.0(#25) — 통합 PR #26(§0-23) · `2360f3c` PDF 회귀 linux 해시 · `8ffb2c8` PDF 사진 슬롯 축소 디코드(§0-20) ·
   `90d2615` 결제 키 pending 수렴 도구(§0-19) · `ea1610e` SW 캐시 v4 · `99f3702`·`7609291`·`e707538`·`b6b3d7c`·`b8783ea` UI·에디터(§0-18) ·
@@ -100,7 +100,7 @@ Storige 연동을 로컬에서 실증하려면 키를 먼저 받아야 한다(�
 
 ### 1. 검증 명령 (전부 로컬에서 동작)
 
-**기준선은 `main`(`5aed177`)에서 2026-10-12 실측한 값이다**(10-13 `0804742` 로 유닛 1,495)(루트 `CLAUDE.md` 테스트 절과 동일).
+**기준선은 `main`(`5aed177`)에서 2026-10-12 실측한 값이다**(10-13 `0804742` 로 유닛 1,495, 10-24 `af92b5a` 에서 전 항목 동일 재확인)(루트 `CLAUDE.md` 테스트 절과 동일).
 
 | 대상 | 명령 | 현재 기준선 |
 |---|---|---|
@@ -401,6 +401,9 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
     한 단계 얕게 읽으면 세 값이 조용히 비어 관리자 화면에 오류·경고가 안 보인다(10-13 전까지 실제로 그랬다, 발주 차단은 status 만 봐서 무영향).
     presign 503 의 서버 code 는 **`STORAGE_NOT_S3`**(STORIGE 아님) — `isNotS3Body()` 가 판정한다. 둘 다 Storige 가 유지를 약속했다(10-13).
     잡 응답은 10-14 06:30Z 부터 키 14개로 한정(FREEZE v1.20) — 100p 가 읽는 id·status·result 는 남는다. 새 필드를 읽으려면 그 목록에 있는지 먼저 확인할 것.
+35. **axe(`@axe-core/playwright`) 업데이트는 검사 규칙을 늘린다**(§0-26). 의존성 PR 의 a11y 실패가 앱 변경 없이 나면 먼저 새 규칙인지 볼 것 —
+    4.14 의 `label-content-name-mismatch`(WCAG 2.5.3)가 실제 사례다. **규칙을 끄지 말고 마크업을 고친다.** 링크·버튼에 `aria-label` 을 달 때는 보이는 텍스트를
+    그대로 포함시키거나, 보이는 텍스트가 충분하면 `aria-label` 을 달지 말 것. CI 로그는 첫 위반 라우트에 가려 다른 라우트 위반이 안 보일 수 있으니 로컬 `pnpm test:a11y` 로 전부 확인한다.
 
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
 
