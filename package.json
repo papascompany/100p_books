@@ -91,7 +91,8 @@
       "fabric>canvas": "-",
       "ws": "^8.21.0",
       "jsdom>canvas": "-",
-      "exceljs>uuid": "^11.1.1"
+      "exceljs>uuid": "^11.1.1",
+      "@vercel/cli-config>zod": "^4.6.6"
     }
   }
 }
