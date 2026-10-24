@@ -41,7 +41,10 @@
 - **보안**: 병합 전 lockfile(`b42d810`) 기준 `pnpm audit --prod` 는 이미 **4건(critical 2·high 2)** 이었다 — next 16.4.0 권고 3건(GHSA-2464-fhr4-w9xw · GHSA-673q-mjm6-r5xr critical ·
   GHSA-p3m5-59mp-jv5r high, ≥16.4.1)과 zod 1건. 이번 병합으로 next 3건 해소. vite 3건(dev 전용)도 해소.
   **잔여 1건(high, 병합 전부터 존재 — 회귀 아님)**: `zod@4.1.11` GHSA-mrhx-c7xc-m3w5(≥4.6.6) — 경로 `@vercel/functions > @vercel/oidc@4.0.1 > @vercel/cli-config@0.3.1 > zod`.
-  앱 코드는 `@vercel/functions` 의 `waitUntil` 만 쓴다(`lib/orders/finalize-paid.ts`). 해소 방안(override 등)은 후속. Dependabot alert 의 postcss-selector-parser(dev)도 잔존.
+  앱 코드는 `@vercel/functions` 의 `waitUntil` 만 쓴다(`lib/orders/finalize-paid.ts`). Dependabot alert 의 postcss-selector-parser(dev)는 잔존.
+  → **같은 날 해소(PR #31)**: 상류 최신(cli-config 0.3.3)도 `zod: 4.1.11` 정확 고정이라 `pnpm.overrides` 에 `"@vercel/cli-config>zod": "^4.6.6"` 추가 →
+    lockfile 은 zod 4.1.11 제거·4.6.7 통합뿐 → **`pnpm audit --prod` 0 복구**. cli-config 가 쓰는 zod API(object·string·union·literal·encode)는 4.6 동일,
+    로드·스키마 safeParse 실측 정상. 상류가 고정을 풀면 이 override 는 지워도 된다.
 - 병합 끝난 Dependabot 원격 브랜치 6개(§0-25)는 이번 확인 시점에 이미 없었다(원격 = main + #28·#29 브랜치).
 
 ### 0-25. 세션 교대 정리 (2026-10-16) — 코드 변경 없음

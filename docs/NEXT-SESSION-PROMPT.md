@@ -5,7 +5,7 @@
 > 갱신 **2026-10-24** · 운영 코드 기준 **`af92b5a`**(Dependabot #28·#29 통합 PR #30 + axe 4.14 a11y 수정, STATUS §0-26) — 그 아래 `0804742`(Storige 검증 결과 중첩 파싱, §0-24)· `44edc75`(prod audit 0)·`5aed177`(next 16.4·zod 4·zustand 5·vitest 5·jsdom 30, §0-23).
 >   CI 3잡 green · Vercel prod success.
 > **미병합 브랜치·worktree 없음 · 열린 PR 0**(#27 은 #28 로 대체돼 닫힘, #28·#29 는 #30 으로 병합 후 닫음).
-> ⚠️ `pnpm audit --prod` **high 1건 잔존**(병합 전부터): `@vercel/functions > @vercel/oidc > @vercel/cli-config > zod@4.1.11`(GHSA-mrhx-c7xc-m3w5) — 후속(STATUS §0-26).
+> ✅ `pnpm audit --prod` 0 — `@vercel/cli-config>zod` override(PR #31, STATUS §0-26). 상류가 zod 4.1.11 고정을 풀면 override 제거 가능.
 > ✅ GitHub HTTPS 정상(10-09 TLS 이상은 같은 날 해소). SSH 는 이 Mac 키가 GitHub 미등록이라 불가 — 재발 시 HTTPS 재시도.
 > ✅ 마이그레이션 `0001~0033` 전부 운영 적용(STATUS §0-14) · QA-1 피해 0 · 고아 사진 0 · `pnpm audit --prod` 0(10-12 `44edc75` — STATUS §0-23).
 > ✅ 09-28~30: Dependabot 정리 · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 0/0(§0-15) · `proxy.ts` ·
