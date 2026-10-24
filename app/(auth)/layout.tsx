@@ -11,7 +11,6 @@ export default function AuthLayout({
         <Link
           href="/"
           className="flex items-center gap-1.5 text-ink"
-          aria-label="홈으로"
         >
           <span className="font-display-num text-2xl font-bold leading-none">100p</span>
           <span className="text-base font-semibold tracking-tight">Books</span>

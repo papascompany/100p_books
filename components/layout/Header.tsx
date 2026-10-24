@@ -22,7 +22,6 @@ export default async function Header() {
         <Link
           href="/"
           className="flex items-center gap-1 text-ink"
-          aria-label="100p Books 홈"
         >
           <span className="font-display-num text-2xl font-bold leading-none">
             <span>100</span><span className="text-coral">p</span>
