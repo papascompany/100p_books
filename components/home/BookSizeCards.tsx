@@ -47,7 +47,6 @@ export default function BookSizeCards({ items }: { items?: SizeItem[] }) {
               href="/upload"
               className="group relative block isolate overflow-hidden rounded-2xl animate-fade-up motion-safe:hover:-translate-y-1.5 transition-transform duration-500 ease-out"
               style={{ aspectRatio: b.ratio, animationDelay: `${120 + i * 120}ms` }}
-              aria-label={`${b.name} (${b.size}) 선택하기`}
             >
               <Image
                 src={b.image}
