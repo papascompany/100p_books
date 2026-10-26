@@ -302,6 +302,8 @@ pending 으로 남고, 토스 웹훅 URL 이 미등록인 동안에는 수렴 �
     불변 — `/embed` 파라미터·postMessage 봉투·editor.complete·v1 오퍼레이션·웹훅 서명·잡 응답 14키·업로드 상한.
     100p 대조: Storige 호출은 upload/external(`lib/storige/client.ts:228`)·presigned-upload-public(`:310`)·validate/external(`:465`, `bleed` 를 직접 전송 `:438`)·
     worker-jobs/external/:id(`:496`)와 download·DELETE 뿐 — `/embed`·템플릿셋·편집 세션·postMessage 0건. **100p 영향 없음.**
+    → **완료 통지(2026-10-26 05:17Z)**: 편집기·관리자 Vercel 04:58Z · api·worker VPS 05:17Z. api 는 예고한 별도 사전 통지 없이 이번에 함께 배포됨(완료 통지로 갈음).
+      Storige 확인 — `[FLAGS-CHECK] ok`, 스모크 정상(책 세트 저장·완료, 템플릿 교체, 오류 로그 0). 가이드 적용 시점 = 05:17Z. 이상 시 UTC 시각 + 세션/잡 id 앞 8자로 통보.
 - 인계 문서 stale 정리(`7101c38`) — lint 0/0·`proxy.ts`·fabric 7 함정·Dependabot 열린 PR 0. `git fetch --prune` 으로 원격 추적 참조 16개 정리(원격 브랜치 `main` 하나).
 
 ### 0-16. fabric 6.9.1 → 7.4.0 전환 (2026-09-30) — prod audit 0
