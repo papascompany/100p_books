@@ -296,6 +296,12 @@ pending 으로 남고, 토스 웹훅 URL 이 미등록인 동안에는 수렴 �
     100p 대조: 잡 호출은 `POST worker-jobs/validate/external`(`lib/storige/client.ts:465`)·`GET worker-jobs/external/:id`(`:496`) 뿐 — `/output` 0건,
     ≤90MB multipart 경로는 Storige multer 100MB 캡(`client.ts:43`) 기준이며 값 불변. **100p 영향 없음.**
     또 FREEZE v1.20 7일 관찰은 10-21 종료 — 점검 구간 이상 없음, 누락 시간대는 10-28 전 재집계(달라지면 재통지).
+  · **편집기·관리자(Vercel) 배포 사전 통지**(2026-10-26 04:3xZ 예정, 통지 10-26 수신, 회신 불요 · api(VPS) 배포는 별도 사전 통지 예정 — api 재시작 수십 초 끊김 가능):
+    전부 선택 키 추가(ADDITIVE) — 템플릿셋 조회 `productProfile.calendar` 선택 키(v1.26·v1.27·v1.29) · 편집 세션 `metadata.calendar` 편집기 기록 키(v1.26·v1.29·v1.30) ·
+    편집 완료 자동 검증 잡의 기본 도련이 재단선 템플릿셋에서 세트 `bleedMm`(v1.28, 직접 전송 `validate/external` 규칙은 그대로) · 캘린더 벽걸이 1단 구성 추가 · 편집기 화면 개선.
+    불변 — `/embed` 파라미터·postMessage 봉투·editor.complete·v1 오퍼레이션·웹훅 서명·잡 응답 14키·업로드 상한.
+    100p 대조: Storige 호출은 upload/external(`lib/storige/client.ts:228`)·presigned-upload-public(`:310`)·validate/external(`:465`, `bleed` 를 직접 전송 `:438`)·
+    worker-jobs/external/:id(`:496`)와 download·DELETE 뿐 — `/embed`·템플릿셋·편집 세션·postMessage 0건. **100p 영향 없음.**
 - 인계 문서 stale 정리(`7101c38`) — lint 0/0·`proxy.ts`·fabric 7 함정·Dependabot 열린 PR 0. `git fetch --prune` 으로 원격 추적 참조 16개 정리(원격 브랜치 `main` 하나).
 
 ### 0-16. fabric 6.9.1 → 7.4.0 전환 (2026-09-30) — prod audit 0
