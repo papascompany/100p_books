@@ -8,10 +8,10 @@
 > 이중 사용 창, `0032`(클라이언트 직접 쓰기 봉쇄)로 `profiles.role` 권한 상승 표면이 닫혔다.
 > postcheck 요약(`docs/sql/0032-postcheck-summary.sql`) 운영 실행 **27행 전부 `pass=true`**(2026-09-28).
 >
-> 최종 업데이트: 2026-10-24
+> 최종 업데이트: 2026-10-27
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: `af92b5a`(2026-10-24, Dependabot #28·#29 통합 PR #30 — next 16.4.2 · react 19.3.1 · canvas 1.0.11 · vite 7.3.7 · axe 4.14 a11y 수정, §0-26) · `0804742`(2026-10-13, Storige 검증 결과 중첩 파싱·STORAGE_NOT_S3 — §0-24) · `44edc75`(2026-10-12, tailwindcss-animate devDeps 이동 → prod audit 0) · `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
+> 운영 빌드: PR #36(2026-10-27, Dependabot #33·#35 통합 — canvas 1.0.13 PDF baseline 갱신 · vite 8, §0-27) · `af92b5a`(2026-10-24, Dependabot #28·#29 통합 PR #30 — next 16.4.2 · react 19.3.1 · canvas 1.0.11 · vite 7.3.7 · axe 4.14 a11y 수정, §0-26) · `0804742`(2026-10-13, Storige 검증 결과 중첩 파싱·STORAGE_NOT_S3 — §0-24) · `44edc75`(2026-10-12, tailwindcss-animate devDeps 이동 → prod audit 0) · `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
 > `proxy.ts` · 보안 overrides(**prod audit 0**) · Next 16.3.6. 그 이전 `2d403ae` = Next 16 전환(§0-12)+리뷰 후속(§0-13).
 > 그 직전 `34a5897` 까지 2026-09-17~21 보안·결제·편집 무결성 작업 전량 반영(§0-11).
 > **미병합 브랜치 없음.**
@@ -26,6 +26,21 @@
 ---
 
 ## 🆕 최근 작업 (2026-09-17 ~ 10-16)
+
+### 0-27. Dependabot #33·#35 통합 + canvas 1.0.13 PDF baseline 갱신 · Tailwind 메이저 보류 (2026-10-27) — PR #36
+
+- 10-26 Dependabot PR 4건: #32 tailwind-merge 3 · #33 minor/patch 6종 · #34 tailwindcss 4 · #35 vite 8. 오너 결정 — #33·#35 통합 병합, #32·#34 보류.
+- **#33 PDF 해시 5건 변경 = `@napi-rs/canvas` 1.0.11→1.0.13 단독**(canvas 만 되돌리면 전부 일치). 1.0.12(10-20) 가 텍스트 래스터(CoreText/Fontations)·
+  Skia CPU 래스터·이미지 디코드 샘플링·인코더를 Chrome 방식으로 바꾼 대형 릴리스다. 판정 근거(디코드 픽셀 비교, scratch 측정):
+  cover 최대 Δ2 · shapes/photo-shadow 최대 Δ7(JPEG 노이즈 수준) · photo-downscale 픽셀 0.026% 가 Δ>16(회전 사진 경계) · text 는 안티앨리어싱이 진해짐
+  (잉크 darwin +8~9%, Linux 컨테이너 +2.5%). `measureText` 폭 차 ≤0.036%(96px 에서 0.14px) → **줄바꿈·레이아웃·구조 불변**. → 의도된 상류 변경으로 **수용**,
+  darwin 은 `test:pdf:update`, linux-x64 는 #33 CI 로그의 실제 해시로 갱신. 1.0.13 에서 텍스트 외 4케이스는 darwin·linux 해시가 같아졌다.
+- #35 vite 8.3.5: dev 전용(vitest 5 peer `^6.4 || ^7 || ^8`), CI·로컬 통과. #33 위에서 lockfile 재생성.
+- **#32·#34 보류**: tailwindcss 4 는 PostCSS 플러그인이 `@tailwindcss/postcss` 로 분리돼 단독 업데이트 시 빌드 실패, tailwind-merge 3 은 Tailwind 4 전용
+  (Tailwind 3 위에서 CI 는 통과하지만 클래스 병합이 틀어질 수 있음). 두 PR 은 근거 코멘트로 닫고 `.github/dependabot.yml` 에 semver-major ignore 추가.
+  Tailwind 4 전환은 백로그(이때 함께 올리고 ignore 제거 — dev audit 의 postcss-selector-parser 도 tailwind 3 트리라 그때 해소).
+- 로컬 검증(darwin-arm64, load ~30): frozen install · prod audit 0 · typecheck 0 · lint 0/0 · vitest 89파일 1,495 / 1 skip · test:pdf 5 · build · e2e 12 · a11y 25 / 1 skip ·
+  로컬 운영 빌드 `e2e:auth` 5 passed.
 
 ### 0-26. Dependabot #28·#29 통합 병합 + axe 4.14 a11y 수정 (2026-10-24) — PR #30, 운영 배포 완료
 
