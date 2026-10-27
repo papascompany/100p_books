@@ -7,6 +7,8 @@
 # - 프레임워크 메이저는 별도 마이그레이션 마일스톤으로 다룬다(아래 ignore). 서로 묶여 있어
 #   하나만 올리면 빌드가 깨진다: next ↔ react/react-dom ↔ @types/react* ↔ eslint-config-next ↔ eslint.
 #   fabric 메이저는 직렬화 포맷·에디터 전반 회귀가 크다. @types/node 메이저는 engines "24.x" 와 맞춘다.
+#   tailwindcss 4 는 설정·PostCSS 플러그인 구조가 바뀌어 단독으로 올리면 빌드가 깨지고, tailwind-merge 3 은
+#   Tailwind 4 전용이라 Tailwind 3 위에서는 CI 가 통과해도 클래스 병합이 조용히 틀어진다 → 둘은 Tailwind 4 전환과 함께(2026-10-27).
 version: 2
 updates:
   - package-ecosystem: npm
@@ -44,6 +46,10 @@ updates:
       - dependency-name: eslint-config-next
         update-types: ["version-update:semver-major"]
       - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: tailwindcss
+        update-types: ["version-update:semver-major"]
+      - dependency-name: tailwind-merge
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions

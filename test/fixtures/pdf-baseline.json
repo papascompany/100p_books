@@ -33,18 +33,18 @@
   },
   "pixels": {
     "darwin-arm64": {
-      "shapes": "4f8c4bc94435455a39840dc1f6a4207dc5d2c23b62f4f9b6cbcd5808b33f51f9",
-      "photo-shadow": "301fc1e62f05d43fa7128a4771150a8c6a078a73877e6a9693342df8ebb6a410",
-      "text": "5a33c68ee6a390a2be391ffad2586e9fb5bce7aaae6ebedea5d31902f2e8d408",
-      "cover": "2ee828eff2a465697c2cbcf72a799d3467de6f5416547020f01f5d0fe16f17f6",
-      "photo-downscale": "4a723d28acb1db0aa61b3ba69ece8f22799559a14b0734ff38f2a3346c5a7e17"
+      "shapes": "82f79eefbe16a2195b53311adb0634aa58945a29b57dc97c9f1defcb1ae148f4",
+      "photo-shadow": "1b5555e62d8dbe171787a11e1b0f1204b47107c685f8ee7e2ed29656717fd672",
+      "text": "200a1163dec40a4cebef8094ac7760361869df6b8b725e677477dede9c17a6ed",
+      "cover": "5141ef24722f3850f61bf0df4a24ec49e3373977a79cd9c7f5488dcc8051e2ae",
+      "photo-downscale": "9765f2da8f117a3f44916c8f61b335c9d2a85b1a7a0a131bad5d2205b7c7ed67"
     },
     "linux-x64": {
-      "shapes": "d99311a59f792ebd131537871bce2fbbd3a608d0173d075076fcffc8a90f6fdc",
-      "photo-shadow": "caea6624f32827ae77e509833336571337b716c531a7dabf47af12a1bff38414",
-      "text": "8e04fcf2b771059caaf54be007e314a66781817af6269135e098c2818390cb40",
-      "cover": "f6b99f16c0355afbe31b6eda49d9d05c028dd7ebbf5dd96dade5d6d194ace367",
-      "photo-downscale": "abe60a43419077d3902a2540a47eb615e24fff6aea88a5a4042bc33fe2ecc022"
+      "shapes": "82f79eefbe16a2195b53311adb0634aa58945a29b57dc97c9f1defcb1ae148f4",
+      "photo-shadow": "1b5555e62d8dbe171787a11e1b0f1204b47107c685f8ee7e2ed29656717fd672",
+      "text": "b25fd30dfb1da05d3c4bd413e2c5fd855356574f2ab50ca357a41f39aa69e155",
+      "cover": "5141ef24722f3850f61bf0df4a24ec49e3373977a79cd9c7f5488dcc8051e2ae",
+      "photo-downscale": "9765f2da8f117a3f44916c8f61b335c9d2a85b1a7a0a131bad5d2205b7c7ed67"
     }
   }
 }
