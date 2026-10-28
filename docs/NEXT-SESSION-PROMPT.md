@@ -12,7 +12,7 @@
 >    **fabric 7.4.0**(§0-16) · Storige DELETE 404 구분(§0-17).
 > ✅ 10-05: 운영 브라우저 점검 → UI 결함 5건 + 에디터 레이아웃 4건 · SW 캐시 오염(v4) · Vercel 방화벽 CLI 확인(§0-18) ·
 >    **결제 키 pending 수렴 도구**(§0-19) · **PDF 100p 측정 → 사진 슬롯 축소 디코드, collage-6 RSS 약 -45%**(§0-20).
-> ✅ Storige 측 Wave 2(P4·JOB_STALLED)·Wave 4·5·6(10-05)·Wave 8 1단계(10-06) 운영 배포 · JOB_LINK_STRICT 플래그 적용(10-08 14:37Z) · Wave 9 서버 정비(10-12 15:40Z 완료) · Wave 10 서버 정비(10-14 05:47Z 완료, FREEZE v1.19) — 100p 영향 없음 확인 · **잡 응답 필드 한정(10-14 06:30Z 전환 완료, FREEZE v1.20, 7일 관찰 10-21 종료·이상 없음 — 누락 시간대 10-28 전 재집계, 이상 시 UTC 시각+잡 id 앞 8자 통보)** · api·worker 재빌드(10-17 04:31Z, 사후 통지, 응답 불변) · 편집기·관리자·api·worker 배포(10-26 05:17Z 완료, ADDITIVE, 100p 미사용 경로) — 같은 날 Storige FYI 로 잠복 결함 2건 수정(STATUS §0-24)(`JOB_FILE_SITE_STRICT` 는 아직 false — 10-12 Storige 회신: 켜도 100p 사이트·미지정 파일 모두 통과, 켜기 전 안내+ACK+최소 3영업일. 안내 오면 집계 확인 후 ACK)(STATUS §0-17·§0-19 기록).
+> ✅ Storige 측 Wave 2(P4·JOB_STALLED)·Wave 4·5·6(10-05)·Wave 8 1단계(10-06) 운영 배포 · JOB_LINK_STRICT 플래그 적용(10-08 14:37Z) · Wave 9 서버 정비(10-12 15:40Z 완료) · Wave 10 서버 정비(10-14 05:47Z 완료, FREEZE v1.19) — 100p 영향 없음 확인 · **잡 응답 필드 한정(10-14 06:30Z 전환 완료, FREEZE v1.20, 7일 관찰 10-21 종료·이상 없음 — 누락 시간대 10-28 전 재집계, 이상 시 UTC 시각+잡 id 앞 8자 통보)** · api·worker 재빌드(10-17 04:31Z, 사후 통지, 응답 불변) · 편집기·관리자·api·worker 배포(10-26 05:17Z 완료, ADDITIVE, 100p 미사용 경로) · worker 재단선 판정 완화(10-28 08:21Z, 100p PDF 는 MediaBox 만·표지 책등 미전송이라 미발동) — 같은 날 Storige FYI 로 잠복 결함 2건 수정(STATUS §0-24)(`JOB_FILE_SITE_STRICT` 는 아직 false — 10-12 Storige 회신: 켜도 100p 사이트·미지정 파일 모두 통과, 켜기 전 안내+ACK+최소 3영업일. 안내 오면 집계 확인 후 ACK)(STATUS §0-17·§0-19 기록).
 > 남은 운영 액션·오너 결정·백로그는 전부 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md), 실시간 상태는 `/admin` "서비스 런치 체크".
 > **"다음 추천" 목록을 새로 만들지 말 것 — 운영 액션·백로그의 유일한 정본은 런북이다** (사용자 지시, 2026-08-09).
 

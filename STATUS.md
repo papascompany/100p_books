@@ -319,6 +319,12 @@ pending 으로 남고, 토스 웹훅 URL 이 미등록인 동안에는 수렴 �
     worker-jobs/external/:id(`:496`)와 download·DELETE 뿐 — `/embed`·템플릿셋·편집 세션·postMessage 0건. **100p 영향 없음.**
     → **완료 통지(2026-10-26 05:17Z)**: 편집기·관리자 Vercel 04:58Z · api·worker VPS 05:17Z. api 는 예고한 별도 사전 통지 없이 이번에 함께 배포됨(완료 통지로 갈음).
       Storige 확인 — `[FLAGS-CHECK] ok`, 스모크 정상(책 세트 저장·완료, 템플릿 교체, 오류 로그 0). 가이드 적용 시점 = 05:17Z. 이상 시 UTC 시각 + 세션/잡 id 앞 8자로 통보.
+  · **worker(파일 검증) 배포 완료 통지**(2026-10-28 08:21Z, 회신 불요 · api·편집기·관리자 불변, 요청·응답·웹훅 구조 불변): 재단선 포함 PDF 판형 판정 2건 완화
+    (종전 거부 → 통과 방향, 기존 통과 결과 불변). ① 내지 TrimBox·BleedBox 역전 기록 파일을 맞바꿔 재단 크기로 판정 ② 무선 표지 MediaBox 어긋남(SPINE_SIZE_MISMATCH) 중
+    TrimBox 가 앞+책등+뒤×높이이고 TrimBox+도련이 MediaBox 안이면 통과 — **검증 요청에 책등 정보가 있을 때만**. 응답은 TRIMBOX_SIZE_BASIS details 에
+    `boxesSwapped`·`fileType:'cover'` 선택 키 추가(보정 시에만).
+    100p 대조: PDF 빌더에 TrimBox/BleedBox 설정 0건(MediaBox 만, 함정 25) → ① 미발동 · 표지 검증은 `spineWidthMm` 을 의도적으로 보내지 않음
+    (`lib/pdf/build-job.ts:308`, 함정 9) → ② 미발동 · 응답 경고 details 는 관리자 화면 표시뿐. **100p 영향 없음.**
 - 인계 문서 stale 정리(`7101c38`) — lint 0/0·`proxy.ts`·fabric 7 함정·Dependabot 열린 PR 0. `git fetch --prune` 으로 원격 추적 참조 16개 정리(원격 브랜치 `main` 하나).
 
 ### 0-16. fabric 6.9.1 → 7.4.0 전환 (2026-09-30) — prod audit 0
