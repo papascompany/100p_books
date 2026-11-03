@@ -2,10 +2,11 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 **2026-10-27** · 운영 코드 기준 **PR #36**(Dependabot #33·#35 통합 — canvas 1.0.13 PDF baseline 갱신 · vite 8, STATUS §0-27) — 그 아래 `af92b5a`(PR #30, §0-26)· `0804742`(Storige 검증 결과 중첩 파싱, §0-24)· `44edc75`(prod audit 0)·`5aed177`(next 16.4·zod 4·zustand 5·vitest 5·jsdom 30, §0-23).
+> 갱신 **2026-11-03** · 운영 코드 기준 **PR #39**(Dependabot #38 next 16.4.3 등 · postcss-selector-parser 6.1.5, STATUS §0-28) — 그 아래 PR #36(canvas 1.0.13·vite 8, §0-27)· `af92b5a`(PR #30, §0-26)· `0804742`(Storige 검증 결과 중첩 파싱, §0-24)· `44edc75`(prod audit 0)·`5aed177`(next 16.4·zod 4·zustand 5·vitest 5·jsdom 30, §0-23).
 >   CI 3잡 green · Vercel prod success.
 > **미병합 브랜치·worktree 없음 · 열린 PR 0**(#33·#35 는 #36 으로 병합, #32 tailwind-merge 3·#34 tailwindcss 4 는 Tailwind 4 전환 전까지 보류로 닫고 ignore 추가).
-> ✅ `pnpm audit --prod` 0 — `@vercel/cli-config>zod` override(PR #31, STATUS §0-26). 상류가 zod 4.1.11 고정을 풀면 override 제거 가능.
+> ⚠️ `pnpm audit --prod` moderate 1건(2개 버전) — `exceljs > archiver > minimatch`(GHSA-g3hv-75wg-m249, 패치 ≥11). **도달 불가 판정·보류**(STATUS §0-28).
+>   zod override(PR #31)는 유지 — 상류가 zod 4.1.11 고정을 풀면 제거 가능.
 > ✅ GitHub HTTPS 정상(10-09 TLS 이상은 같은 날 해소). SSH 는 이 Mac 키가 GitHub 미등록이라 불가 — 재발 시 HTTPS 재시도.
 > ✅ 마이그레이션 `0001~0033` 전부 운영 적용(STATUS §0-14) · QA-1 피해 0 · 고아 사진 0 · `pnpm audit --prod` 0(10-12 `44edc75` — STATUS §0-23).
 > ✅ 09-28~30: Dependabot 정리 · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 0/0(§0-15) · `proxy.ts` ·
@@ -408,6 +409,9 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
     PDF 해시가 깨지면 ① canvas 만 이전 버전으로 되돌려 원인을 분리하고 ② 해시가 아니라 **디코드 픽셀**로 비교하고(해시는 JPEG 바이트라 인코더만 바뀌어도 달라진다)
     ③ `measureText` 폭을 비교해 줄바꿈 영향이 없는지 본 뒤에만 `test:pdf:update` + CI 로그의 linux-x64 해시로 갱신한다.
     `tailwindcss`·`tailwind-merge` 메이저는 dependabot ignore 다 — Tailwind 4 전환 때 함께 올리고 ignore 를 지울 것.
+37. **macOS 를 올리면 로컬 PDF 회귀의 text@darwin-arm64 가 깨질 수 있다**(§0-28). canvas 1.0.12+ 는 macOS 에서 CoreText 로 글자를 그리므로 OS 버전이 래스터에 들어간다.
+    먼저 **변경 전 main 으로 같은 실패가 나는지** 확인하고(나면 환경), darwin 해시만 커밋을 분리해 갱신한다. linux-x64(운영) baseline 은 CI 가 판정한다.
+    또 `e2e:auth` 는 머신 load 가 높으면(30+) 180s 타임아웃·운영 Supabase `fetch failed` 로 거짓 실패한다 — `uptime` 을 함께 기록하고 부하가 내려간 뒤 재실행할 것.
 
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
 

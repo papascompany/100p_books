@@ -8,10 +8,10 @@
 > 이중 사용 창, `0032`(클라이언트 직접 쓰기 봉쇄)로 `profiles.role` 권한 상승 표면이 닫혔다.
 > postcheck 요약(`docs/sql/0032-postcheck-summary.sql`) 운영 실행 **27행 전부 `pass=true`**(2026-09-28).
 >
-> 최종 업데이트: 2026-10-27
+> 최종 업데이트: 2026-11-03
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: PR #36(2026-10-27, Dependabot #33·#35 통합 — canvas 1.0.13 PDF baseline 갱신 · vite 8, §0-27) · `af92b5a`(2026-10-24, Dependabot #28·#29 통합 PR #30 — next 16.4.2 · react 19.3.1 · canvas 1.0.11 · vite 7.3.7 · axe 4.14 a11y 수정, §0-26) · `0804742`(2026-10-13, Storige 검증 결과 중첩 파싱·STORAGE_NOT_S3 — §0-24) · `44edc75`(2026-10-12, tailwindcss-animate devDeps 이동 → prod audit 0) · `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
+> 운영 빌드: PR #39(2026-11-03, Dependabot #38 — next 16.4.3 등 8종 · postcss-selector-parser 6.1.5, §0-28) · PR #36(2026-10-27, Dependabot #33·#35 통합 — canvas 1.0.13 PDF baseline 갱신 · vite 8, §0-27) · `af92b5a`(2026-10-24, Dependabot #28·#29 통합 PR #30 — next 16.4.2 · react 19.3.1 · canvas 1.0.11 · vite 7.3.7 · axe 4.14 a11y 수정, §0-26) · `0804742`(2026-10-13, Storige 검증 결과 중첩 파싱·STORAGE_NOT_S3 — §0-24) · `44edc75`(2026-10-12, tailwindcss-animate devDeps 이동 → prod audit 0) · `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
 > `proxy.ts` · 보안 overrides(**prod audit 0**) · Next 16.3.6. 그 이전 `2d403ae` = Next 16 전환(§0-12)+리뷰 후속(§0-13).
 > 그 직전 `34a5897` 까지 2026-09-17~21 보안·결제·편집 무결성 작업 전량 반영(§0-11).
 > **미병합 브랜치 없음.**
@@ -26,6 +26,22 @@
 ---
 
 ## 🆕 최근 작업 (2026-09-17 ~ 10-16)
+
+### 0-28. Dependabot #38 + dev audit 정리 · minimatch 권고 분석 (2026-11-03) — PR #39
+
+- 11-03 점검: main `31b5413` CI·Vercel green, 운영 HTTP 200. 새로 생긴 것 — Dependabot #38(minor/patch 8종: next·eslint-config-next 16.4.3 · @upstash/redis 1.40 ·
+  @vercel/functions 3.10.5 · lucide-react 1.64 · resend 6.35 · autoprefixer 10.6.2 · postcss 8.5.32, CI green) · 새 권고 2건.
+- **`postcss-selector-parser` GHSA-rj75-hqrm-r3gf(dev, tailwindcss 3 경유)**: 6.x 패치 6.1.5 가 나와 기존 override `postcss-selector-parser@6` 를 `^6.1.5` 로 상향 → 해소
+  (lockfile 변경은 이 패키지뿐). Tailwind 4 전환을 기다릴 필요가 없어졌다.
+- **`minimatch` GHSA-g3hv-75wg-m249(moderate, 10-30 공개, 패치 ≥11.0.1) — prod audit 에 잡힘, 수정 보류**: 경로 `exceljs@4.4.0 > archiver@5.3.2 > (archiver-utils·readdir-glob) > glob/minimatch 3.1.5·5.1.9`
+  (+ dev eslint 경유 10.2.6). **도달 불가로 판정** — 앱은 `lib/admin/excel.ts:160` 의 `wb.xlsx.writeBuffer()` 만 쓰고, 이 경로는 exceljs 의 jszip 기반 `ZipStream`(`xlsx.js:646`)이라
+  archiver 를 거치지 않는다. archiver 는 미사용 스트리밍 `WorkbookWriter` 에서만 로드되며 거기서도 `append`/`file` 만 호출한다(minimatch 는 `glob`/`directory` 에서만).
+  패턴 입력도 사용자 값이 아니다. 패치가 메이저(11)라 override 시 `glob@7` 구 API 가 깨질 위험 → 보류(런북 백로그). `pnpm audit --prod` 는 이 1건(2개 버전) 때문에 0 이 아니다.
+- **로컬 PDF 회귀 text@darwin-arm64 불일치 = 환경 변화**: 이 Mac 이 Darwin 25.4 → 27.2 로 올랐고 canvas 1.0.12+ 는 macOS 에서 CoreText 로 글자를 그린다.
+  변경 전 main(`31b5413`)에서도 같은 1건만 불일치(나머지 4케이스·구조 일치) → darwin text 해시만 갱신(커밋 분리). linux-x64(운영) baseline 불변.
+- 검증(darwin-arm64): frozen install · typecheck 0 · lint 0/0 · vitest 89파일 1,495 / 1 skip · test:pdf 5 · build · e2e 12 · a11y 25 / 1 skip.
+  **`e2e:auth`**: 1차 4 passed / 1 failed — QA-2 가 180s 타임아웃(실행 19.2분, load 27~39, 저장본 단언 실패 아님). 재실행은 QA-1 시작 전 운영 Supabase 사용자 조회 `fetch failed`.
+  네트워크 점검 결과 정상(Node fetch 20/20, 중앙값 25ms, DNS 1~19ms — 첫 조회만 1s, DNS 는 Tailscale MagicDNS 100.100.100.100) → 일시 실패로 판단. **부하 완화 후 재실행 필요**.
 
 ### 0-27. Dependabot #33·#35 통합 + canvas 1.0.13 PDF baseline 갱신 · Tailwind 메이저 보류 (2026-10-27) — PR #36
 
