@@ -41,7 +41,7 @@
   변경 전 main(`31b5413`)에서도 같은 1건만 불일치(나머지 4케이스·구조 일치) → darwin text 해시만 갱신(커밋 분리). linux-x64(운영) baseline 불변.
 - 검증(darwin-arm64): frozen install · typecheck 0 · lint 0/0 · vitest 89파일 1,495 / 1 skip · test:pdf 5 · build · e2e 12 · a11y 25 / 1 skip.
   **`e2e:auth`**: 1차 4 passed / 1 failed — QA-2 가 180s 타임아웃(실행 19.2분, load 27~39, 저장본 단언 실패 아님). 재실행은 QA-1 시작 전 운영 Supabase 사용자 조회 `fetch failed`.
-  네트워크 점검 결과 정상(Node fetch 20/20, 중앙값 25ms, DNS 1~19ms — 첫 조회만 1s, DNS 는 Tailscale MagicDNS 100.100.100.100) → 일시 실패로 판단. **부하 완화 후 재실행 필요**.
+  네트워크 점검 결과 정상(Node fetch 20/20, 중앙값 25ms, DNS 1~19ms — 첫 조회만 1s, DNS 는 Tailscale MagicDNS 100.100.100.100) → 일시 실패로 판단. **3차 재실행 5 passed**(1.7분, load 23 — golden-flow + QA-1·QA-4·QA-2).
 
 ### 0-27. Dependabot #33·#35 통합 + canvas 1.0.13 PDF baseline 갱신 · Tailwind 메이저 보류 (2026-10-27) — PR #36
 
