@@ -341,6 +341,12 @@ pending 으로 남고, 토스 웹훅 URL 이 미등록인 동안에는 수렴 �
     `boxesSwapped`·`fileType:'cover'` 선택 키 추가(보정 시에만).
     100p 대조: PDF 빌더에 TrimBox/BleedBox 설정 0건(MediaBox 만, 함정 25) → ① 미발동 · 표지 검증은 `spineWidthMm` 을 의도적으로 보내지 않음
     (`lib/pdf/build-job.ts:308`, 함정 9) → ② 미발동 · 응답 경고 details 는 관리자 화면 표시뿐. **100p 영향 없음.**
+  · **편집기·api·worker 배포 사후 통지**(2026-11-04 14:23~14:25Z — 편집기 Vercel 14:23Z · api·worker 14:25Z, Storige master `6ab73407`, CONTRACT_FREEZE **v1.31**, 조치 불필요):
+    ADDITIVE ① 검증 잡 `orderOptions.source?:'editor'` — 입력 파일 metadata `generatedBy:'editor'` 일 때만 서버가 싣고 호출자 값은 소독. 이때만 PDF 표준 14폰트 미임베드를
+    FONT_NOT_EMBEDDED 에서 제외하고 `metadata.ignoredStandardFonts` 에 기록(고객 업로드·직접 전달은 종전 그대로) ② 내지 펼침면 세트의 편집 완료 검증 잡이 `trimSize`·`workSize` 도
+    펼침면 기준으로 생성(TRIMBOX_SIZE_MISMATCH 비차단 경고 소멸). 교정 1건 — 편집기 임베드가 편집 완료 뒤 입력이 없으면 자동저장을 보내지 않아 세션 status `complete` 유지.
+    100p 대조: 100p 는 자체 PDF 를 `upload/external` 로 올리고 `validate/external` 에 `source` 를 보내지 않음(코드 0건) → ① 미적용·검증 종전 그대로 ·
+    편집 세션·`/embed`·펼침면 세트 미사용 → ②·교정 무관. **100p 영향 없음.** Storige 창구 세션 이름 변경: `20261014 캘린더 편집기·워커 개발 진행`(같은 세션).
 - 인계 문서 stale 정리(`7101c38`) — lint 0/0·`proxy.ts`·fabric 7 함정·Dependabot 열린 PR 0. `git fetch --prune` 으로 원격 추적 참조 16개 정리(원격 브랜치 `main` 하나).
 
 ### 0-16. fabric 6.9.1 → 7.4.0 전환 (2026-09-30) — prod audit 0
