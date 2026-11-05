@@ -32,11 +32,11 @@
 - `pnpm audit --prod`: **0**(2026-11-05 클라우드 재확인, STATUS §0-29). GHSA-g3hv-75wg-m249 범위가 `minimatch >=7.0.0 <11.0.1` 로 축소돼
   `exceljs > archiver` 경유 3.1.5·5.1.9 는 해당 없음(lockfile 불변). 전체 audit 잔여 moderate 1건은 dev 전용 `@typescript-eslint` 경유 `minimatch@10.2.6`.
 - 2026-11-05 클라우드 세션: Node 24 설치 후 전체 검증 통과(linux-x64 PDF 해시 일치) — 문서 갱신 PR #40(브랜치 `claude/busy-keller-l7qetg`). 환경 준비 절차는 함정 38.
+  같은 날 로컬 세션이 PR #40 을 병합(main `bc5331d`, CI·Vercel success)하고 원격 브랜치를 정리했다(STATUS §0-29) — 원격 브랜치 `main` 하나, 열린 PR 0.
 - Dependabot ignore(semver-major): next·react*·@types/react*·fabric·eslint*·@types/node·**tailwindcss·tailwind-merge**(Tailwind 4 전환 때 함께, 런북 백로그).
 - Storige: CONTRACT_FREEZE **v1.31**(11-04 14:25Z 배포, 100p 영향 없음 — STATUS §0-17). `JOB_FILE_SITE_STRICT` 는 아직 false(켜기 전 안내+ACK+최소 3영업일).
 
-**사용자 결정 대기(직접 처리 금지)**
-- 원격에 남은 Dependabot 브랜치 2개 정리: `dependabot/npm_and_yarn/npm-minor-patch-ef6e05cf7e`, `dependabot/npm_and_yarn/vite-7.3.7`(원격 삭제 = 사용자 승인 후에만).
+**사용자 결정 대기(직접 처리 금지)**: 없음. (~~원격 Dependabot 브랜치 2개 정리~~ — 2026-11-05 사용자 승인으로 삭제, STATUS §0-29)
 
 **백로그(요청 시에만 착수, 런북 등재)**: Tailwind 4 전환(#32·#34 보류분). (exceljs 경유 minimatch 권고는 11-05 해소)
 

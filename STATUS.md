@@ -40,6 +40,11 @@
   prod 경로(`exceljs > archiver/unzipper > … > minimatch`)의 3.1.5·5.1.9 는 범위 밖이 됐다(트리는 §0-28 그대로 — `pnpm why minimatch --prod` 확인).
   전체 `pnpm audit` 는 moderate 1건 잔존 — **dev 전용** `eslint-config-next > @typescript-eslint/typescript-estree > minimatch@10.2.6`(운영 번들 미포함).
   범위가 언제 바뀌었는지는 미확인(GitHub advisories API 가 비인증 403). → §0-28 의 "prod audit 1건 보류"는 해소됐다. 런북 백로그 "exceljs 경유 minimatch 권고"는 해소 처리(취소선), `docs/CLOUD-SESSION-PROMPT.md` 도 함께 갱신(PR #40).
+- **로컬 인계·마감(같은 날)**: 클라우드 세션 중단 후 로컬 세션이 이어받아 PR #40(CI 3잡·Vercel Preview green, CLEAN)을 사용자 승인으로 rebase 병합
+  (2026-11-05 12:45Z, main `0f55495`·`bc5331d`) → main CI 3잡 success · Vercel 운영 success · 운영 HTTP 200.
+  사용자 승인으로 원격 브랜치 3개 삭제(복구용 SHA): `claude/busy-keller-l7qetg`(`e89a960`, #40 병합) ·
+  `dependabot/npm_and_yarn/npm-minor-patch-ef6e05cf7e`(`1d7f5b5`, #28 닫힘) · `dependabot/npm_and_yarn/vite-7.3.7`(`b7ee3b7`, #29 닫힘) — #28·#29 는 PR #30 으로 통합됐던 것.
+  원격 브랜치는 `main` 하나, 열린 PR 0. push 때 GitHub 가 안내한 alert #110 은 **withdrawn(410)**, 열린 Dependabot alert 0.
 
 ### 0-28. Dependabot #38 + dev audit 정리 · minimatch 권고 분석 (2026-11-03) — PR #39
 

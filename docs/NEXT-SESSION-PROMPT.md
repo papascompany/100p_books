@@ -7,7 +7,7 @@
 > **미병합 브랜치·worktree 없음 · 열린 PR 0**(#33·#35 는 #36 으로 병합, #32 tailwind-merge 3·#34 tailwindcss 4 는 Tailwind 4 전환 전까지 보류로 닫고 ignore 추가).
 > ✅ `pnpm audit --prod` **0**(11-05 재확인) — GHSA-g3hv-75wg-m249 범위가 `minimatch >=7.0.0 <11.0.1` 로 좁아져 `exceljs > archiver` 경유 3.1.5·5.1.9 는 해당 없음(STATUS §0-29).
 >   전체 audit 의 잔여 moderate 1건은 dev 전용 `@typescript-eslint/typescript-estree > minimatch@10.2.6`.
-> 🌐 11-05 클라우드 세션(브랜치 `claude/busy-keller-l7qetg`, 코드 변경 없음): Node 24 설치 후 전체 검증 통과(STATUS §0-29) · 이 문서·STATUS 갱신 PR. 클라우드 전용 지침은 [CLOUD-SESSION-PROMPT.md](CLOUD-SESSION-PROMPT.md).
+> 🌐 11-05 클라우드 세션(브랜치 `claude/busy-keller-l7qetg`, 코드 변경 없음): Node 24 설치 후 전체 검증 통과(STATUS §0-29) · 이 문서·STATUS 갱신 PR #40 — 같은 날 로컬에서 병합(main `bc5331d`, CI·Vercel success) · 원격 브랜치 정리(`main` 하나). 클라우드 전용 지침은 [CLOUD-SESSION-PROMPT.md](CLOUD-SESSION-PROMPT.md).
 >   zod override(PR #31)는 유지 — 상류가 zod 4.1.11 고정을 풀면 제거 가능.
 > ✅ GitHub HTTPS 정상(10-09 TLS 이상은 같은 날 해소). SSH 는 이 Mac 키가 GitHub 미등록이라 불가 — 재발 시 HTTPS 재시도.
 > ✅ 마이그레이션 `0001~0033` 전부 운영 적용(STATUS §0-14) · QA-1 피해 0 · 고아 사진 0 · `pnpm audit --prod` 0(10-12 `44edc75` — STATUS §0-23).
