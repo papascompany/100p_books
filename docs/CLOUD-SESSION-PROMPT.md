@@ -18,8 +18,8 @@
 ### 0. 먼저 읽을 것 (레포 안 정본)
 
 1. 루트 `CLAUDE.md` — 스택·코드 규약·테스트 명령·기준선.
-2. `docs/NEXT-SESSION-PROMPT.md` — 전체 인계: 완료 항목(재작업 금지), **함정 1~37**, 작업 방식. 함정은 클라우드에서도 전부 유효하다.
-3. `STATUS.md` §0-28 → §0-26 → §0-17(Storige 통지 기록) 순서로 최근 상태.
+2. `docs/NEXT-SESSION-PROMPT.md` — 전체 인계: 완료 항목(재작업 금지), **함정 1~38**, 작업 방식. 함정은 클라우드에서도 전부 유효하다(38 은 클라우드 환경 준비).
+3. `STATUS.md` §0-29 → §0-28 → §0-26 → §0-17(Storige 통지 기록) 순서로 최근 상태.
 4. `docs/LAUNCH-RUNBOOK.md` — 운영 액션·오너 결정·백로그의 **유일한 정본**. **"다음 추천" 목록을 새로 만들지 말 것**(사용자 지시, 2026-08-09).
 
 ### 1. 인계 시점 상태 (2026-11-05, 로컬 세션 실측)
@@ -29,16 +29,16 @@
 - 운영 코드 기준 **PR #39**(Dependabot #38 next 16.4.3 등 · postcss-selector-parser override `^6.1.5`, STATUS §0-28).
 - 로컬 기준선(11-03, darwin): typecheck 0 · lint 0/0 · vitest 89파일 1,495 pass / 1 skip · test:pdf 5 · e2e 12 · a11y 25(+1 skip) · build 성공 ·
   e2e:auth 5 passed(3차 재실행, 고부하 거짓 실패 2회 후 — 함정 37).
-- `pnpm audit --prod`: moderate 1건(버전 2개로 표시) — `exceljs > archiver > minimatch`(GHSA-g3hv-75wg-m249, 패치 ≥11).
-  **도달 불가 판정·보류**(STATUS §0-28): `lib/admin/excel.ts:160` `writeBuffer()` 는 jszip 경로라 archiver·minimatch 에 닿지 않는다.
-  메이저 override 는 glob@7 을 깨뜨릴 위험이 있어 하지 않았다. 참고: Dependabot 보안 업데이트(minimatch) 실행이 `d00b2ba` 시점에 failure 로 끝났다 — 패치가 메이저뿐이라 예상된 결과, PR 은 생기지 않았다.
+- `pnpm audit --prod`: **0**(2026-11-05 클라우드 재확인, STATUS §0-29). GHSA-g3hv-75wg-m249 범위가 `minimatch >=7.0.0 <11.0.1` 로 축소돼
+  `exceljs > archiver` 경유 3.1.5·5.1.9 는 해당 없음(lockfile 불변). 전체 audit 잔여 moderate 1건은 dev 전용 `@typescript-eslint` 경유 `minimatch@10.2.6`.
+- 2026-11-05 클라우드 세션: Node 24 설치 후 전체 검증 통과(linux-x64 PDF 해시 일치) — 문서 갱신 PR #40(브랜치 `claude/busy-keller-l7qetg`). 환경 준비 절차는 함정 38.
 - Dependabot ignore(semver-major): next·react*·@types/react*·fabric·eslint*·@types/node·**tailwindcss·tailwind-merge**(Tailwind 4 전환 때 함께, 런북 백로그).
 - Storige: CONTRACT_FREEZE **v1.31**(11-04 14:25Z 배포, 100p 영향 없음 — STATUS §0-17). `JOB_FILE_SITE_STRICT` 는 아직 false(켜기 전 안내+ACK+최소 3영업일).
 
 **사용자 결정 대기(직접 처리 금지)**
 - 원격에 남은 Dependabot 브랜치 2개 정리: `dependabot/npm_and_yarn/npm-minor-patch-ef6e05cf7e`, `dependabot/npm_and_yarn/vite-7.3.7`(원격 삭제 = 사용자 승인 후에만).
 
-**백로그(요청 시에만 착수, 런북 등재)**: Tailwind 4 전환(#32·#34 보류분) · exceljs 경유 minimatch 권고.
+**백로그(요청 시에만 착수, 런북 등재)**: Tailwind 4 전환(#32·#34 보류분). (exceljs 경유 minimatch 권고는 11-05 해소)
 
 ### 2. 클라우드 환경 차이 — 로컬 문서와 다르게 행동할 것
 
@@ -48,10 +48,11 @@
 | 사용자 전역 지침 | `~/.claude/CLAUDE.md` | 없을 수 있다 — 이 블록의 규칙이 그 대신이다 |
 | `pnpm e2e:auth` | 운영 Supabase 로 실행(수동) | **실행 금지.** service_role 키가 없어 skip 되며, 있어도 운영에 계정을 만든다 |
 | PDF 회귀 | darwin-arm64 해시 비교 | 대부분 **linux-x64**(CI 와 같은 키)로 비교된다. baseline 에 없는 플랫폼이면 "신규 플랫폼 기록" 후 **그냥 통과**하니 로그를 볼 것(함정 2). darwin 해시는 클라우드에서 갱신 불가 — 렌더 변경 시 사용자에게 로컬 갱신을 요청 |
-| e2e·a11y | 로컬 chromium | 먼저 `pnpm exec playwright install chromium`(필요 시 `--with-deps`). 네트워크 정책으로 막히면 CI 결과로 대체하고 그렇게 보고 |
+| Node | 24.x | 컨테이너 기본은 **Node 22**. 최신 v24 를 받아 `/opt/node24` 에 설치하고 PATH 앞에 둔다(함정 38). 컨테이너 한정이라 세션마다 다시 |
+| e2e·a11y | 로컬 chromium | `pnpm exec playwright install chromium` 다운로드는 11-05 실측 **차단**(`code=1`). `/opt/pw-browsers` 사전 설치본을 요구 리비전 이름으로 scratch 에 심볼릭 링크 + `PLAYWRIGHT_BROWSERS_PATH`(함정 38). 그래도 안 되면 CI 결과로 대체하고 그렇게 보고 |
 | Storige 계약 원문 | `/Users/yohan/Developer/Bookmoa Storige editor/storige/docs/CONTRACT_FREEZE.md` | **접근 불가.** 계약 근거는 `lib/storige/client.ts` 주석·`docs/STORIGE-NOTICE.md`·STATUS §0-17 로만 판단 |
 | 세션 간 교신 | ListAgents/SendMessage 로 Storige·북모아 세션과 교신 | **클라우드 세션은 다른 세션에 답장할 수 없다.** 세션 교대 통지(NEXT-SESSION-PROMPT §5 "세션 교대")를 시도하지 말 것. Storige 통지는 로컬 세션이 계속 받는다. 사용자가 통지 내용을 붙여넣으면 아래 §3 순서로 판정만 하고, 회신은 사용자에게 문구로 넘긴다 |
-| GitHub | `gh` 인증됨, main 직접 push(관리자 우회) | `gh auth status` 로 먼저 확인. **main 에 직접 push 하지 말고** 작업 브랜치 → PR → CI 확인 → 사용자 승인 후 `gh pr merge <n> --rebase`. CI 는 PR 에서 돈다(피처 브랜치 단독 push 로는 안 돈다) |
+| GitHub | `gh` 인증됨, main 직접 push(관리자 우회) | `gh auth status` 로 먼저 확인 — 11-05 실측 `GH_TOKEN` 무효라 PR·CI 조회·병합은 GitHub MCP 도구로. **main 에 직접 push 하지 말고** 작업 브랜치 → PR → CI 확인 → 사용자 승인 후 `gh pr merge <n> --rebase`. CI 는 PR 에서 돈다(피처 브랜치 단독 push 로는 안 돈다) |
 | 배포 | `vercel` CLI(`/opt/homebrew/bin/vercel`) | 없다. 배포는 main 병합 → GitHub auto-deploy 뿐. `vercel --prod` 금지 |
 | 운영 DB | MCP/CLI 불가(로컬도 동일) | 동일하게 불가. 마이그레이션은 사용자가 SQL Editor 에서 직접 적용 |
 | 브라우저 운영 점검 | 내장 브라우저 + 관리자 세션 | 불가로 간주. 필요하면 사용자에게 로컬 세션에서 하도록 넘긴다 |
