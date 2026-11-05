@@ -8,7 +8,7 @@
 > 이중 사용 창, `0032`(클라이언트 직접 쓰기 봉쇄)로 `profiles.role` 권한 상승 표면이 닫혔다.
 > postcheck 요약(`docs/sql/0032-postcheck-summary.sql`) 운영 실행 **27행 전부 `pass=true`**(2026-09-28).
 >
-> 최종 업데이트: 2026-11-03
+> 최종 업데이트: 2026-11-05
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
 > 운영 빌드: PR #39(2026-11-03, Dependabot #38 — next 16.4.3 등 8종 · postcss-selector-parser 6.1.5, §0-28) · PR #36(2026-10-27, Dependabot #33·#35 통합 — canvas 1.0.13 PDF baseline 갱신 · vite 8, §0-27) · `af92b5a`(2026-10-24, Dependabot #28·#29 통합 PR #30 — next 16.4.2 · react 19.3.1 · canvas 1.0.11 · vite 7.3.7 · axe 4.14 a11y 수정, §0-26) · `0804742`(2026-10-13, Storige 검증 결과 중첩 파싱·STORAGE_NOT_S3 — §0-24) · `44edc75`(2026-10-12, tailwindcss-animate devDeps 이동 → prod audit 0) · `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
@@ -25,9 +25,25 @@
 
 ---
 
-## 🆕 최근 작업 (2026-09-17 ~ 10-16)
+## 🆕 최근 작업 (2026-09-17 ~ 11-05)
+
+### 0-29. 클라우드 세션 전체 검증 + minimatch 권고 범위 축소 확인 (2026-11-05) — 코드 변경 없음
+
+- 클라우드 세션(linux-x64, 브랜치 `claude/busy-keller-l7qetg`)에서 main `a6a082a`(`7915eba` + `docs/CLOUD-SESSION-PROMPT.md`) 기준 전체 검증. 컨테이너 기본 Node 가 22 라
+  공식 배포본 **Node v24.22.2**(SHA256 확인)를 `/opt/node24` 에 설치해 실행 — 컨테이너 한정 설치라 다음 클라우드 세션에서 다시 해야 한다(함정 38).
+- 결과: frozen install(lockfile 불변) · typecheck 0 · lint 0/0 · vitest 89파일 1,495 / 1 skip · test:pdf 5(**linux-x64 해시 5건 baseline 일치**, 신규 플랫폼 기록 아님) ·
+  build · e2e 12 · a11y 25 / 1 skip. `e2e:auth`·darwin 해시는 클라우드 범위 밖이라 미실행.
+- e2e·a11y 브라우저: Playwright 1.64.1 은 chromium **1248**·ffmpeg **1013** 을 요구하는데 `playwright install chromium` 다운로드가 실패(`Download failure, code=1`).
+  사전 설치본(`/opt/pw-browsers` 의 chromium 1243 = Chrome for Testing 153.0.8010.12, ffmpeg 1011)을 scratch 디렉터리에 1248·1013 이름으로 심볼릭 링크하고
+  `PLAYWRIGHT_BROWSERS_PATH` 로 지정해 통과 — 레포 무수정. 기대 버전(156.0.8078.4)보다 이전 빌드라 정확한 판정은 PR CI 가 맡는다.
+- **`pnpm audit --prod` 0 — 원인은 권고 범위 축소(코드·lockfile 불변)**: npm bulk advisory 조회 결과 GHSA-g3hv-75wg-m249 의 취약 범위가 현재 **`minimatch >=7.0.0 <11.0.1`**.
+  prod 경로(`exceljs > archiver/unzipper > … > minimatch`)의 3.1.5·5.1.9 는 범위 밖이 됐다(트리는 §0-28 그대로 — `pnpm why minimatch --prod` 확인).
+  전체 `pnpm audit` 는 moderate 1건 잔존 — **dev 전용** `eslint-config-next > @typescript-eslint/typescript-estree > minimatch@10.2.6`(운영 번들 미포함).
+  범위가 언제 바뀌었는지는 미확인(GitHub advisories API 가 비인증 403). → §0-28 의 "prod audit 1건 보류"는 해소됐다. 런북 백로그 "exceljs 경유 minimatch 권고"는 런북에서 정리 필요.
 
 ### 0-28. Dependabot #38 + dev audit 정리 · minimatch 권고 분석 (2026-11-03) — PR #39
+
+> ⚠️ 2026-11-05 정정(§0-29): 권고 범위가 `>=7.0.0 <11.0.1` 로 좁아져 아래 prod 경로의 3.1.5·5.1.9 는 더 이상 해당 없음 — `pnpm audit --prod` 0. 남은 건 dev 전용 10.2.6.
 
 - 11-03 점검: main `31b5413` CI·Vercel green, 운영 HTTP 200. 새로 생긴 것 — Dependabot #38(minor/patch 8종: next·eslint-config-next 16.4.3 · @upstash/redis 1.40 ·
   @vercel/functions 3.10.5 · lucide-react 1.64 · resend 6.35 · autoprefixer 10.6.2 · postcss 8.5.32, CI green) · 새 권고 2건.
