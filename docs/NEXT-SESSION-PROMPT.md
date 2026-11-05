@@ -2,10 +2,12 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 **2026-11-03** · 운영 코드 기준 **PR #39**(Dependabot #38 next 16.4.3 등 · postcss-selector-parser 6.1.5, STATUS §0-28) — 그 아래 PR #36(canvas 1.0.13·vite 8, §0-27)· `af92b5a`(PR #30, §0-26)· `0804742`(Storige 검증 결과 중첩 파싱, §0-24)· `44edc75`(prod audit 0)·`5aed177`(next 16.4·zod 4·zustand 5·vitest 5·jsdom 30, §0-23).
+> 갱신 **2026-11-05** · 운영 코드 기준 **PR #39**(Dependabot #38 next 16.4.3 등 · postcss-selector-parser 6.1.5, STATUS §0-28) — 그 아래 PR #36(canvas 1.0.13·vite 8, §0-27)· `af92b5a`(PR #30, §0-26)· `0804742`(Storige 검증 결과 중첩 파싱, §0-24)· `44edc75`(prod audit 0)·`5aed177`(next 16.4·zod 4·zustand 5·vitest 5·jsdom 30, §0-23).
 >   CI 3잡 green · Vercel prod success.
 > **미병합 브랜치·worktree 없음 · 열린 PR 0**(#33·#35 는 #36 으로 병합, #32 tailwind-merge 3·#34 tailwindcss 4 는 Tailwind 4 전환 전까지 보류로 닫고 ignore 추가).
-> ⚠️ `pnpm audit --prod` moderate 1건(2개 버전) — `exceljs > archiver > minimatch`(GHSA-g3hv-75wg-m249, 패치 ≥11). **도달 불가 판정·보류**(STATUS §0-28).
+> ✅ `pnpm audit --prod` **0**(11-05 재확인) — GHSA-g3hv-75wg-m249 범위가 `minimatch >=7.0.0 <11.0.1` 로 좁아져 `exceljs > archiver` 경유 3.1.5·5.1.9 는 해당 없음(STATUS §0-29).
+>   전체 audit 의 잔여 moderate 1건은 dev 전용 `@typescript-eslint/typescript-estree > minimatch@10.2.6`.
+> 🌐 11-05 클라우드 세션(브랜치 `claude/busy-keller-l7qetg`, 코드 변경 없음): Node 24 설치 후 전체 검증 통과(STATUS §0-29) · 이 문서·STATUS 갱신 PR. 클라우드 전용 지침은 [CLOUD-SESSION-PROMPT.md](CLOUD-SESSION-PROMPT.md).
 >   zod override(PR #31)는 유지 — 상류가 zod 4.1.11 고정을 풀면 제거 가능.
 > ✅ GitHub HTTPS 정상(10-09 TLS 이상은 같은 날 해소). SSH 는 이 Mac 키가 GitHub 미등록이라 불가 — 재발 시 HTTPS 재시도.
 > ✅ 마이그레이션 `0001~0033` 전부 운영 적용(STATUS §0-14) · QA-1 피해 0 · 고아 사진 0 · `pnpm audit --prod` 0(10-12 `44edc75` — STATUS §0-23).
@@ -412,6 +414,15 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 37. **macOS 를 올리면 로컬 PDF 회귀의 text@darwin-arm64 가 깨질 수 있다**(§0-28). canvas 1.0.12+ 는 macOS 에서 CoreText 로 글자를 그리므로 OS 버전이 래스터에 들어간다.
     먼저 **변경 전 main 으로 같은 실패가 나는지** 확인하고(나면 환경), darwin 해시만 커밋을 분리해 갱신한다. linux-x64(운영) baseline 은 CI 가 판정한다.
     또 `e2e:auth` 는 머신 load 가 높으면(30+) 180s 타임아웃·운영 Supabase `fetch failed` 로 거짓 실패한다 — `uptime` 을 함께 기록하고 부하가 내려간 뒤 재실행할 것.
+
+--- 아래는 2026-11-05 클라우드 세션에서 확인한 함정이다 ---
+
+38. **클라우드 컨테이너는 Node 22 · Playwright 브라우저 불일치로 시작한다**(STATUS §0-29). 설치물은 컨테이너 한정이라 세션마다 다시 해야 하고, 로컬 Mac 과 동기화되지 않는다(레포 변경만 git 으로 오간다).
+    ① Node: nodejs.org 의 최신 v24 tar.xz 를 SHASUMS256 확인 후 `/opt/node24` 에 풀고 `export PATH=/opt/node24/bin:$PATH`(pnpm 은 `packageManager` 로 9.0.0 이 잡힌다).
+    ② e2e·a11y: `playwright install chromium` 다운로드가 막힌다(`code=1`). Playwright 가 요구하는 리비전(1.64.1 = chromium 1248·ffmpeg 1013)으로
+    `/opt/pw-browsers` 의 사전 설치본을 scratch 에 심볼릭 링크하고 `PLAYWRIGHT_BROWSERS_PATH` 로 지정한다(ffmpeg 도 필요 — `video: retain-on-failure`). 레포는 고치지 말 것.
+    ③ `gh` 는 `GH_TOKEN` 무효로 실패한다 — PR·CI 조회·병합은 GitHub MCP 도구로.
+    ④ audit 결과가 이전 기록과 다르면 lockfile 보다 **권고 범위 변경**을 먼저 의심하고 npm bulk advisory(`/-/npm/v1/security/advisories/bulk`)로 현재 범위를 조회할 것.
 
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
 
