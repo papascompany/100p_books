@@ -39,7 +39,7 @@
 - **`pnpm audit --prod` 0 — 원인은 권고 범위 축소(코드·lockfile 불변)**: npm bulk advisory 조회 결과 GHSA-g3hv-75wg-m249 의 취약 범위가 현재 **`minimatch >=7.0.0 <11.0.1`**.
   prod 경로(`exceljs > archiver/unzipper > … > minimatch`)의 3.1.5·5.1.9 는 범위 밖이 됐다(트리는 §0-28 그대로 — `pnpm why minimatch --prod` 확인).
   전체 `pnpm audit` 는 moderate 1건 잔존 — **dev 전용** `eslint-config-next > @typescript-eslint/typescript-estree > minimatch@10.2.6`(운영 번들 미포함).
-  범위가 언제 바뀌었는지는 미확인(GitHub advisories API 가 비인증 403). → §0-28 의 "prod audit 1건 보류"는 해소됐다. 런북 백로그 "exceljs 경유 minimatch 권고"는 런북에서 정리 필요.
+  범위가 언제 바뀌었는지는 미확인(GitHub advisories API 가 비인증 403). → §0-28 의 "prod audit 1건 보류"는 해소됐다. 런북 백로그 "exceljs 경유 minimatch 권고"는 해소 처리(취소선), `docs/CLOUD-SESSION-PROMPT.md` 도 함께 갱신(PR #40).
 
 ### 0-28. Dependabot #38 + dev audit 정리 · minimatch 권고 분석 (2026-11-03) — PR #39
 
