@@ -8,7 +8,7 @@
 > 이중 사용 창, `0032`(클라이언트 직접 쓰기 봉쇄)로 `profiles.role` 권한 상승 표면이 닫혔다.
 > postcheck 요약(`docs/sql/0032-postcheck-summary.sql`) 운영 실행 **27행 전부 `pass=true`**(2026-09-28).
 >
-> 최종 업데이트: 2026-11-06
+> 최종 업데이트: 2026-11-07
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
 > 운영 빌드: PR #39(2026-11-03, Dependabot #38 — next 16.4.3 등 8종 · postcss-selector-parser 6.1.5, §0-28) · PR #36(2026-10-27, Dependabot #33·#35 통합 — canvas 1.0.13 PDF baseline 갱신 · vite 8, §0-27) · `af92b5a`(2026-10-24, Dependabot #28·#29 통합 PR #30 — next 16.4.2 · react 19.3.1 · canvas 1.0.11 · vite 7.3.7 · axe 4.14 a11y 수정, §0-26) · `0804742`(2026-10-13, Storige 검증 결과 중첩 파싱·STORAGE_NOT_S3 — §0-24) · `44edc75`(2026-10-12, tailwindcss-animate devDeps 이동 → prod audit 0) · `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
@@ -47,9 +47,11 @@
 - **결정만 기록(코드 변경 없음)**: 선물 수령 이메일 대조 안 함 · Sentry 추후 보류 · 랜딩 문구 유지 → 런북 "오너 결정" 갱신.
 - **인쇄소 자동 발주**: 계획서만 — [docs/PRINT-AUTO-ORDER-PLAN.md](docs/PRINT-AUTO-ORDER-PLAN.md)(권장: "제작 시작" 전이 시 outbox enqueue, 1단계 이메일 반자동 → Storige 계약 확정 후 경유,
   flag `off|shadow|on`, 0034 가정). 오너·Storige 확인 항목 §11. 착수는 오너 지시 시.
-- **토스 웹훅**: 코드는 운영 배포 상태, 운영 엔드포인트 응답 확인(빈 이벤트 `200 ignored`). 남은 것은 토스 개발자센터 URL 등록(런북 §1-b) — 등록 방식은 오너에게 재확인 예정.
+- **토스 웹훅**: 코드는 운영 배포 상태, 운영 엔드포인트 응답 확인(빈 이벤트 `200 ignored`). 남은 것은 토스 개발자센터 URL 등록(런북 §1-b) — **11-07 오너 결정으로 추후 진행 보류**(개발자센터 미로그인 상태 확인).
 - 검증(로컬 darwin, Node 26 — engine 24 경고만): typecheck 0 · lint 0/0 · vitest **91파일 1,537 pass / 1 skip**(+2파일·42건) · build 성공.
   e2e·a11y 는 PR CI 로 판정. 관리자 출석 화면·탈퇴 모달은 인증이 필요해 브라우저 실측 미실시.
+- **병합·배포(11-07)**: PR #41 CI 5건 green → 사용자 승인으로 rebase 병합(main `a633623`, 2026-11-06T17:04Z) → main CI 3잡 success · Vercel 운영 success ·
+  운영 `/`·`/attendance` 200, `/admin/attendance` 비로그인 307(관리자 보호), 첫 페이지에 "02-2273-5131" 노출 확인. 원격 브랜치 `claude/owner-decisions-attendance-1106` 은 남김(삭제는 승인 후).
 
 
 ### 0-29. 클라우드 세션 전체 검증 + minimatch 권고 범위 축소 확인 (2026-11-05) — 코드 변경 없음

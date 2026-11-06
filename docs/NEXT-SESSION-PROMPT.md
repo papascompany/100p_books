@@ -2,9 +2,9 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 **2026-11-05** · 운영 코드 기준 **PR #39**(Dependabot #38 next 16.4.3 등 · postcss-selector-parser 6.1.5, STATUS §0-28) — 그 아래 PR #36(canvas 1.0.13·vite 8, §0-27)· `af92b5a`(PR #30, §0-26)· `0804742`(Storige 검증 결과 중첩 파싱, §0-24)· `44edc75`(prod audit 0)·`5aed177`(next 16.4·zod 4·zustand 5·vitest 5·jsdom 30, §0-23).
+> 갱신 **2026-11-07** · 운영 코드 기준 **PR #41**(`a633623` — 출석 30일 만근제·관리자 출석 채우기·탈퇴 최종 안내 모달·고객센터 표시, STATUS §0-30, 마이그레이션 없음) — 그 아래 PR #39(Dependabot #38 next 16.4.3 등, §0-28) · PR #36(canvas 1.0.13·vite 8, §0-27)· `af92b5a`(PR #30, §0-26)· `0804742`(Storige 검증 결과 중첩 파싱, §0-24)· `44edc75`(prod audit 0)·`5aed177`(next 16.4·zod 4·zustand 5·vitest 5·jsdom 30, §0-23).
 >   CI 3잡 green · Vercel prod success.
-> **미병합 브랜치·worktree 없음 · 열린 PR 0**(#33·#35 는 #36 으로 병합, #32 tailwind-merge 3·#34 tailwindcss 4 는 Tailwind 4 전환 전까지 보류로 닫고 ignore 추가).
+> **열린 PR 0** · 병합 완료 원격 브랜치 `claude/owner-decisions-attendance-1106` 잔존(삭제 승인 대기)(이전: #33·#35 는 #36 으로 병합, #32 tailwind-merge 3·#34 tailwindcss 4 는 Tailwind 4 전환 전까지 보류로 닫고 ignore 추가).
 > ✅ `pnpm audit --prod` **0**(11-05 재확인) — GHSA-g3hv-75wg-m249 범위가 `minimatch >=7.0.0 <11.0.1` 로 좁아져 `exceljs > archiver` 경유 3.1.5·5.1.9 는 해당 없음(STATUS §0-29).
 >   전체 audit 의 잔여 moderate 1건은 dev 전용 `@typescript-eslint/typescript-estree > minimatch@10.2.6`.
 > 🌐 11-05 클라우드 세션(브랜치 `claude/busy-keller-l7qetg`, 코드 변경 없음): Node 24 설치 후 전체 검증 통과(STATUS §0-29) · 이 문서·STATUS 갱신 PR #40 — 같은 날 로컬에서 병합(main `bc5331d`, CI·Vercel success) · 원격 브랜치 정리(`main` 하나). 클라우드 전용 지침은 [CLOUD-SESSION-PROMPT.md](CLOUD-SESSION-PROMPT.md).
@@ -428,7 +428,7 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
 **런치 차단 항목 없음**(`/admin` 런치 체크 "차단 항목 없음 — 서비스 가능", 2026-10-05 확인). 서비스 경로
 (이메일 가입 → 업로드 → 편집 → 주문 → 결제 → 인쇄검증)는 전부 동작한다.
 
-**오너 운영 액션(런북 §1·§3·§4·§5·§7)**: 토스 웹훅 URL 등록 · Resend 키(메일 6종 큐 대기 중) · Upstash(rate limit fail-open) ·
+**오너 운영 액션(런북 §1·§3·§4·§5·§7)**: 토스 웹훅 URL 등록(11-07 보류 결정) · Resend 키(메일 6종 큐 대기 중) · Upstash(rate limit fail-open) ·
 카카오 콘솔 설정 · Storige 통지 전달.
 **오너 확인 대기**: ① 카카오 로그인 실제 1회(PKCE 쿠키 키 변경) · ② 실제 iPhone Safari 핀치 후 더블탭 · ③ Supabase 조직 멤버 계정
 · ④ 결제 수렴 버튼은 운영 주문 0건이라 실사용 미확인(첫 해당 주문 때).
