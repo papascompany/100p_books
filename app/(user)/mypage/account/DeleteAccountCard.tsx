@@ -27,6 +27,13 @@ const REASONS = [
   { value: "other", label: "기타" },
 ] as const;
 
+/**
+ * 탈퇴 최종 안내 문구 (2026-11-06 오너 결정 — 사실 기준 문구).
+ * 미주문 포토북·사진은 탈퇴 시 삭제되고(account-content-purge), 주문·결제 기록은 전자상거래법상 5년 보존한다.
+ */
+const DELETION_NOTICE =
+  "회원 탈퇴 시 사진·작업 중인 포토북 등 데이터는 즉시 삭제되며, 주문·결제 기록은 전자상거래법에 따라 5년간 보관됩니다.";
+
 interface ApiResponse<T> {
   ok: boolean;
   data?: T;
@@ -48,6 +55,7 @@ export default function DeleteAccountCard({
   const [reason, setReason] = React.useState<string>(REASONS[0].value);
   const [reasonText, setReasonText] = React.useState("");
   const [agreed, setAgreed] = React.useState(false);
+  const [noticeOpen, setNoticeOpen] = React.useState(false);
 
   const CONFIRM_PHRASE = "회원 탈퇴";
   const blocked = blockingOrderCount > 0;
@@ -57,9 +65,16 @@ export default function DeleteAccountCard({
   const canSubmit =
     !busy && !blocked && emailMatches && textMatches && agreed && !!email;
 
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+  /** 폼 제출 = 최종 안내 모달 열기. 실제 탈퇴 요청은 안내를 확인한 뒤에만 보낸다(2026-11-06 오너 결정). */
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!canSubmit) return;
+    setNoticeOpen(true);
+  }
+
+  async function performDelete() {
+    if (!canSubmit) return;
+    setNoticeOpen(false);
     setBusy(true);
     try {
       const composedReason =
@@ -315,6 +330,46 @@ export default function DeleteAccountCard({
                 </Button>
               </div>
             </form>
+
+            {/* 탈퇴 완료 전 최종 안내 모달 — 확인해야만 실제 요청을 보낸다. */}
+            <DialogPrimitive.Root open={noticeOpen} onOpenChange={setNoticeOpen}>
+              <DialogPrimitive.Portal>
+                <DialogPrimitive.Overlay className="fixed inset-0 z-[60] bg-black/50" />
+                <DialogPrimitive.Content
+                  className={cn(
+                    "fixed left-1/2 top-1/2 z-[60] w-[88vw] max-w-sm -translate-x-1/2 -translate-y-1/2",
+                    "rounded-xl border bg-card p-5 shadow-soft-lg focus:outline-none",
+                    "data-[state=open]:animate-dialog-in",
+                    "data-[state=closed]:animate-dialog-out",
+                  )}
+                >
+                  <DialogPrimitive.Title className="flex items-center gap-2 text-base font-semibold text-destructive">
+                    <AlertTriangle className="size-4" aria-hidden />
+                    탈퇴 전 꼭 확인해 주세요
+                  </DialogPrimitive.Title>
+                  <DialogPrimitive.Description className="mt-3 text-sm leading-relaxed text-foreground">
+                    {DELETION_NOTICE}
+                  </DialogPrimitive.Description>
+                  <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setNoticeOpen(false)}
+                    >
+                      취소
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() => void performDelete()}
+                      disabled={!canSubmit}
+                    >
+                      확인하고 탈퇴
+                    </Button>
+                  </div>
+                </DialogPrimitive.Content>
+              </DialogPrimitive.Portal>
+            </DialogPrimitive.Root>
           </DialogPrimitive.Content>
         </DialogPrimitive.Portal>
       </DialogPrimitive.Root>

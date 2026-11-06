@@ -2,30 +2,14 @@ import "server-only";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
 import { requireActiveUser } from "@/lib/auth/session";
+import {
+  DAILY_ATTENDANCE_REWARD,
+  kstToday,
+} from "@/lib/attendance/perfect-month";
 import { createAdminSupabase } from "@/lib/db/admin";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-/**
- * 출석 일일 보상 (포인트).
- */
-const DAILY_REWARD = 100;
-/**
- * 월 10일 달성 보너스. 정확히 10일째 출석 시점에 1회만 지급.
- */
-const TEN_DAY_BONUS = 500;
-const TEN_DAY_THRESHOLD = 10;
-
-/**
- * KST(UTC+9) 기준 오늘 일자(YYYY-MM-DD) 와 월 키(YYYY-MM) 를 반환.
- */
-function kstToday(): { dateStr: string; monthKey: string } {
-  const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
-  const dateStr = kst.toISOString().slice(0, 10); // YYYY-MM-DD
-  const monthKey = dateStr.slice(0, 7); // YYYY-MM
-  return { dateStr, monthKey };
-}
 
 /**
  * user_points 에 +amount 를 atomic 적립 (add_user_points_v2 RPC).
@@ -36,7 +20,7 @@ async function creditPoints(
   admin: ReturnType<typeof createAdminSupabase>,
   userId: string,
   amount: number,
-  reason: "attendance" | "attendance_bonus",
+  reason: "attendance",
   refId?: string,
   memo?: string,
 ): Promise<void> {
@@ -60,7 +44,9 @@ async function creditPoints(
  *
  * 오늘(KST) 출석체크.
  * - 중복 호출 시 멱등 응답 (alreadyChecked: true).
- * - 출석 성공 시 +100P, 정확히 월 10일째 출석에 도달하면 +500P 추가 지급.
+ * - 출석 성공 시 +100P. 월 보너스는 만근 보너스(+1,000P)뿐이며 여기서 주지 않는다 —
+ *   KST 매월 1일 cron(/api/cron/attendance-reset)이 직전 달을 정산한다 (lib/attendance/perfect-month.ts).
+ *   (10일 달성 +500P 는 2026-11-06 운영 결정으로 폐지.)
  * - 포인트 지급은 best-effort (실패해도 출석은 성공).
  *
  * 응답: {
@@ -68,8 +54,7 @@ async function creditPoints(
  *   checkedDate: string,        // YYYY-MM-DD (KST)
  *   totalThisMonth: number,
  *   totalAllTime: number,
- *   pointsAwarded: number,      // 이번 호출에서 지급된 포인트 합 (멱등 호출 시 0)
- *   tenDayBonus: boolean        // 이번 호출에서 10일 보너스 지급 여부
+ *   pointsAwarded: number       // 이번 호출에서 지급된 포인트 (멱등 호출 시 0)
  * }
  */
 export async function POST() {
@@ -134,66 +119,23 @@ export async function POST() {
 
     // 3) 포인트 보상 (best-effort, 신규 출석에 한함).
     let pointsAwarded = 0;
-    let tenDayBonus = false;
 
     if (!alreadyChecked) {
       try {
         await creditPoints(
           admin,
           user.id,
-          DAILY_REWARD,
+          DAILY_ATTENDANCE_REWARD,
           "attendance",
           undefined,
           `일일 출석 (${dateStr})`,
         );
-        pointsAwarded += DAILY_REWARD;
+        pointsAwarded += DAILY_ATTENDANCE_REWARD;
       } catch (e) {
         console.warn(
           "[attendance/check] 일일 포인트 지급 실패:",
           e instanceof Error ? e.message : String(e),
         );
-      }
-
-      // 월 10일 달성 보너스 — 정확히 1회만.
-      // `=== 10` 등호 비교는 동시 출석 레이스(서로 다른 날짜의 거의 동시 INSERT)에서
-      //   count 가 양쪽 모두 9 또는 모두 10/11 로 읽혀 보너스가 0번 또는 2번 지급될 수 있다.
-      //   (a) 임계 도달은 `>= 10` 으로 판정해 경계를 건너뛰어도 누락되지 않게 하고,
-      //   (b) 지급 직전 ledger 에 이번 달 보너스가 이미 있는지 확인해 중복 지급을 막는다.
-      if (totalThisMonth >= TEN_DAY_THRESHOLD) {
-        try {
-          const bonusMemo = `${monthKey} 10일 달성 보너스`;
-          // 이번 달 보너스 ledger 가 이미 존재하면(=다른 요청이 선지급) 건너뛴다 — 멱등.
-          const { count: existingBonus, error: bonusCheckErr } = await admin
-            .from("point_ledger")
-            .select("id", { count: "exact", head: true })
-            .eq("user_id", user.id)
-            .eq("reason", "attendance_bonus")
-            .eq("memo", bonusMemo);
-
-          if (bonusCheckErr) {
-            throw new Error(
-              `보너스 중복 확인 실패: ${bonusCheckErr.message}`,
-            );
-          }
-
-          if (!existingBonus) {
-            await creditPoints(
-              admin,
-              user.id,
-              TEN_DAY_BONUS,
-              "attendance_bonus",
-              undefined,
-              bonusMemo,
-            );
-            pointsAwarded += TEN_DAY_BONUS;
-            tenDayBonus = true;
-          }
-        } catch (e) {
-          console.warn(
-            "[attendance/check] 10일 보너스 지급 실패:",
-            e instanceof Error ? e.message : String(e),
-          );
-        }
       }
     }
 
@@ -203,7 +145,6 @@ export async function POST() {
       totalThisMonth,
       totalAllTime,
       pointsAwarded,
-      tenDayBonus,
     });
   } catch (err) {
     return failFromError(err);
