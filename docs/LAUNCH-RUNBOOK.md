@@ -208,6 +208,9 @@ pnpm test:a11y
 pnpm e2e:auth
 ```
 
+**최신 실행 2026-11-07** (`main` = `c001e86`, 운영 배포본): typecheck 0 · lint 0/0 · vitest 91파일 1,537 / 1 skip · test:pdf 5 · 운영 e2e 12 · a11y 25(+1 skip) ·
+build 성공 · `e2e:auth` **5 passed**(STATUS §0-30).
+
 **2026-09-21 기준선** (`main` = `4346c0b`, Next 16 전환 후): typecheck 0 ·
 lint **0 error / 41 warning**(38건이 `react-hooks` v7 신규 규칙 — 전환 방침상 warn 유지) ·
 vitest **78 파일 / 1,371 passed / 1 skipped**(`2d403ae` 에서는 82 파일 / 1,427) · `test:pdf` 4 케이스 · e2e 12 · a11y 25 ·
