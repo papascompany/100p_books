@@ -8,7 +8,7 @@
 > 이중 사용 창, `0032`(클라이언트 직접 쓰기 봉쇄)로 `profiles.role` 권한 상승 표면이 닫혔다.
 > postcheck 요약(`docs/sql/0032-postcheck-summary.sql`) 운영 실행 **27행 전부 `pass=true`**(2026-09-28).
 >
-> 최종 업데이트: 2026-11-05
+> 최종 업데이트: 2026-11-06
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
 > 운영 빌드: PR #39(2026-11-03, Dependabot #38 — next 16.4.3 등 8종 · postcss-selector-parser 6.1.5, §0-28) · PR #36(2026-10-27, Dependabot #33·#35 통합 — canvas 1.0.13 PDF baseline 갱신 · vite 8, §0-27) · `af92b5a`(2026-10-24, Dependabot #28·#29 통합 PR #30 — next 16.4.2 · react 19.3.1 · canvas 1.0.11 · vite 7.3.7 · axe 4.14 a11y 수정, §0-26) · `0804742`(2026-10-13, Storige 검증 결과 중첩 파싱·STORAGE_NOT_S3 — §0-24) · `44edc75`(2026-10-12, tailwindcss-animate devDeps 이동 → prod audit 0) · `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
@@ -25,7 +25,32 @@
 
 ---
 
-## 🆕 최근 작업 (2026-09-17 ~ 11-05)
+## 🆕 최근 작업 (2026-09-17 ~ 11-06)
+
+### 0-30. 오너 결정 반영 — 출석 만근제·관리자 출석 채우기·탈퇴 최종 안내·고객센터·자동발주 계획 (2026-11-06)
+
+오너 결정(11-06)을 서브에이전트 병렬로 처리(출석 구현 · 자동발주 계획서 · 메인은 탈퇴/푸터/문서·통합). **마이그레이션 없음.**
+
+- **출석 정책 — 30일 만근만 인정**: 일일 +100P 유지, **10일(+500P)·20일(+1,000P) 보너스 폐지**, 월 보너스는 **만근 +1,000P** 하나
+  (기준 `min(30, 그 달 일수)` — 2월은 전체 일수). 정본 `lib/attendance/perfect-month.ts`, memo `<YYYY-MM> 월 만근 보너스`(정확 일치 dedupe,
+  옛 20일 memo 도 같은 달 지급분으로 간주 · DB 0028 부분 unique). KST 1일 cron(`/api/cron/attendance-reset`)이 직전 달 정산. `monthly-bonus.ts` 삭제.
+  출석 체크 응답에서 `tenDayBonus` 제거(소비처 `AttendanceWidget` 하나 — 함께 정리). 사용자 문구(`/attendance`·위젯) 갱신.
+- **관리자 출석 채우기**(소급 지급의 유일한 경로): `/admin/attendance`(사이드바 "출석 현황") — 월 선택·회원 검색·출석 n/기준·만근·보너스 지급 여부,
+  "출석 채우기" 버튼 → **사유 필수(2~200자)** → `POST /api/admin/attendance/fill`. **어제(KST)까지**의 미출석일만 채움(오늘은 회원 본인 출석 +100P 몫이라 제외 —
+  구현 검토 중 메인이 조정), 채운 날은 일일 포인트 없음. 지난 달이 만근이 되면 그 자리에서 +1,000P(같은 memo), 이번 달은 다음 달 1일 cron 이 정산.
+  탈퇴 회원 409, 미래 월 400, 할 일 없음 409 `NOTHING_TO_FILL`. `audit_logs` `attendance.fill`(사유·채운 날짜·보너스 결과).
+- **탈퇴 최종 안내 모달**: 탈퇴 폼 제출 → 안내 모달 "회원 탈퇴 시 사진·작업 중인 포토북 등 데이터는 즉시 삭제되며, 주문·결제 기록은 전자상거래법에 따라
+  5년간 보관됩니다." → "확인하고 탈퇴"를 눌러야 요청 전송(`DeleteAccountCard.tsx`). 오너 원안("주문정보와 데이터는 즉시 삭제")은 법정 보존·실제 동작과 달라
+  오너 확인 후 사실 기준 문구로 조정 — 보관 정책은 현행 유지.
+- **고객센터**: 푸터에 "고객센터 02-2273-5131"(`tel:` 링크, CMS 가 아닌 코드 고정 — `components/layout/Footer.tsx`). 통신판매업 신고 완료(오너 확인).
+  **사업자 정보 세부값(상호·대표자·사업자번호·신고번호·주소)은 미수령** — 받으면 푸터에 추가.
+- **결정만 기록(코드 변경 없음)**: 선물 수령 이메일 대조 안 함 · Sentry 추후 보류 · 랜딩 문구 유지 → 런북 "오너 결정" 갱신.
+- **인쇄소 자동 발주**: 계획서만 — [docs/PRINT-AUTO-ORDER-PLAN.md](docs/PRINT-AUTO-ORDER-PLAN.md)(권장: "제작 시작" 전이 시 outbox enqueue, 1단계 이메일 반자동 → Storige 계약 확정 후 경유,
+  flag `off|shadow|on`, 0034 가정). 오너·Storige 확인 항목 §11. 착수는 오너 지시 시.
+- **토스 웹훅**: 코드는 운영 배포 상태, 운영 엔드포인트 응답 확인(빈 이벤트 `200 ignored`). 남은 것은 토스 개발자센터 URL 등록(런북 §1-b) — 등록 방식은 오너에게 재확인 예정.
+- 검증(로컬 darwin, Node 26 — engine 24 경고만): typecheck 0 · lint 0/0 · vitest **91파일 1,537 pass / 1 skip**(+2파일·42건) · build 성공.
+  e2e·a11y 는 PR CI 로 판정. 관리자 출석 화면·탈퇴 모달은 인증이 필요해 브라우저 실측 미실시.
+
 
 ### 0-29. 클라우드 세션 전체 검증 + minimatch 권고 범위 축소 확인 (2026-11-05) — 코드 변경 없음
 

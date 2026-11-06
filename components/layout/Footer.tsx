@@ -2,6 +2,9 @@ import Link from "next/link";
 
 import { getSiteContent } from "@/lib/content/get";
 
+/** 고객센터 대표 번호 — 법정 고지 성격이라 CMS(site_content)가 아니라 코드에 고정한다. */
+const CUSTOMER_CENTER_TEL = "02-2273-5131";
+
 export default async function Footer() {
   const year = new Date().getFullYear();
   const footerContent = await getSiteContent("footer");
@@ -20,6 +23,16 @@ export default async function Footer() {
             </Link>
             <p className="mt-2 text-sm text-mute max-w-[28ch] leading-relaxed">
               {footerContent.tagline}
+            </p>
+            {/* 고객 문의 창구 (2026-11-06 오너 결정). 사업자 정보 고지는 정보 수령 후 추가 — 런북 오너 결정 항목. */}
+            <p className="mt-3 text-sm text-ink">
+              고객센터{" "}
+              <a
+                href={`tel:${CUSTOMER_CENTER_TEL.replace(/-/g, "")}`}
+                className="font-semibold hover:text-coral-700 dark:hover:text-coral transition-colors"
+              >
+                {CUSTOMER_CENTER_TEL}
+              </a>
             </p>
             <p className="mt-3 text-xs text-mute">
               © {year} {footerContent.copyright}

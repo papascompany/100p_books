@@ -23,7 +23,6 @@ interface CheckResponse {
   totalThisMonth: number;
   totalAllTime: number;
   pointsAwarded: number;
-  tenDayBonus: boolean;
 }
 
 /**
@@ -215,11 +214,8 @@ export default function AttendanceWidget() {
       }
 
       // 성공 토스트
-      const bonusDesc = result.tenDayBonus
-        ? `+${result.pointsAwarded}P 적립 (10일 달성 보너스 +500P 포함!)`
-        : result.pointsAwarded > 0
-          ? `+${result.pointsAwarded}P 적립`
-          : undefined;
+      const bonusDesc =
+        result.pointsAwarded > 0 ? `+${result.pointsAwarded}P 적립` : undefined;
 
       toast({
         variant: "success",
@@ -431,8 +427,9 @@ export default function AttendanceWidget() {
       {/* 포인트 안내 */}
       {!todayChecked && (
         <p className="text-xs text-center text-muted-foreground -mt-2">
-          출석 시 <span className="font-semibold text-foreground">+100P</span> 적립 ·
-          10일 달성 시 추가 <span className="font-semibold text-foreground">+500P</span>
+          매일 출석 <span className="font-semibold text-foreground">+100P</span> · 한 달 만근(30일,
+          30일 미만인 달은 전체 일수) 시{" "}
+          <span className="font-semibold text-foreground">+1,000P</span>
         </p>
       )}
     </section>

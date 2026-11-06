@@ -23,6 +23,7 @@ const NAV: NavItem[] = [
   { href: "/admin/content", label: "사이트 콘텐츠", match: "prefix" },
   { href: "/admin/discounts", label: "할인 코드", match: "prefix" },
   { href: "/admin/users", label: "사용자", match: "prefix" },
+  { href: "/admin/attendance", label: "출석 현황", match: "prefix" },
   { href: "/admin/jobs", label: "PDF 잡", match: "prefix" },
   { href: "/admin/emails", label: "이메일 잡", match: "prefix" },
   { href: "/admin/audit", label: "감사 로그", match: "prefix" },
