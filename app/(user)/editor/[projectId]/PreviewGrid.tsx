@@ -402,7 +402,7 @@ export default function PreviewGrid({
             onClick={() => void onInsert(0)}
             disabled={busy}
             className={cn(
-              "mt-4 inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium",
+              "mt-4 inline-flex min-h-11 items-center gap-1.5 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium md:min-h-0",
               "transition-colors hover:bg-accent hover:text-accent-foreground",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               "disabled:opacity-50",
@@ -729,14 +729,14 @@ function DeleteDialog({
             <button
               type="button"
               onClick={onCancel}
-              className="inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex h-11 items-center justify-center rounded-md px-3 text-sm md:h-9 font-medium text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               취소
             </button>
             <button
               type="button"
               onClick={onConfirm}
-              className="inline-flex h-9 items-center justify-center rounded-md bg-destructive px-3 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex h-11 items-center justify-center rounded-md bg-destructive px-3 md:h-9 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               삭제
             </button>

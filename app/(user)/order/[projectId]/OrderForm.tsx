@@ -161,6 +161,20 @@ export default function OrderForm(props: OrderFormProps) {
   const [agreePrivacy, setAgreePrivacy] = useState(false);
   const [agreeRefund, setAgreeRefund] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // 모바일 하단 고정 결제바 — 폼 안 결제 버튼이 화면 아래에 있을 때만 보인다(버튼이 보이거나
+  // 이미 지나쳤으면 숨긴다 — 중복 표시·푸터 가림 방지).
+  const inlinePayRef = useRef<HTMLDivElement | null>(null);
+  const [inlinePayBelow, setInlinePayBelow] = useState(false);
+  useEffect(() => {
+    const el = inlinePayRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([entry]) => {
+      if (!entry) return;
+      setInlinePayBelow(!entry.isIntersecting && entry.boundingClientRect.top > 0);
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
   const [error, setError] = useState<string | null>(null);
 
   const [discount, setDiscount] = useState<DiscountState>({
@@ -1004,17 +1018,19 @@ export default function OrderForm(props: OrderFormProps) {
           </dl>
         </div>
 
-        <Button
-          type="button"
-          size="lg"
-          variant="coral"
-          className="w-full"
-          onClick={() => void handleSubmit()}
-          disabled={!canSubmit}
-        >
-          {submitting ? <Loader2 className="animate-spin" /> : null}
-          {submitting ? "처리 중…" : `${fmtKrw(finalAmount)} 결제하기`}
-        </Button>
+        <div ref={inlinePayRef}>
+          <Button
+            type="button"
+            size="lg"
+            variant="coral"
+            className="w-full"
+            onClick={() => void handleSubmit()}
+            disabled={!canSubmit}
+          >
+            {submitting ? <Loader2 className="animate-spin" /> : null}
+            {submitting ? "처리 중…" : `${fmtKrw(finalAmount)} 결제하기`}
+          </Button>
+        </div>
 
         {!addressValid ? (
           <p className="text-xs text-muted-foreground">
@@ -1036,6 +1052,53 @@ export default function OrderForm(props: OrderFormProps) {
           </p>
         ) : null}
       </aside>
+
+      {/* 모바일 하단 고정 결제바 — 긴 폼 중간에서도 최종 금액과 결제 상태를 보여준다.
+          md 이상에서는 숨김(display:none 이라 접근성 트리·e2e 의 결제 버튼 조회에도 잡히지 않는다). */}
+      {inlinePayBelow ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-hairline bg-canvas/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.06)] backdrop-blur md:hidden">
+          <div className="mx-auto flex max-w-xl items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-muted-foreground">최종 결제 금액</p>
+              <p className="font-display text-lg font-bold tracking-tight text-coral-700 dark:text-coral-300">
+                {fmtKrw(finalAmount)}
+              </p>
+            </div>
+            {submitting ? (
+              <Button type="button" variant="coral" className="h-11 shrink-0 px-5" disabled>
+                <Loader2 className="animate-spin" />
+                처리 중…
+              </Button>
+            ) : canSubmit ? (
+              <Button
+                type="button"
+                variant="coral"
+                className="h-11 shrink-0 px-5"
+                onClick={() => void handleSubmit()}
+              >
+                결제하기
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 shrink-0 px-4"
+                onClick={() => {
+                  // 막힌 이유가 있는 곳으로 데려간다 — 첫 미입력 배송지 칸(포커스) 또는 결제 버튼 주변.
+                  const firstInvalid = REQUIRED_ADDRESS_FIELDS.find((f) => addressErrors[f.key]);
+                  const target = firstInvalid
+                    ? document.getElementById(`order-${firstInvalid.key}-input`)
+                    : inlinePayRef.current;
+                  target?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  if (target instanceof HTMLInputElement) target.focus({ preventScroll: true });
+                }}
+              >
+                {!addressValid ? "배송지 입력하기" : !allAgreed ? "약관 동의하기" : "결제 정보 확인"}
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

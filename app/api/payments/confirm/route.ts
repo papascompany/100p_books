@@ -11,7 +11,7 @@ import { createServerSupabase } from "@/lib/db/server";
 import type { Database, OrderStatus } from "@/lib/db/types";
 import { reasonMessage } from "@/lib/discounts/validate";
 import { enqueueEmail } from "@/lib/email/queue";
-import { calcCoverDimensions } from "@/lib/layout/cover";
+import { isCoverFormatOutdated } from "@/lib/layout/cover";
 import { isPageDoc } from "@/lib/layout/types";
 import { refundCapturedPaymentOfCancelledOrder } from "@/lib/orders/cancelled-order-refund";
 import { finalizePaidOrder, isPaidLikeStatus } from "@/lib/orders/finalize-paid";
@@ -706,8 +706,7 @@ async function checkPricingBasis(
   }
 
   // 표지 규격 게이트 — orders/create 와 동일(페이지 수가 바뀌면 책등 폭도 바뀐다).
-  const expectedCover = calcCoverDimensions({ bookSize, pageCount: pages });
-  if (Math.abs(expectedCover.totalWidthMm - stored.widthMm) > 0.5) {
+  if (isCoverFormatOutdated({ bookSize, pageCount: pages, coverWidthMm: stored.widthMm })) {
     return fail(
       "COVER_FORMAT_OUTDATED",
       "표지 규격이 갱신되었어요. 표지 편집기에서 '새 규격으로 다시 만들기'를 실행한 뒤 다시 주문해주세요.",
