@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { getSession, requireAdmin } from "@/lib/auth/session";
 
+import AdminMobileNav from "./AdminMobileNav";
 import AdminSidebar from "./AdminSidebar";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +39,7 @@ export default async function AdminLayout({
             {session?.user.email ?? ""}
           </span>
         </header>
+        <AdminMobileNav />
         <main className="flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
       </div>
     </div>

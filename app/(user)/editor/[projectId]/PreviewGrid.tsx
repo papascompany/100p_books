@@ -419,7 +419,8 @@ export default function PreviewGrid({
     <>
       {/* 드래그 reorder 시각 안내 — aria-label 만으로는 발견이 어려움 */}
       <p className="text-xs text-muted-foreground">
-        카드를 길게 누르면(마우스는 드래그) 순서를 바꿀 수 있어요.
+        탭하면 편집, 길게 누르면 순서 변경
+        <span className="[@media(hover:none)]:hidden"> (마우스는 클릭하면 편집, 드래그하면 순서 변경)</span>
       </p>
       <div
         ref={gridRef}
@@ -669,6 +670,8 @@ const PreviewCell = memo(function PreviewCell({
             "absolute inset-0 flex items-center justify-center rounded-md bg-black/0 opacity-0 transition-opacity",
             "focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             "group-hover:bg-black/30 group-hover:opacity-100",
+            // hover 가 없는 터치 기기 — "편집" 배지를 항상 보여 탭하면 편집된다는 것을 알린다.
+            "[@media(hover:none)]:opacity-100",
           )}
           aria-label={`페이지 ${p.pageNo} 편집`}
         >

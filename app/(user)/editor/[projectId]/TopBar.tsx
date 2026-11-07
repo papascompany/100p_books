@@ -1,10 +1,11 @@
 "use client";
 
-import { Share2 } from "lucide-react";
+import { ImagePlus, Share2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import ShareDialog from "@/components/editor/ShareDialog";
+import StepIndicator from "@/components/flow/StepIndicator";
 import { Button } from "@/components/ui/button";
 import {
   READ_ONLY_BADGE_LABEL,
@@ -21,11 +22,16 @@ export interface TopBarProps {
    * 배너는 EditorClient 가 1회 노출하므로 여기서는 비활성 + 짧은 상태 표시만 한다.
    */
   lockMessage: string | null;
+  /** 저장된 표지(projects.cover_json)가 있는지 — 없으면 주 버튼이 주문 대신 표지 만들기로 간다. */
+  hasCover: boolean;
 }
 
 /**
- * 프로젝트 타이틀 인라인 편집 + 사진/페이지 카운트 + 다음/표지 링크.
- * 실제 표지 편집 / 주문 라우트는 M4 / M6 에서 연결.
+ * 포토북 제목 인라인 편집 + 사진/페이지 카운트 + 다음 단계 링크.
+ *
+ * 주 버튼은 흐름의 다음 단계로 보낸다 — 표지가 없으면 "다음: 표지 만들기"(주문 페이지는 표지가 없으면
+ * 진행할 수 없다), 표지가 있으면 "다음: 주문". 다른 쪽은 보조 버튼으로 둔다.
+ * 접근 이름 "주문 단계로 이동"·"표지 편집으로 이동"은 두 경우 모두 하나씩 존재한다(e2e 계약).
  */
 export default function TopBar({
   projectId,
@@ -33,6 +39,7 @@ export default function TopBar({
   photoCount,
   pageCount,
   lockMessage,
+  hasCover,
 }: TopBarProps) {
   const [title, setTitle] = useState(initialTitle);
   const [saving, setSaving] = useState(false);
@@ -86,11 +93,9 @@ export default function TopBar({
   return (
     <header className="flex flex-col gap-4 border-b pb-5 md:flex-row md:items-end md:justify-between">
       <div className="min-w-0">
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-coral/90">
-          step 2 of 4 · 내지 편집
-        </p>
+        <StepIndicator step={2} />
         <label htmlFor="project-title" className="sr-only">
-          프로젝트 제목
+          포토북 제목
         </label>
         <input
           id="project-title"
@@ -105,7 +110,7 @@ export default function TopBar({
           }}
           disabled={titleField.disabled}
           title={titleField.lockMessage ?? undefined}
-          aria-label="프로젝트 제목"
+          aria-label="포토북 제목"
           className="mt-1 w-full max-w-xl bg-transparent font-display text-2xl font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:text-3xl"
         />
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
@@ -137,26 +142,63 @@ export default function TopBar({
           <Share2 className="size-4" aria-hidden />
           공유
         </Button>
-        <Button asChild variant="outline" size="sm">
-          <Link href={`/cover/${projectId}`} aria-label="표지 편집으로 이동">
-            표지 편집
-          </Link>
-        </Button>
-        {pageCount === 0 ? (
-          <Button
-            variant="gradient"
-            size="sm"
-            disabled
-            aria-label="페이지가 생성된 후에 주문할 수 있어요"
-          >
-            다음: 주문
-          </Button>
-        ) : (
-          <Button asChild variant="gradient" size="sm">
-            <Link href={`/order/${projectId}`} aria-label="주문 단계로 이동">
-              다음: 주문
+        {/* 사진 추가 — 이미 사진이 있는 포토북에도 업로드로 돌아갈 입구. 모바일은 아이콘만. */}
+        {titleField.lockMessage === null ? (
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/upload?projectId=${projectId}`} aria-label="사진 추가">
+              <ImagePlus className="size-4" aria-hidden />
+              <span className="hidden sm:inline">사진 추가</span>
             </Link>
           </Button>
+        ) : null}
+        {hasCover ? (
+          <>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/cover/${projectId}`} aria-label="표지 편집으로 이동">
+                표지 편집
+              </Link>
+            </Button>
+            {pageCount === 0 ? (
+              <Button
+                variant="gradient"
+                size="sm"
+                disabled
+                aria-label="페이지가 생성된 후에 주문할 수 있어요"
+              >
+                다음: 주문
+              </Button>
+            ) : (
+              <Button asChild variant="gradient" size="sm">
+                <Link href={`/order/${projectId}`} aria-label="주문 단계로 이동">
+                  다음: 주문
+                </Link>
+              </Button>
+            )}
+          </>
+        ) : (
+          <>
+            {pageCount === 0 ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled
+                aria-label="페이지가 생성된 후에 주문할 수 있어요"
+              >
+                주문
+              </Button>
+            ) : (
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/order/${projectId}`} aria-label="주문 단계로 이동">
+                  주문
+                </Link>
+              </Button>
+            )}
+            <Button asChild variant="gradient" size="sm">
+              <Link href={`/cover/${projectId}`} aria-label="표지 편집으로 이동">
+                다음: 표지 만들기
+              </Link>
+            </Button>
+          </>
         )}
       </div>
 

@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import type { OrderStatus } from "@/lib/db/types";
+import { CARRIER_OPTIONS } from "@/lib/orders/carriers";
 import { canTransition, ORDER_STATUS_LABEL } from "@/lib/orders/state";
 import {
   formatValidationBlocks,
@@ -33,15 +34,6 @@ const NEXT: Array<{
   // 토스 결제를 건드리지 않는 상태 기록 전용 — 콘솔에서 이미 전액 취소한 주문 보정용.
   // 실제 결제 취소까지 하는 경로는 아래 '전액 환불' 버튼(/api/admin/orders/:id/refund).
   { to: "refunded", label: "환불 상태만 기록", tone: "outline" },
-];
-
-const CARRIER_OPTIONS = [
-  { value: "cj", label: "CJ대한통운" },
-  { value: "hanjin", label: "한진택배" },
-  { value: "lotte", label: "롯데택배" },
-  { value: "post", label: "우체국택배" },
-  { value: "logen", label: "로젠택배" },
-  { value: "etc", label: "기타" },
 ];
 
 export interface PdfJobBrief {
@@ -104,7 +96,7 @@ export default function OrderActions({
                   "계속하시겠습니까?"
               : "주문을 취소하시겠습니까?",
           )
-        : !confirm(`상태를 '${to}' 로 변경하시겠습니까?`))
+        : !confirm(`상태를 '${ORDER_STATUS_LABEL[to]}'(으)로 변경하시겠습니까?`))
     ) {
       return;
     }
@@ -138,9 +130,16 @@ export default function OrderActions({
         });
         return;
       }
-      toast({ variant: "success", title: `상태 변경: ${to}` });
+      toast({ variant: "success", title: `상태 변경: ${ORDER_STATUS_LABEL[to]}` });
       setShowShip(false);
       router.refresh();
+    } catch {
+      // 네트워크 예외 — 서버 반영 여부를 알 수 없으므로 상태 재확인을 안내한다.
+      toast({
+        variant: "destructive",
+        title: "결과 확인 실패",
+        description: "새로고침 후 상태를 확인하세요.",
+      });
     } finally {
       setBusy(false);
     }
@@ -170,6 +169,13 @@ export default function OrderActions({
         description: "표지/내지 PDF 가 갱신되었습니다.",
       });
       router.refresh();
+    } catch {
+      // 네트워크 예외 — 서버 반영 여부를 알 수 없으므로 상태 재확인을 안내한다.
+      toast({
+        variant: "destructive",
+        title: "결과 확인 실패",
+        description: "새로고침 후 상태를 확인하세요.",
+      });
     } finally {
       setBusy(false);
     }
@@ -232,6 +238,13 @@ export default function OrderActions({
       }
       toast({ variant: "success", title: "결제 상태 수렴 완료", description: action });
       router.refresh();
+    } catch {
+      // 네트워크 예외 — 서버 반영 여부를 알 수 없으므로 상태 재확인을 안내한다.
+      toast({
+        variant: "destructive",
+        title: "결과 확인 실패",
+        description: "새로고침 후 상태를 확인하세요.",
+      });
     } finally {
       setBusy(false);
     }
@@ -259,6 +272,13 @@ export default function OrderActions({
         description: "잡 상태를 확인하세요.",
       });
       router.refresh();
+    } catch {
+      // 네트워크 예외 — 서버 반영 여부를 알 수 없으므로 상태 재확인을 안내한다.
+      toast({
+        variant: "destructive",
+        title: "결과 확인 실패",
+        description: "새로고침 후 상태를 확인하세요.",
+      });
     } finally {
       setBusy(false);
     }

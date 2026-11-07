@@ -49,6 +49,16 @@ function extractCoverThumb(coverJson: Record<string, unknown> | null): string | 
   return null;
 }
 
+/**
+ * 카드에 보이는 제목 — DB 기본 제목 "Untitled" 는 화면에서만 쉬운 말로 바꾼다.
+ * (DB 값과 삭제 확인 문구는 원래 제목 그대로 — confirmPhrase 참고)
+ */
+function displayTitle(title: string | null): string {
+  const t = title?.trim();
+  if (!t || t === "Untitled") return "제목 없는 포토북";
+  return t;
+}
+
 /** relative time 한국어 표현 */
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -71,7 +81,7 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
     className: "bg-card text-mute border border-hairline",
   },
   ordered: {
-    label: "완성",
+    label: "주문 완료",
     className: "bg-night text-white border border-night",
   },
 };
@@ -95,10 +105,12 @@ function StatusBadge({ status }: { status: string }) {
 interface CardMenuProps {
   projectId: string;
   projectTitle: string | null;
+  /** 저장된 표지가 있는지 — 없으면 주문 대신 표지 만들기로 보낸다(주문은 표지가 있어야 진행된다). */
+  hasCover: boolean;
   onDeleted: (id: string) => void;
 }
 
-function CardMenu({ projectId, projectTitle, onDeleted }: CardMenuProps) {
+function CardMenu({ projectId, projectTitle, hasCover, onDeleted }: CardMenuProps) {
   const { toast } = useToast();
   const [deleting, setDeleting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -186,7 +198,11 @@ function CardMenu({ projectId, projectTitle, onDeleted }: CardMenuProps) {
             <Link href={`/cover/${projectId}`}>표지 편집</Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
-            <Link href={`/order/${projectId}`}>주문하기</Link>
+            {hasCover ? (
+              <Link href={`/order/${projectId}`}>주문하기</Link>
+            ) : (
+              <Link href={`/cover/${projectId}`}>표지 만들고 주문하기</Link>
+            )}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
@@ -199,7 +215,7 @@ function CardMenu({ projectId, projectTitle, onDeleted }: CardMenuProps) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* 2단계 삭제 확인 — 프로젝트 삭제는 휴지통 없이 즉시 영구 삭제라 강한 확인이 필요 */}
+      {/* 2단계 삭제 확인 — 포토북 삭제는 휴지통 없이 즉시 영구 삭제라 강한 확인이 필요 */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         {/* 모바일: 상단 정렬 — 제목 입력 시 소프트 키보드가 하단 버튼을 가리지 않게 */}
         <DialogContent className="top-[8%] max-w-md translate-y-0 sm:top-1/2 sm:-translate-y-1/2">
@@ -265,20 +281,27 @@ interface ProjectCardProps {
 function ProjectCard({ project, onDeleted }: ProjectCardProps) {
   const router = useRouter();
   const thumbSrc = extractCoverThumb(project.cover_json);
+  const title = displayTitle(project.title);
+  // 사진이 하나도 없는 초안 — 빈 에디터 대신 사진 올리기부터.
+  const isEmptyDraft = project.status === "draft" && project.photo_count === 0;
 
   return (
     <article className="group relative flex flex-col overflow-hidden rounded-2xl border border-hairline bg-card shadow-soft transition-all hover:-translate-y-1 hover:border-coral hover:shadow-soft-lg">
       {/* 썸네일 */}
       <button
         type="button"
-        aria-label={`${project.title ?? "제목 없음"} 편집하기`}
+        aria-label={isEmptyDraft ? `${title} 사진 올리기` : `${title} 편집하기`}
         className="relative aspect-square w-full overflow-hidden bg-soft-cloud focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-        onClick={() => router.push(`/editor/${project.id}`)}
+        onClick={() =>
+          router.push(
+            isEmptyDraft ? `/upload?projectId=${project.id}` : `/editor/${project.id}`,
+          )
+        }
       >
         {thumbSrc ? (
           <Image
             src={thumbSrc}
-            alt={project.title ?? "포토북 표지"}
+            alt={`${title} 표지`}
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             className="object-cover transition-transform duration-300 group-hover:scale-105"
@@ -298,14 +321,13 @@ function ProjectCard({ project, onDeleted }: ProjectCardProps) {
       <CardMenu
         projectId={project.id}
         projectTitle={project.title}
+        hasCover={project.cover_json !== null}
         onDeleted={onDeleted}
       />
 
       {/* 정보 영역 */}
       <div className="flex flex-col gap-0.5 px-3 py-3">
-        <p className="truncate text-sm font-semibold leading-snug">
-          {project.title ?? "제목 없음"}
-        </p>
+        <p className="truncate text-sm font-semibold leading-snug">{title}</p>
         <p className="truncate text-xs text-muted-foreground">
           {project.book_sizes?.name ?? "—"}
         </p>
@@ -369,7 +391,7 @@ export default function ProjectsClient({ projects: initialProjects }: Props) {
           </Button>
         </div>
       ) : (
-        /* 프로젝트 그리드 */
+        /* 포토북 그리드 */
         <ul
           className="grid grid-cols-2 gap-4 sm:grid-cols-3"
           aria-label="내 포토북 목록"

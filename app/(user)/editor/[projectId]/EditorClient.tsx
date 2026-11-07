@@ -23,6 +23,8 @@ export interface EditorClientProps {
    * 서버도 409 PROJECT_LOCKED 로 막으므로 이것은 안내다.
    */
   lockMessage: string | null;
+  /** 저장된 표지가 있는지 — TopBar 주 버튼(표지 만들기 / 주문) 결정. */
+  hasCover: boolean;
 }
 
 /** 내지 목록 조회 — state 는 건드리지 않고 응답만 돌려준다(실패 시 throw). */
@@ -57,6 +59,7 @@ export default function EditorClient({
   initialPageCount,
   bookSize,
   lockMessage,
+  hasCover,
 }: EditorClientProps) {
   const [pages, setPages] = useState<PageSummary[]>([]);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
@@ -229,6 +232,7 @@ export default function EditorClient({
         photoCount={photoCount}
         pageCount={pageCount}
         lockMessage={lockNotice}
+        hasCover={hasCover}
       />
 
       <GenerateControls

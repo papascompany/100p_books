@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckCircle2, Coins, Loader2, Minus, Plus, Search, Tag, XCircle } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -301,15 +302,21 @@ export default function OrderForm(props: OrderFormProps) {
     setPoints((s) => ({ ...s, inputValue: numStr }));
   }
 
+  // 이번 주문에서 쓸 수 있는 최대 포인트 — "전액 사용" 과 같은 계산(보유 잔액 전부를 요청했을 때의 클램프 결과).
+  const maxUsablePoints = useMemo(
+    () =>
+      clampPointsForMinPayment({
+        subtotal: breakdown.total,
+        discountAmount: discount.discountAmount,
+        requestedPoints: points.balance,
+      }).pointsUsed,
+    [breakdown.total, discount.discountAmount, points.balance],
+  );
+
   function useAllPoints() {
-    const { pointsUsed } = clampPointsForMinPayment({
-      subtotal: breakdown.total,
-      discountAmount: discount.discountAmount,
-      requestedPoints: points.balance,
-    });
     setPoints((s) => ({
       ...s,
-      inputValue: pointsUsed === 0 ? "" : String(pointsUsed),
+      inputValue: maxUsablePoints === 0 ? "" : String(maxUsablePoints),
     }));
   }
 
@@ -484,7 +491,7 @@ export default function OrderForm(props: OrderFormProps) {
       const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY;
       if (!clientKey) {
         throw new Error(
-          "토스 결제 키가 설정되어 있지 않습니다. (NEXT_PUBLIC_TOSS_CLIENT_KEY)",
+          "지금은 결제를 진행할 수 없어요. 잠시 후 다시 시도하거나 고객센터로 문의해 주세요.",
         );
       }
       // 동적 import — 번들 사이즈 절감.
@@ -540,9 +547,28 @@ export default function OrderForm(props: OrderFormProps) {
           <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">
             주문서
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {props.projectTitle} · {props.bookSizeName} · {props.pageCount}p
-          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <p className="text-sm text-muted-foreground">
+              {props.projectTitle} · {props.bookSizeName} · {props.pageCount}p
+            </p>
+            <div className="flex items-center gap-1 text-xs">
+              <Link
+                href={`/cover/${props.projectId}`}
+                className="inline-flex min-h-8 items-center rounded-md px-2 text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              >
+                표지 수정
+              </Link>
+              <span aria-hidden className="text-muted-foreground/60">
+                ·
+              </span>
+              <Link
+                href={`/editor/${props.projectId}`}
+                className="inline-flex min-h-8 items-center rounded-md px-2 text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              >
+                내지 수정
+              </Link>
+            </div>
+          </div>
         </header>
 
         {/* 수량 */}
@@ -587,11 +613,13 @@ export default function OrderForm(props: OrderFormProps) {
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <Field
               label="받는 분"
+              htmlFor="order-name-input"
               required
               error={touched.name ? addressErrors.name : null}
               errorId="order-name-error"
             >
               <Input
+                id="order-name-input"
                 value={address.name}
                 onChange={(e) => update("name", e.target.value)}
                 onBlur={() => markTouched("name")}
@@ -605,12 +633,15 @@ export default function OrderForm(props: OrderFormProps) {
             </Field>
             <Field
               label="전화번호"
+              htmlFor="order-phone-input"
               required
               hint="예: 010-1234-5678"
+              hintId="order-phone-hint"
               error={touched.phone ? addressErrors.phone : null}
               errorId="order-phone-error"
             >
               <Input
+                id="order-phone-input"
                 value={address.phone}
                 onChange={(e) => update("phone", e.target.value)}
                 onBlur={() => markTouched("phone")}
@@ -619,18 +650,20 @@ export default function OrderForm(props: OrderFormProps) {
                 required
                 aria-invalid={touched.phone && addressErrors.phone ? true : undefined}
                 aria-describedby={
-                  touched.phone && addressErrors.phone ? "order-phone-error" : undefined
+                  touched.phone && addressErrors.phone ? "order-phone-error" : "order-phone-hint"
                 }
               />
             </Field>
             <Field
               label="우편번호"
+              htmlFor="order-zip-input"
               required
               error={touched.zip ? addressErrors.zip : null}
               errorId="order-zip-error"
             >
               <div className="flex gap-2">
                 <Input
+                  id="order-zip-input"
                   value={address.zip}
                   onChange={(e) => update("zip", e.target.value.replace(/\D/g, "").slice(0, 5))}
                   onBlur={() => markTouched("zip")}
@@ -662,12 +695,14 @@ export default function OrderForm(props: OrderFormProps) {
             </Field>
             <Field
               label="주소"
+              htmlFor="order-addr1-input"
               required
               className="sm:col-span-2"
               error={touched.addr1 ? addressErrors.addr1 : null}
               errorId="order-addr1-error"
             >
               <Input
+                id="order-addr1-input"
                 value={address.addr1}
                 onChange={(e) => update("addr1", e.target.value)}
                 onBlur={() => markTouched("addr1")}
@@ -679,7 +714,7 @@ export default function OrderForm(props: OrderFormProps) {
                 }
               />
             </Field>
-            <Field label="상세주소" className="sm:col-span-2">
+            <Field label="상세주소" htmlFor="addr2-input" className="sm:col-span-2">
               <Input
                 id="addr2-input"
                 value={address.addr2}
@@ -687,8 +722,9 @@ export default function OrderForm(props: OrderFormProps) {
                 autoComplete="address-line2"
               />
             </Field>
-            <Field label="배송 메모" className="sm:col-span-2">
+            <Field label="배송 메모" htmlFor="order-memo-input" className="sm:col-span-2">
               <Input
+                id="order-memo-input"
                 value={address.memo}
                 onChange={(e) => update("memo", e.target.value)}
                 placeholder="예: 부재 시 경비실에 맡겨주세요"
@@ -750,7 +786,7 @@ export default function OrderForm(props: OrderFormProps) {
                   aria-describedby={discount.error ? "discount-error" : undefined}
                   autoComplete="off"
                   spellCheck={false}
-                  className="flex-1 font-mono tracking-wider uppercase"
+                  className="flex-1 font-mono tracking-wider uppercase placeholder:font-sans placeholder:normal-case placeholder:tracking-normal"
                   disabled={discount.validating}
                 />
                 <Button
@@ -826,8 +862,11 @@ export default function OrderForm(props: OrderFormProps) {
                   })
                 }
                 inputMode="numeric"
-                placeholder="사용할 포인트 입력 (100 단위)"
+                placeholder="100P 단위로 입력"
                 aria-label="사용할 포인트"
+                aria-describedby={
+                  !points.loading && points.balance > 0 ? "points-cap-hint" : undefined
+                }
                 disabled={points.loading || points.balance === 0}
                 className="flex-1"
               />
@@ -836,13 +875,20 @@ export default function OrderForm(props: OrderFormProps) {
                 variant="outline"
                 size="default"
                 onClick={useAllPoints}
-                disabled={points.loading || points.balance === 0}
+                disabled={points.loading || maxUsablePoints === 0}
                 aria-label="포인트 전액 사용"
                 className="shrink-0"
               >
                 전액 사용
               </Button>
             </div>
+            {!points.loading && points.balance > 0 ? (
+              <p id="points-cap-hint" className="text-xs text-muted-foreground">
+                {maxUsablePoints > 0
+                  ? `최대 ${KRW.format(maxUsablePoints)}P 사용 가능`
+                  : `지금은 사용할 수 있는 포인트가 없어요 — 100P 단위로 사용하고, 최소 결제 금액(${MIN_PAYMENT_AMOUNT}원)은 남겨야 해요.`}
+              </p>
+            ) : null}
             {effectivePoints > 0 ? (
               <p className="text-xs text-coral-600 dark:text-coral-400 font-medium">
                 {KRW.format(effectivePoints)}P 차감 예정
@@ -866,6 +912,18 @@ export default function OrderForm(props: OrderFormProps) {
         <section className="rounded-2xl border border-hairline bg-card p-4 sm:p-5 shadow-soft">
           <h2 className="text-sm font-semibold">약관 동의</h2>
           <div className="mt-3 space-y-2 text-sm">
+            {/* 전체 동의 — 상태는 개별 동의 3개에서 계산한다(별도 state 없음). */}
+            <div className="border-b border-hairline pb-2 font-medium">
+              <Agree
+                checked={allAgreed}
+                onChange={(v) => {
+                  setAgreeService(v);
+                  setAgreePrivacy(v);
+                  setAgreeRefund(v);
+                }}
+                label="전체 동의"
+              />
+            </div>
             <Agree
               checked={agreeService}
               onChange={setAgreeService}
@@ -901,6 +959,11 @@ export default function OrderForm(props: OrderFormProps) {
               />
             ) : null}
             <Row label="수량" value={`× ${qty}`} />
+            {/* 상품 금액 = (단가 + 페이지 추가) × 수량 = 수량 할인 전 금액 (pricing.ts calcOrderAmount).
+                할인이 없으면 바로 아래 소계와 같은 값이라 중복 줄을 만들지 않는다. */}
+            {breakdown.discount > 0 ? (
+              <Row label="상품 금액" value={fmtKrw(breakdown.total + breakdown.discount)} />
+            ) : null}
             {breakdown.discount > 0 ? (
               <Row
                 label={`수량 할인 (${Math.round(breakdown.discountRatio * 100)}%)`}
@@ -981,10 +1044,19 @@ function fmtKrw(n: number): string {
   return `${KRW.format(n)}원`;
 }
 
+/**
+ * 입력 필드 래퍼. label 은 htmlFor 로 입력과 연결하고 라벨 문구만 담는다 — 오류·힌트 문구가
+ * 접근 이름에 섞이지 않게 label 밖에 두고, 입력의 aria-describedby 로 errorId/hintId 를 연결한다.
+ * (e2e 가 getByLabel("받는 분 *") 등 라벨 문구로 입력을 찾는다.)
+ */
 function Field(props: {
   label: string;
+  /** 연결할 입력 요소의 id. */
+  htmlFor: string;
   required?: boolean;
   hint?: string;
+  /** 힌트 문구 요소 id — input 의 aria-describedby 와 연결. */
+  hintId?: string;
   /** blur 검증 실패 메시지 — 있으면 hint 대신 표시. */
   error?: string | null;
   /** 에러 문구 요소 id — input 의 aria-describedby 와 연결. */
@@ -993,20 +1065,22 @@ function Field(props: {
   children: React.ReactNode;
 }) {
   return (
-    <label className={"flex flex-col gap-1.5 " + (props.className ?? "")}>
-      <span className="text-xs font-medium text-muted-foreground">
+    <div className={"flex flex-col gap-1.5 " + (props.className ?? "")}>
+      <label htmlFor={props.htmlFor} className="text-xs font-medium text-muted-foreground">
         {props.label}
         {props.required ? <span className="text-coral-700 dark:text-coral-300"> *</span> : null}
-      </span>
+      </label>
       {props.children}
       {props.error ? (
         <span id={props.errorId} role="alert" className="text-xs text-destructive">
           {props.error}
         </span>
       ) : props.hint ? (
-        <span className="text-xs text-muted-foreground/80">{props.hint}</span>
+        <span id={props.hintId} className="text-xs text-muted-foreground/80">
+          {props.hint}
+        </span>
       ) : null}
-    </label>
+    </div>
   );
 }
 

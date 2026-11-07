@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, Check, ImageOff, Loader2, RotateCcw, X } from "lucide-react";
+import { AlertCircle, Check, ImageOff, Loader2, RotateCcw, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { UploadItem } from "@/lib/image/upload-queue";
@@ -92,6 +92,9 @@ export default function FileGridItem({
     item.status === "pending";
 
   const pct = Math.round(item.progress * 100);
+  const failed = item.status === "error" || item.status === "cancelled";
+  // 형식·용량 검증 실패 — 재시도해도 같은 결과라 제거만 제공한다.
+  const invalid = item.status === "error" && item.errorKind === "invalid";
 
   return (
     <div
@@ -176,7 +179,7 @@ export default function FileGridItem({
             {item.status === "done" && <Check className="size-3" aria-hidden />}
             {item.status === "error" && <AlertCircle className="size-3" aria-hidden />}
             {isWorking && <Loader2 className="size-3 animate-spin" aria-hidden />}
-            {STATUS_LABEL[item.status]}
+            {invalid ? "올릴 수 없음" : STATUS_LABEL[item.status]}
             {isWorking ? ` ${pct}%` : null}
           </span>
         </div>
@@ -206,7 +209,16 @@ export default function FileGridItem({
           </p>
         ) : null}
 
-        {(item.status === "error" || item.status === "cancelled") && (
+        {invalid ? (
+          <button
+            type="button"
+            onClick={() => onRemove(item.id)}
+            aria-label={`${item.file.name} 목록에서 제거`}
+            className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-input bg-background px-3 text-xs font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Trash2 className="size-3.5" aria-hidden /> 제거
+          </button>
+        ) : failed ? (
           // 실패 복구는 핵심 동작 — 44px 터치 타깃의 풀폭 버튼 (UP-11)
           <button
             type="button"
@@ -215,7 +227,7 @@ export default function FileGridItem({
           >
             <RotateCcw className="size-3.5" aria-hidden /> 재시도
           </button>
-        )}
+        ) : null}
       </div>
     </div>
   );

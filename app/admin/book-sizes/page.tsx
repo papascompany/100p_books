@@ -60,7 +60,7 @@ export default async function BookSizesPage() {
               : "bg-zinc-200 text-zinc-700")
           }
         >
-          {b.active ? "ON" : "OFF"}
+          {b.active ? "활성" : "비활성"}
         </span>
       ),
     },

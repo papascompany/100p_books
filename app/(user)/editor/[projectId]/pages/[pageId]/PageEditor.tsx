@@ -53,6 +53,7 @@ import {
 // fabricClipboard: 실제 사용 시점에 동적으로 import (fabric.js 번들 분리)
 const getClipboard = () => import("@/lib/fabric/clipboard").then((m) => m.fabricClipboard);
 import type { LoadDocResult } from "@/lib/fabric/load-guards";
+import { useLeaveGuard } from "@/lib/hooks/use-leave-guard";
 import type { TaggedFabricObject } from "@/lib/fabric/serialize";
 import {
   isPageDoc,
@@ -85,6 +86,10 @@ export interface PageEditorProps {
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 5000;
+
+/** 미저장 상태에서 링크·새로고침으로 나갈 때의 확인 문구. */
+const EDITOR_LEAVE_MESSAGE =
+  "저장되지 않은 변경 사항이 있어요. 이 페이지를 나가면 최근 변경 사항이 사라져요.";
 
 /** 저장 전 캔버스 로드·복원 대기 한도 — 이미지 로드가 멈춰도 저장·이동이 영원히 막히지 않게. */
 const STAGE_IDLE_TIMEOUT_MS = 15_000;
@@ -516,16 +521,9 @@ export default function PageEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dirty, autosave, readOnly, savedAt, docReloadedAt]);
 
-  // beforeunload guard — 하드 내비게이션(새로고침/탭 닫기) 전용.
-  useEffect(() => {
-    function onBeforeUnload(e: BeforeUnloadEvent) {
-      if (!dirty) return;
-      e.preventDefault();
-      e.returnValue = "저장되지 않은 변경 사항이 있어요.";
-    }
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [dirty]);
+  // 이탈 경고 — 하드 내비게이션(새로고침/탭 닫기) + 헤더 등 `<a>` 링크 소프트 내비게이션.
+  // 에디터 자체 이동(navigateTo)은 버튼 + router.push 라 이 가드를 거치지 않고 저장 후 이동한다.
+  useLeaveGuard(dirty, EDITOR_LEAVE_MESSAGE);
 
   /**
    * 소프트 내비게이션 가드 (EC-1).
@@ -872,7 +870,7 @@ export default function PageEditor({
         >
           ← 페이지 목록
         </Button>
-        <span className="text-sm text-muted-foreground" aria-live="polite">
+        <span className="text-sm text-muted-foreground">
           {projectTitle} ·
         </span>
 
@@ -1000,7 +998,7 @@ export default function PageEditor({
             className="basis-full text-xs text-muted-foreground md:basis-auto"
             aria-live="polite"
           >
-            마지막 저장 {new Date(savedAt).toLocaleTimeString()}
+            마지막 저장 {new Date(savedAt).toLocaleTimeString("ko-KR")}
           </span>
         ) : null}
         {error ? (

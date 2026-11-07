@@ -19,7 +19,14 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  *     결제 키 없음 + 토스에 승인된 결제 없음을 확인한 뒤에만 취소한다.
  * GET 렌더에서 상태를 바꾸지 않는다(프리페치·미리보기 안전).
  */
-export default function FailPendingOrderNotice({ orderId }: { orderId?: string }) {
+export default function FailPendingOrderNotice({
+  orderId,
+  retryLabel = "다시 시도",
+}: {
+  orderId?: string;
+  /** 같은 화면의 재결제 버튼 이름 — 안내 문구가 그 버튼을 가리킨다. */
+  retryLabel?: string;
+}) {
   const [cancelled, setCancelled] = useState(false);
   if (typeof orderId !== "string" || !UUID_RE.test(orderId)) return null;
 
@@ -27,8 +34,8 @@ export default function FailPendingOrderNotice({ orderId }: { orderId?: string }
     <div className="mt-4 rounded-xl bg-muted/60 px-3 py-3 text-xs text-muted-foreground">
       <p aria-live="polite">
         {cancelled
-          ? "결제 대기 주문을 취소했어요. 다시 주문하려면 '다시 시도'를 눌러 주세요."
-          : `주문은 결제 대기 상태로 남아 있어요. '다시 시도'를 누르면 주문서에서 다시 결제할 수 있고, 결제하지 않은 대기 주문은 ${PENDING_ORDER_EXPIRY_HOURS}시간 뒤 자동으로 정리돼요.`}
+          ? `결제 대기 주문을 취소했어요. 다시 주문하려면 '${retryLabel}'를 눌러 주세요.`
+          : `주문은 결제 대기 상태로 남아 있어요. '${retryLabel}'를 누르면 주문서에서 다시 결제할 수 있고, 결제하지 않은 대기 주문은 ${PENDING_ORDER_EXPIRY_HOURS}시간 뒤 자동으로 정리돼요.`}
       </p>
       {cancelled ? null : (
         <div className="mt-2 flex justify-center">

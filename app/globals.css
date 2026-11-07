@@ -101,6 +101,10 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "ss01", "cv01";
+    /* 한국어는 어절 단위로 줄바꿈한다("변환돼/요" 같은 음절 중간 끊김 방지).
+       공백 없는 긴 문자열(URL·주문번호)은 overflow-wrap 이 넘침을 막는다. */
+    word-break: keep-all;
+    overflow-wrap: break-word;
   }
 
   @media (prefers-reduced-motion: reduce) {

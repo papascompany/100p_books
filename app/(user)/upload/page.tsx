@@ -2,6 +2,7 @@ import type { User } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 
 import UploadClient from "./UploadClient";
+import StepIndicator from "@/components/flow/StepIndicator";
 import { trackFunnelEvent } from "@/lib/analytics/funnel";
 import { requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
@@ -102,7 +103,7 @@ export default async function UploadPage(props: PageProps) {
       return (
         <div className="container py-16">
           <p className="text-base text-muted-foreground">
-            프로젝트를 시작하지 못했어요. 잠시 후 다시 시도해 주세요.
+            포토북을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.
           </p>
         </div>
       );
@@ -172,9 +173,7 @@ export default async function UploadPage(props: PageProps) {
   return (
     <div className="container py-8 md:py-12">
       <header className="mx-auto max-w-3xl text-center">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-stone">
-          STEP 1 OF 4
-        </p>
+        <StepIndicator step={1} />
         <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
           소중한 사진을 모아주세요.
         </h1>

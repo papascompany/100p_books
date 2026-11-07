@@ -1,7 +1,7 @@
 "use client";
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Eye, Save, X } from "lucide-react";
+import { Eye, MoreHorizontal, Save, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -24,8 +24,15 @@ const PREVIEW_DPI = 72;
 /** 모바일 면 세그먼트 확대 시 논리 px 대비 허용 최대 업스케일(핀치 maxZoom 4와 정합). */
 const SEGMENT_MAX_FIT_SCALE = 4;
 import Toolbar, { type ToolbarTool } from "@/components/editor/Toolbar";
+import StepIndicator from "@/components/flow/StepIndicator";
 import MobileBottomSheet from "@/components/layout/MobileBottomSheet";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/use-toast";
 import type { BookSize } from "@/lib/db/types";
 import {
@@ -45,6 +52,7 @@ import {
   type SaveOutcome,
 } from "@/lib/editor/edit-conflict";
 import type { LoadDocResult } from "@/lib/fabric/load-guards";
+import { useLeaveGuard } from "@/lib/hooks/use-leave-guard";
 import type { TaggedFabricObject } from "@/lib/fabric/serialize";
 import {
   buildDefaultCoverDoc,
@@ -81,6 +89,10 @@ export interface CoverEditorProps {
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 5000;
+
+/** 미저장 상태에서 링크·새로고침으로 나갈 때의 확인 문구. */
+const EDITOR_LEAVE_MESSAGE =
+  "저장되지 않은 변경 사항이 있어요. 이 페이지를 나가면 최근 변경 사항이 사라져요.";
 
 /** 저장 전 캔버스 로드·복원 대기 한도 — 이미지 로드가 멈춰도 저장·이동이 영원히 막히지 않게. */
 const STAGE_IDLE_TIMEOUT_MS = 15_000;
@@ -259,16 +271,9 @@ export default function CoverEditor({
   const legacyWidthMismatch =
     Math.abs(currentDoc.widthMm - dims.totalWidthMm) > 0.5;
 
-  // beforeunload guard
-  useEffect(() => {
-    function onBeforeUnload(e: BeforeUnloadEvent) {
-      if (!dirty) return;
-      e.preventDefault();
-      e.returnValue = "저장되지 않은 변경 사항이 있어요.";
-    }
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [dirty]);
+  // 이탈 경고 — 하드 내비게이션(새로고침/탭 닫기) + 헤더 등 `<a>` 링크 소프트 내비게이션.
+  // 에디터 자체 이동(flushAndNavigate)은 버튼 + router.push 라 이 가드를 거치지 않고 저장 후 이동한다.
+  useLeaveGuard(dirty, EDITOR_LEAVE_MESSAGE);
 
   /** 라이브 캔버스를 현재 meta 기준 PageDoc 으로 직렬화. */
   const serializeLive = useCallback((): PageDoc | null => {
@@ -909,21 +914,23 @@ export default function CoverEditor({
 
   return (
     <div className="flex min-h-[calc(100dvh-4rem)] flex-col">
-      {/* 상단 헤더 */}
+      {/* 상단 헤더 — 모바일(md 미만)은 2줄로 고정: ① 뒤로 + 단계 ② 제목 + [더보기·저장·다음].
+          예전엔 버튼 4개가 줄바꿈되며 3줄 이상으로 늘어 캔버스 높이를 잡아먹었다. */}
       <header className="sticky top-0 z-30 flex flex-wrap items-center gap-2 border-b bg-background/95 px-3 py-2 backdrop-blur md:px-6">
         <Button
           variant="ghost"
           size="sm"
+          className="px-3 md:px-6"
           onClick={() => void flushAndNavigate(`/editor/${projectId}`)}
         >
           ← 내지 편집
         </Button>
-        <span className="text-xs uppercase tracking-widest text-coral/90">
-          step 3 of 4 · 표지 편집
-        </span>
+        <StepIndicator step={3} />
+        {/* 모바일 줄바꿈 — 제목·버튼을 다음 줄로 */}
+        <div aria-hidden className="basis-full md:hidden" />
 
         <label htmlFor="cover-title" className="sr-only">
-          프로젝트 제목
+          포토북 제목
         </label>
         <input
           id="cover-title"
@@ -937,17 +944,47 @@ export default function CoverEditor({
             }
           }}
           disabled={titleSaving || readOnly}
-          aria-label="프로젝트 제목"
-          className="ml-1 max-w-[12rem] flex-1 truncate bg-transparent text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-md md:text-base"
+          aria-label="포토북 제목"
+          className="ml-1 min-w-0 max-w-[12rem] flex-1 truncate bg-transparent text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-md md:text-base"
         />
 
         {/* flex-wrap + min-w-0 — 375px 에서 버튼 4개(443px)가 한 줄로 고정돼 레이아웃 뷰포트가
             455px 로 넓어지고 페이지 전체가 가로 스크롤됐다. 줄바꿈을 허용해 폭 안에 둔다. */}
         <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+          {/* 모바일 — 보조 동작(템플릿·3D 미리보기)은 더보기 메뉴로 접어 저장·다음과 한 줄에 둔다. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="px-2.5 md:hidden"
+                aria-label="표지 도구 더보기"
+              >
+                <MoreHorizontal className="size-4" aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+            {/* 메뉴가 닫힌 다음 틱에 모달을 연다 — Radix 드롭다운·다이얼로그 포커스 경합 방지(ProjectsClient 와 동일). */}
+            <DropdownMenuContent align="end">
+              {readOnly ? null : (
+                <DropdownMenuItem
+                  onSelect={() => window.setTimeout(openTemplateDialog, 0)}
+                >
+                  기본 템플릿 적용
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                onSelect={() => window.setTimeout(() => void openPreview(), 0)}
+              >
+                <Eye className="size-4" aria-hidden />
+                3D 미리보기
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {readOnly ? null : (
             <Button
               variant="outline"
               size="sm"
+              className="hidden md:inline-flex"
               onClick={openTemplateDialog}
             >
               기본 템플릿 적용
@@ -956,11 +993,12 @@ export default function CoverEditor({
           <Button
             variant="outline"
             size="sm"
+            className="hidden md:inline-flex"
             onClick={() => void openPreview()}
             aria-label="3D 미리보기 열기"
           >
             <Eye className="size-4" aria-hidden />
-            <span className="hidden sm:inline ml-1">3D 미리보기</span>
+            <span className="ml-1">3D 미리보기</span>
           </Button>
 
           {readOnly ? null : (
@@ -978,6 +1016,7 @@ export default function CoverEditor({
             disabled={saving || readOnly}
             size="sm"
             variant="gradient"
+            className="px-3 md:px-6"
           >
             <Save className="size-4" aria-hidden />
             {readOnly
@@ -991,6 +1030,7 @@ export default function CoverEditor({
           <Button
             variant="coral"
             size="sm"
+            className="px-3 md:px-6"
             disabled={saving}
             onClick={() => void flushAndNavigate(`/order/${projectId}`)}
             aria-label="다음: 주문"
@@ -999,11 +1039,14 @@ export default function CoverEditor({
           </Button>
         </div>
         <div className="basis-full text-xs text-muted-foreground">
-          <span>책등 {dims.spineMm.toFixed(2)}mm · 페이지 {pageCount}p · </span>
-          <span>총 폭 {dims.totalWidthMm.toFixed(1)}mm × 높이 {dims.totalHeightMm.toFixed(1)}mm</span>
+          <span>책등 {dims.spineMm.toFixed(2)}mm · 페이지 {pageCount}p</span>
+          {/* 인쇄 규격 상세는 데스크톱만 — 모바일은 한 줄을 넘겨 캔버스 높이를 줄였다. 구분점도 함께 숨긴다. */}
+          <span className="hidden md:inline">
+            {" · "}총 폭 {dims.totalWidthMm.toFixed(1)}mm × 높이 {dims.totalHeightMm.toFixed(1)}mm
+          </span>
           {savedAt ? (
             <span className="ml-2">
-              · 마지막 저장 {new Date(savedAt).toLocaleTimeString()}
+              · 마지막 저장 {new Date(savedAt).toLocaleTimeString("ko-KR")}
             </span>
           ) : null}
           {error ? (
@@ -1341,8 +1384,8 @@ export default function CoverEditor({
           title="표지에 사진 추가"
           description={
             projectPhotos.length === 0
-              ? "프로젝트에 사진이 없어요."
-              : "프로젝트 사진 중에서 선택하세요."
+              ? "포토북에 사진이 없어요."
+              : "포토북 사진 중에서 선택하세요."
           }
         >
           <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">

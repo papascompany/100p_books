@@ -40,6 +40,11 @@ const SECTIONS: { key: SectionKey; label: string }[] = [
 // ImageField — 이미지 URL 입력 + 파일 업로드
 // ---------------------------------------------------------------------------
 
+/** API 공통 응답 봉투 — 실패 시 error 는 `{ code, message }` 객체다(문자열 아님). */
+type ApiEnvelope<T> =
+  | { ok: true; data: T }
+  | { ok: false; error?: { code?: string; message?: string } };
+
 interface ImageFieldProps {
   label: string;
   value: string;
@@ -64,16 +69,19 @@ function ImageField({ label, value, section, onChange }: ImageFieldProps) {
         method: "POST",
         body: fd,
       });
-      const j = await r.json().catch(() => null);
-      if (!r.ok || !j?.url) {
+      const j = (await r.json().catch(() => null)) as ApiEnvelope<{
+        url: string;
+        path: string;
+      }> | null;
+      if (!r.ok || !j?.ok) {
         toast({
           variant: "destructive",
           title: "업로드 실패",
-          description: j?.error ?? "알 수 없는 오류",
+          description: (j?.ok === false ? j.error?.message : undefined) ?? "알 수 없는 오류",
         });
         return;
       }
-      onChange(j.url as string);
+      onChange(j.data.url);
       toast({ variant: "success", title: "이미지가 업로드되었습니다." });
     } finally {
       setUploading(false);
@@ -1192,12 +1200,12 @@ export default function ContentClient({ initial }: Props) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ value: valueOf(key) }),
       });
-      const j = await r.json().catch(() => null);
+      const j = (await r.json().catch(() => null)) as ApiEnvelope<unknown> | null;
       if (!r.ok || !j?.ok) {
         toast({
           variant: "destructive",
           title: "저장 실패",
-          description: j?.error ?? "알 수 없는 오류",
+          description: (j?.ok === false ? j.error?.message : undefined) ?? "알 수 없는 오류",
         });
         return;
       }

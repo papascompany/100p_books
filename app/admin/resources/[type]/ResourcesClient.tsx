@@ -423,7 +423,7 @@ export default function ResourcesClient({ type }: { type: ResourceType }) {
                         : "bg-zinc-200 text-zinc-700")
                     }
                   >
-                    {it.active ? "ON" : "OFF"}
+                    {it.active ? "활성" : "비활성"}
                   </span>
                 </div>
                 <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">

@@ -220,7 +220,8 @@ export function GiftDialog({ orderId, children }: GiftDialogProps) {
               id="gift-dialog-desc"
               className="text-sm text-muted-foreground mt-0.5"
             >
-              포토북을 소중한 분께 선물해보세요
+              포토북을 소중한 분께 선물해보세요. 받는 분 계정에 편집 가능한 포토북
+              사본이 생겨요. 인쇄본은 받는 분이 따로 주문해요.
             </p>
           </div>
         </div>

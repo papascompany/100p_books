@@ -9,53 +9,70 @@ import { useToast } from "@/components/ui/use-toast";
 import type { Profile, UserRole } from "@/lib/db/types";
 
 const DT = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul",
   year: "2-digit",
   month: "2-digit",
   day: "2-digit",
 });
 
-interface ListResponse {
-  ok: true;
-  data: { items: Profile[]; total: number; page: number; pageSize: number };
-}
+type ListResponse =
+  | { ok: true; data: { items: Profile[]; total: number; page: number; pageSize: number } }
+  | { ok: false; error?: { code?: string; message?: string } };
+
+const ROLE_LABEL: Record<UserRole, string> = { user: "일반", admin: "관리자" };
 
 const PAGE_SIZE = 50;
 
-export default function UsersClient() {
+export default function UsersClient({ selfId = null }: { selfId?: string | null }) {
   const { toast } = useToast();
   const [items, setItems] = React.useState<Profile[]>([]);
   const [total, setTotal] = React.useState(0);
+  // 입력값(qInput)과 적용값(q) 분리 — Enter·"검색" 버튼에서만 적용.
+  const [qInput, setQInput] = React.useState("");
   const [q, setQ] = React.useState("");
   const [role, setRole] = React.useState<UserRole | "">("");
   const [page, setPage] = React.useState(1);
   const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  // 역할 변경 진행 중인 사용자 id — 응답 전 중복 클릭 방지.
+  const [roleBusyId, setRoleBusyId] = React.useState<string | null>(null);
 
   // 조회 본체 — 선행 로딩 표시 없이 응답만 반영한다(effect·핸들러 공용). state 반영은
   // promise 콜백에서만 한다(react-hooks/set-state-in-effect 는 await 경계를 보지 않는다).
   const runFetch = React.useCallback(
-    () =>
+    (signal?: AbortSignal) =>
       (async () => {
         const params = new URLSearchParams();
-        if (q.trim()) params.set("q", q.trim());
+        if (q) params.set("q", q);
         if (role) params.set("role", role);
         params.set("page", String(page));
         params.set("pageSize", String(PAGE_SIZE));
         const r = await fetch(`/api/admin/users?${params.toString()}`, {
           cache: "no-store",
+          signal,
         });
-        return (await r.json()) as ListResponse | { ok: false };
+        return (await r.json().catch(() => null)) as ListResponse | null;
       })()
         .then((j) => {
+          if (signal?.aborted) return;
           if (!j || j.ok !== true) {
             setItems([]);
             setTotal(0);
+            setError((j && j.ok === false ? j.error?.message : undefined) ?? "사용자 목록 조회 실패");
             return;
           }
+          setError(null);
           setItems(j.data.items);
           setTotal(j.data.total);
         })
+        .catch(() => {
+          if (signal?.aborted) return;
+          setItems([]);
+          setTotal(0);
+          setError("네트워크 오류로 사용자 목록을 불러오지 못했습니다.");
+        })
         .finally(() => {
-          setBusy(false);
+          if (!signal?.aborted) setBusy(false);
         }),
     [q, role, page],
   );
@@ -71,7 +88,10 @@ export default function UsersClient() {
   }
 
   React.useEffect(() => {
-    void runFetch();
+    // 조건이 바뀌면 이전 요청을 취소 — 늦게 온 이전 응답이 최신 결과를 덮지 않게 한다.
+    const ac = new AbortController();
+    void runFetch(ac.signal);
+    return () => ac.abort();
   }, [runFetch]);
 
   // 이벤트 핸들러용 수동 재조회 — 로딩 표시 후 조회.
@@ -81,6 +101,7 @@ export default function UsersClient() {
   }, [runFetch]);
 
   const setRoleFor = async (id: string, target: UserRole, currentEmail: string) => {
+    if (roleBusyId) return;
     if (
       !confirm(
         target === "admin"
@@ -90,25 +111,36 @@ export default function UsersClient() {
     ) {
       return;
     }
-    const r = await fetch(`/api/admin/users/${id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ role: target }),
-    });
-    const j = await r.json().catch(() => null);
-    if (!r.ok || !j?.ok) {
+    setRoleBusyId(id);
+    try {
+      const r = await fetch(`/api/admin/users/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ role: target }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.ok) {
+        toast({
+          variant: "destructive",
+          title: "변경 실패",
+          description: j?.error?.message ?? "알 수 없는 오류",
+        });
+        return;
+      }
+      toast({
+        variant: "success",
+        title: target === "admin" ? "관리자로 승격" : "관리자 권한 해제",
+      });
+      void refresh();
+    } catch {
       toast({
         variant: "destructive",
-        title: "변경 실패",
-        description: j?.error?.message ?? "알 수 없는 오류",
+        title: "결과 확인 실패",
+        description: "새로고침 후 상태를 확인하세요.",
       });
-      return;
+    } finally {
+      setRoleBusyId(null);
     }
-    toast({
-      variant: "success",
-      title: target === "admin" ? "관리자로 승격" : "관리자 권한 해제",
-    });
-    refresh();
   };
 
   const columns: Column<Profile>[] = [
@@ -134,7 +166,7 @@ export default function UsersClient() {
               : "bg-zinc-100 text-zinc-700")
           }
         >
-          {p.role}
+          {ROLE_LABEL[p.role] ?? p.role}
         </span>
       ),
     },
@@ -148,17 +180,31 @@ export default function UsersClient() {
       key: "id",
       header: "",
       className: "text-right",
-      cell: (p) => (
-        <Button
-          size="sm"
-          variant={p.role === "admin" ? "ghost" : "outline"}
-          onClick={() =>
-            setRoleFor(p.id, p.role === "admin" ? "user" : "admin", p.email ?? "")
-          }
-        >
-          {p.role === "admin" ? "관리자 해제" : "관리자 승격"}
-        </Button>
-      ),
+      cell: (p) => {
+        const isSelf = selfId !== null && p.id === selfId;
+        return (
+          <div className="flex items-center justify-end gap-2">
+            {isSelf ? (
+              <span className="text-xs text-muted-foreground">본인 계정</span>
+            ) : null}
+            <Button
+              size="sm"
+              variant={p.role === "admin" ? "ghost" : "outline"}
+              // 본인 관리자 해제는 서버도 차단한다 — UI 에서 미리 막아 혼동을 줄인다.
+              disabled={roleBusyId !== null || (isSelf && p.role === "admin")}
+              onClick={() =>
+                setRoleFor(p.id, p.role === "admin" ? "user" : "admin", p.email ?? "")
+              }
+            >
+              {roleBusyId === p.id
+                ? "변경 중…"
+                : p.role === "admin"
+                  ? "관리자 해제"
+                  : "관리자 승격"}
+            </Button>
+          </div>
+        );
+      },
     },
   ];
 
@@ -169,8 +215,13 @@ export default function UsersClient() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          setPage(1);
-          refresh();
+          const nextQ = qInput.trim();
+          if (nextQ === q && page === 1) {
+            void refresh();
+          } else {
+            setQ(nextQ);
+            setPage(1);
+          }
         }}
         className="flex flex-wrap items-end gap-2 rounded-2xl border bg-card p-3 shadow-soft"
       >
@@ -187,8 +238,8 @@ export default function UsersClient() {
             className="mt-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
           >
             <option value="">전체</option>
-            <option value="user">user</option>
-            <option value="admin">admin</option>
+            <option value="user">일반</option>
+            <option value="admin">관리자</option>
           </select>
         </label>
         <label className="block flex-1 min-w-[200px]">
@@ -196,8 +247,8 @@ export default function UsersClient() {
             이메일 검색
           </span>
           <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
+            value={qInput}
+            onChange={(e) => setQInput(e.target.value)}
             className="h-10"
           />
         </label>
@@ -206,16 +257,28 @@ export default function UsersClient() {
         </Button>
       </form>
 
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+
       <DataTable
         columns={columns}
         rows={items}
         rowKey={(p) => p.id}
-        empty={busy ? "불러오는 중…" : "조건에 맞는 사용자가 없습니다."}
+        empty={
+          busy
+            ? "불러오는 중…"
+            : error
+              ? "목록을 불러오지 못했습니다."
+              : "조건에 맞는 사용자가 없습니다."
+        }
       />
 
       <div className="flex items-center justify-between text-sm">
         <span className="text-xs text-muted-foreground">
-          총 {total}명 · {page} / {totalPages}
+          총 {total.toLocaleString("ko-KR")}명 · {page} / {totalPages}
         </span>
         <div className="flex gap-1">
           <Button

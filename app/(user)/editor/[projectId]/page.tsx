@@ -49,6 +49,7 @@ export default async function EditorPage(props: PageProps) {
     { count: pageCount },
     { data: size },
     lockMessage,
+    { count: coverCount },
   ] = await Promise.all([
       supabase
         .from("photos")
@@ -68,6 +69,12 @@ export default async function EditorPage(props: PageProps) {
         .maybeSingle(),
       // 결제 후 편집 잠금 안내 — 소유권 확인 뒤에만 판정(남의 결제 여부 비노출). 쓰기는 API 가 막는다.
       readProjectLockNotice(createAdminSupabase(), project.id),
+      // 표지 저장 여부 — cover_json 본문은 크므로 내려받지 않고 존재만 센다(TopBar 다음 단계 결정).
+      supabase
+        .from("projects")
+        .select("id", { count: "exact", head: true })
+        .eq("id", project.id)
+        .not("cover_json", "is", null),
     ]);
 
   const bookSize: BookSize | null = size ?? null;
@@ -82,6 +89,7 @@ export default async function EditorPage(props: PageProps) {
         initialPageCount={pageCount ?? 0}
         bookSize={bookSize}
         lockMessage={lockMessage}
+        hasCover={(coverCount ?? 0) > 0}
       />
     </div>
   );

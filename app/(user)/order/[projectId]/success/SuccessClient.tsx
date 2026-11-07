@@ -17,6 +17,8 @@ export interface SuccessClientProps {
 
 type Phase = "confirming" | "success" | "failed";
 
+const KRW = new Intl.NumberFormat("ko-KR");
+
 /**
  * 결제는 승인됐을 수 있지만 결과 확정이 아직인 응답 — 같은 요청을 다시 보내면
  * confirm 이 토스 조회·멱등키로 확정 또는 해제로 수렴한다(DEBT-1). 새로고침을 안내한다.
@@ -58,6 +60,8 @@ export default function SuccessClient(props: SuccessClientProps) {
   const [error, setError] = useState<string | null>(null);
   const [retryable, setRetryable] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  /** 확정 응답의 주문 id — 요약 표시용(추가 조회 없음). */
+  const [confirmedOrderId, setConfirmedOrderId] = useState<string | null>(null);
   const calledRef = useRef(false);
 
   useEffect(() => {
@@ -82,6 +86,7 @@ export default function SuccessClient(props: SuccessClientProps) {
           throw new Error(json.error?.message ?? "결제 확정 실패");
         }
         setPhase("success");
+        setConfirmedOrderId(json.data.orderId || null);
         if (json.data.pdfError) setPdfError(json.data.pdfError);
         // 결제 완료 — 주문서 입력 드래프트 제거 (키는 OrderForm 의 orderDraftKey 와 동일)
         try {
@@ -148,22 +153,37 @@ export default function SuccessClient(props: SuccessClientProps) {
         결제가 완료되었습니다
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        주문이 접수되었습니다. 인쇄용 PDF 파일은 몇 분 내에 주문 상세에서
-        준비됩니다.
+        인쇄 파일을 준비해 제작에 들어가요 · 발송되면 주문 상세에서 송장번호를
+        확인할 수 있어요
       </p>
+      {/* confirm 은 요청 금액이 주문 금액과 같을 때만 성공하므로 props.amount 가 결제 금액이다. */}
+      <dl className="mx-auto mt-4 max-w-sm space-y-1.5 rounded-xl bg-muted/60 px-4 py-3 text-sm">
+        {confirmedOrderId ? (
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="text-muted-foreground">주문번호</dt>
+            <dd className="break-all text-right font-mono text-xs text-foreground">
+              {confirmedOrderId}
+            </dd>
+          </div>
+        ) : null}
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="text-muted-foreground">결제 금액</dt>
+          <dd className="font-semibold text-foreground">{KRW.format(props.amount)}원</dd>
+        </div>
+      </dl>
       {pdfError ? (
         <p className="mx-auto mt-3 max-w-md rounded-md border border-coral-200 bg-coral-50 p-2 text-xs text-coral-700 dark:border-coral-700 dark:bg-coral-950/30 dark:text-coral-300">
-          PDF 자동 생성에 일시적인 문제가 있었습니다. 관리자가 확인 후 빠르게
-          재처리합니다.
+          인쇄 파일 준비가 잠시 지연되고 있어요. 담당자가 확인해 바로 다시
+          처리해 드려요.
         </p>
       ) : null}
       <div className="mt-5 flex flex-wrap justify-center gap-2">
-        <Button asChild variant="outline">
-          <Link href="/">홈</Link>
-        </Button>
-        <GiftDialog orderId={props.orderId} />
         <Button asChild variant="coral">
           <Link href={`/mypage/orders/${props.orderId}`}>주문 상세</Link>
+        </Button>
+        <GiftDialog orderId={props.orderId} />
+        <Button asChild variant="outline">
+          <Link href="/">홈</Link>
         </Button>
       </div>
     </div>

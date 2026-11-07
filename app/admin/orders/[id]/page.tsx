@@ -10,6 +10,7 @@ import type {
   StorigeValidationCache,
   StorigeValidationResult,
 } from "@/lib/db/types";
+import { carrierLabel } from "@/lib/orders/carriers";
 import { getValidationBlocks } from "@/lib/orders/validation-gate";
 
 import OrderActions from "./OrderActions";
@@ -19,6 +20,7 @@ export const runtime = "nodejs";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const DT = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul",
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
@@ -199,7 +201,7 @@ export default async function AdminOrderDetailPage(props: {
           {o.tracking_no ? (
             <Row
               label="송장"
-              value={`${o.tracking_carrier ?? ""} ${o.tracking_no}`}
+              value={`${carrierLabel(o.tracking_carrier)} ${o.tracking_no}`.trim()}
             />
           ) : null}
         </Section>

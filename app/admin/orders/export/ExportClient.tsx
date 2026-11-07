@@ -5,6 +5,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
+import { kstDayEndIso, kstDayStartIso } from "@/lib/date/kst";
 import type { OrderStatus } from "@/lib/db/types";
 import { ALL_ORDER_STATUSES, ORDER_STATUS_LABEL } from "@/lib/orders/state";
 
@@ -21,12 +22,9 @@ export default function ExportClient() {
   const buildParams = (extra: Record<string, string> = {}) => {
     const p = new URLSearchParams(extra);
     if (status) p.set("status", status);
-    if (from) p.set("from", new Date(from).toISOString());
-    if (to) {
-      const d = new Date(to);
-      d.setHours(23, 59, 59, 999);
-      p.set("to", d.toISOString());
-    }
+    // KST 달력 기준 — to 는 그 날 23:59:59.999(KST)까지 포함
+    if (from) p.set("from", kstDayStartIso(from));
+    if (to) p.set("to", kstDayEndIso(to));
     return p;
   };
 
@@ -90,7 +88,7 @@ export default function ExportClient() {
       <div className="flex flex-wrap items-end gap-2">
         <label className="block">
           <span className="block text-[11px] font-medium text-muted-foreground">
-            상태 (비우면 paid + in_production + shipped)
+            상태 (비우면 결제 완료 · 제작 중 · 배송 중)
           </span>
           <select
             value={status}
@@ -100,7 +98,7 @@ export default function ExportClient() {
             }}
             className="mt-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
           >
-            <option value="">기본 (paid + in_production + shipped)</option>
+            <option value="">기본 (결제 완료 · 제작 중 · 배송 중)</option>
             {ALL_ORDER_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {ORDER_STATUS_LABEL[s]}
@@ -110,7 +108,7 @@ export default function ExportClient() {
         </label>
         <label className="block">
           <span className="block text-[11px] font-medium text-muted-foreground">
-            From
+            시작일
           </span>
           <Input
             type="date"
@@ -124,7 +122,7 @@ export default function ExportClient() {
         </label>
         <label className="block">
           <span className="block text-[11px] font-medium text-muted-foreground">
-            To
+            종료일
           </span>
           <Input
             type="date"

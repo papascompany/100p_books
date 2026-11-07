@@ -1,9 +1,8 @@
 import Link from "next/link";
 
 import { getSiteContent } from "@/lib/content/get";
-
-/** 고객센터 대표 번호 — 법정 고지 성격이라 CMS(site_content)가 아니라 코드에 고정한다. */
-const CUSTOMER_CENTER_TEL = "02-2273-5131";
+// 고객센터 대표 번호 — 법정 고지 성격이라 CMS(site_content)가 아니라 코드에 고정한다(주문 안내와 공유).
+import { CUSTOMER_CENTER_TEL, CUSTOMER_CENTER_TEL_HREF } from "@/lib/orders/customer-center";
 
 /** 사업자 정보 — 전자상거래법 제10조 표시 의무 (2026-11-07 오너 제공). CMS 편집으로 누락되지 않게 코드에 고정한다. */
 const BUSINESS_INFO = {
@@ -40,7 +39,7 @@ export default async function Footer() {
             <p className="mt-3 text-sm text-ink">
               고객센터{" "}
               <a
-                href={`tel:${CUSTOMER_CENTER_TEL.replace(/-/g, "")}`}
+                href={CUSTOMER_CENTER_TEL_HREF}
                 className="font-semibold hover:text-coral-700 dark:hover:text-coral transition-colors"
               >
                 {CUSTOMER_CENTER_TEL}

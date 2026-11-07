@@ -9,6 +9,7 @@ import FileGridItem from "./components/FileGridItem";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import type { BookSize } from "@/lib/db/types";
+import { useLeaveGuard } from "@/lib/hooks/use-leave-guard";
 import { MAX_PHOTOS_PER_PROJECT } from "@/lib/image/constants";
 import {
   UploadQueue,
@@ -16,6 +17,9 @@ import {
   type ServerPhotoSeed,
 } from "@/lib/image/upload-queue";
 import { cn } from "@/lib/utils";
+
+const UPLOAD_LEAVE_MESSAGE =
+  "업로드가 진행 중이에요. 이 페이지를 나가면 남은 사진 업로드가 취소돼요.";
 
 interface UploadClientProps {
   projectId: string;
@@ -81,39 +85,47 @@ export default function UploadClient({
   const counts = useMemo(() => {
     let done = 0,
       error = 0,
+      invalid = 0,
       working = 0;
     for (const i of items) {
       if (i.status === "done") done++;
-      else if (i.status === "error" || i.status === "cancelled") error++;
-      else working++;
+      else if (i.status === "error" || i.status === "cancelled") {
+        error++;
+        // 형식·용량 검증 실패 — 재시도 대상이 아니다(제거만 가능).
+        if (i.status === "error" && i.errorKind === "invalid") invalid++;
+      } else working++;
     }
-    return { done, error, working };
+    return { done, error, invalid, retryable: error - invalid, working };
   }, [items]);
 
   const locked = lockMessage !== null;
   const remainingSlots = MAX_PHOTOS_PER_PROJECT - items.length;
   const allDone = items.length > 0 && counts.done === items.length;
 
-  // 업로드 진행 중 이탈 경고 — 에디터들과 동일한 beforeunload 패턴 (UP-6).
+  // 업로드 진행 중 이탈 경고 (UP-6) — 새로고침·탭 닫기(beforeunload)와 헤더 링크 같은
+  // 화면 안 이동(소프트 내비게이션)을 모두 확인받는다. 확인 없이 나가면 언마운트로 큐가 취소된다.
+  useLeaveGuard(busy || counts.working > 0, UPLOAD_LEAVE_MESSAGE);
+
   useEffect(() => {
-    function onBeforeUnload(e: BeforeUnloadEvent) {
-      if (!busy && counts.working === 0) return;
-      e.preventDefault();
-      e.returnValue = "업로드가 진행 중이에요. 지금 나가면 진행 중인 사진이 사라져요.";
-    }
     // PUT 은 끝났지만 complete 디바운스(800ms) 때문에 아직 확정 못 한 사진을
     // 이탈 직전에 sendBeacon 으로 밀어넣는다. 없으면 storage 고아가 된다.
     // pagehide 는 bfcache·탭 종료·iOS Safari 에서 beforeunload 보다 확실히 발화한다.
     function onPageHide() {
       queueRef.current?.flushCompleteOnUnload();
     }
-    window.addEventListener("beforeunload", onBeforeUnload);
     window.addEventListener("pagehide", onPageHide);
     return () => {
-      window.removeEventListener("beforeunload", onBeforeUnload);
       window.removeEventListener("pagehide", onPageHide);
     };
-  }, [busy, counts.working]);
+  }, []);
+
+  // 스크린리더용 요약 — 진행률·그리드 변화마다 읽지 않고, 한 묶음이 끝났을 때만 알린다.
+  const liveSummary =
+    started && items.length > 0 && counts.working === 0 && !busy
+      ? counts.error > 0
+        ? `업로드가 끝났어요. 완료 ${counts.done}장, 실패 ${counts.error}장이에요.`
+        : `사진 ${counts.done}장을 모두 올렸어요.`
+      : "";
 
   function handleAddFiles(files: File[]) {
     if (locked) return;
@@ -130,7 +142,11 @@ export default function UploadClient({
 
   function handleRetryAllFailed() {
     items
-      .filter((i) => i.status === "error" || i.status === "cancelled")
+      .filter(
+        (i) =>
+          (i.status === "error" && i.errorKind !== "invalid") ||
+          i.status === "cancelled",
+      )
       .forEach((i) => retryItem(i.id));
   }
 
@@ -307,12 +323,12 @@ export default function UploadClient({
         >
           <div className="flex items-center justify-between gap-3">
             <div className="text-sm">
-              <span className="font-semibold">선택된 사진 {items.length}/{MAX_PHOTOS_PER_PROJECT}</span>
+              <span className="font-semibold">추가한 사진 {items.length}/{MAX_PHOTOS_PER_PROJECT}</span>
               <span className="ml-2 text-muted-foreground">
                 완료 {counts.done} · 진행 {counts.working} · 실패 {counts.error}
               </span>
             </div>
-            <div className="text-sm font-medium tabular-nums" aria-live="polite">
+            <div className="text-sm font-medium tabular-nums">
               {Math.round(overall * 100)}%
             </div>
           </div>
@@ -410,9 +426,9 @@ export default function UploadClient({
                   >
                     <X className="size-4" aria-hidden /> 업로드 취소
                   </Button>
-                  {counts.error > 0 ? (
+                  {counts.retryable > 0 ? (
                     <Button type="button" variant="outline" size="sm" onClick={handleRetryAllFailed}>
-                      실패한 항목만 재시도 ({counts.error})
+                      실패한 항목만 재시도 ({counts.retryable})
                     </Button>
                   ) : null}
                 </>
@@ -429,11 +445,11 @@ export default function UploadClient({
             >
               {allDone ? (
                 <Link href={`/editor/${projectId}`}>
-                  다음 <ArrowRight className="size-4" aria-hidden />
+                  다음: 페이지 만들기 <ArrowRight className="size-4" aria-hidden />
                 </Link>
               ) : (
                 <span>
-                  다음 <ArrowRight className="size-4" aria-hidden />
+                  다음: 페이지 만들기 <ArrowRight className="size-4" aria-hidden />
                 </span>
               )}
             </Button>
@@ -442,18 +458,22 @@ export default function UploadClient({
           {/* 실패 항목이 '다음' 을 막는 이유 안내 (UP-9) */}
           {counts.error > 0 && counts.working === 0 && !allDone ? (
             <p className="text-xs text-muted-foreground" role="status">
-              실패한 사진을 재시도하거나 삭제하면 다음 단계로 진행할 수 있어요.
+              {counts.retryable > 0
+                ? "실패한 사진을 재시도하거나 삭제하면 다음 단계로 진행할 수 있어요."
+                : "올릴 수 없는 사진을 제거하면 다음 단계로 진행할 수 있어요."}
             </p>
           ) : null}
         </div>
       ) : null}
 
+      {/* 완료·실패 요약만 알리는 live region — 항상 DOM 에 두어야 내용 변경이 읽힌다. */}
+      <p className="sr-only" role="status" aria-live="polite">
+        {liveSummary}
+      </p>
+
       {/* 그리드 */}
       {items.length > 0 ? (
-        <div
-          className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
-          aria-live="polite"
-        >
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {items.map((item) => (
             <FileGridItem
               key={item.id}

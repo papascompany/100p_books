@@ -5,14 +5,14 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 
-interface NavItem {
+export interface NavItem {
   href: string;
   label: string;
   /** 자식 경로도 active 처리하려면 prefix 매칭. */
   match?: "exact" | "prefix";
 }
 
-const NAV: NavItem[] = [
+export const NAV: NavItem[] = [
   { href: "/admin", label: "대시보드", match: "exact" },
   { href: "/admin/orders", label: "주문", match: "prefix" },
   { href: "/admin/orders/export", label: "송장 Excel", match: "exact" },
@@ -29,14 +29,29 @@ const NAV: NavItem[] = [
   { href: "/admin/audit", label: "감사 로그", match: "prefix" },
 ];
 
+function matches(item: NavItem, pathname: string): boolean {
+  if (item.match === "exact") return pathname === item.href;
+  // prefix — /admin/resources/font 등 정확한 prefix 매칭
+  return pathname === item.href || pathname.startsWith(item.href + "/");
+}
+
+/**
+ * 현재 경로에서 활성인 메뉴 href — 매칭되는 항목 중 **가장 구체적인(긴) 하나**만.
+ * `/admin/orders/export` 에서 "주문"(prefix)과 "송장 Excel"(exact)이 함께 켜지던 문제 방지.
+ */
+export function activeNavHref(pathname: string): string | null {
+  let best: string | null = null;
+  for (const item of NAV) {
+    if (matches(item, pathname) && (best === null || item.href.length > best.length)) {
+      best = item.href;
+    }
+  }
+  return best;
+}
+
 export default function AdminSidebar({ email }: { email?: string | null }) {
   const pathname = usePathname() ?? "/admin";
-
-  const isActive = (item: NavItem) => {
-    if (item.match === "exact") return pathname === item.href;
-    // prefix — /admin/resources/font 등 정확한 prefix 매칭
-    return pathname === item.href || pathname.startsWith(item.href + "/");
-  };
+  const activeHref = activeNavHref(pathname);
 
   return (
     <aside className="hidden border-r bg-white/60 md:flex md:w-60 md:shrink-0 md:flex-col">
@@ -58,9 +73,10 @@ export default function AdminSidebar({ email }: { email?: string | null }) {
             <li key={item.href}>
               <Link
                 href={item.href}
+                aria-current={item.href === activeHref ? "page" : undefined}
                 className={cn(
                   "block rounded-md px-3 py-2 text-sm transition-colors",
-                  isActive(item)
+                  item.href === activeHref
                     ? "bg-rose-50 text-rose-700 font-medium"
                     : "text-foreground/80 hover:bg-muted hover:text-foreground",
                 )}
