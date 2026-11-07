@@ -4,6 +4,7 @@ import { ImagePlus, Upload } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
 import UploadSourceSheet from "@/components/upload/UploadSourceSheet";
+import { toast } from "@/components/ui/use-toast";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 
@@ -54,9 +55,18 @@ export default function Dropzone({ onFiles, disabled = false, hint }: DropzonePr
       e.preventDefault();
       setIsOver(false);
       if (disabled) return;
-      const files = Array.from(e.dataTransfer.files ?? []).filter((f) =>
+      const dropped = Array.from(e.dataTransfer.files ?? []);
+      const files = dropped.filter((f) =>
         f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name),
       );
+      // 조용히 버리면 "왜 몇 장이 안 올라갔지?"가 된다 — 제외한 개수를 알린다.
+      const skipped = dropped.length - files.length;
+      if (skipped > 0) {
+        toast({
+          description: `${skipped}개 파일은 사진이 아니라 제외했어요.`,
+          variant: "warning",
+        });
+      }
       if (files.length > 0) onFiles(files);
     },
     [disabled, onFiles],

@@ -3,12 +3,15 @@ import { notFound, redirect } from "next/navigation";
 
 import CancelOrderButton from "../CancelOrderButton";
 import OrderPdfButtons from "./OrderPdfButtons";
+import CopyTrackingButton from "@/components/orders/CopyTrackingButton";
 import { GiftDialog } from "@/components/orders/GiftDialog";
+import OrderStatusGuideBanner from "@/components/orders/OrderStatusGuideBanner";
 import ReviewDialog from "@/components/reviews/ReviewDialog";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { createServerSupabase } from "@/lib/db/server";
 import type { OrderAddress, OrderStatus } from "@/lib/db/types";
+import { carrierLabel } from "@/lib/orders/carriers";
 import { PENDING_ORDER_EXPIRY_HOURS } from "@/lib/orders/pending-expiry";
 import {
   canDownloadPdfs,
@@ -16,6 +19,7 @@ import {
   isUserCancellable,
   ORDER_STATUS_BADGE,
   ORDER_STATUS_LABEL,
+  shippingPendingMessage,
 } from "@/lib/orders/state";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +55,10 @@ interface OrderDetailRow {
   storige_interior_file_id: string | null;
   paid_at: string | null;
   created_at: string;
+  tracking_no: string | null;
+  tracking_carrier: string | null;
+  shipped_at: string | null;
+  delivered_at: string | null;
   projects: {
     id: string;
     title: string | null;
@@ -72,7 +80,7 @@ export default async function OrderDetailPage(props: PageProps) {
   const { data: row, error } = await supabase
     .from("orders")
     .select(
-      "id, project_id, qty, amount, discount_amount, points_used, address, status, toss_payment_key, toss_order_id, cover_pdf_key, interior_pdf_key, storige_cover_file_id, storige_interior_file_id, paid_at, created_at, projects(id, title, book_sizes(name)), reviews(id)",
+      "id, project_id, qty, amount, discount_amount, points_used, address, status, toss_payment_key, toss_order_id, cover_pdf_key, interior_pdf_key, storige_cover_file_id, storige_interior_file_id, paid_at, created_at, tracking_no, tracking_carrier, shipped_at, delivered_at, projects(id, title, book_sizes(name)), reviews(id)",
     )
     .eq("id", params.orderId)
     .maybeSingle();
@@ -80,7 +88,7 @@ export default async function OrderDetailPage(props: PageProps) {
     return (
       <div className="container py-10">
         <p className="text-sm text-destructive">
-          주문을 불러오지 못했습니다: {error.message}
+          주문을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
         </p>
       </div>
     );
@@ -100,6 +108,11 @@ export default async function OrderDetailPage(props: PageProps) {
   const canCancel = isUserCancellable(order.status, order.toss_payment_key);
   const awaitingApproval =
     order.status === "pending" && hasPaymentKey(order.toss_payment_key);
+
+  // 배송 정보 — 송장이 있으면 송장, 없으면 상태별 안내(결제 전·취소·환불이면 영역 숨김).
+  const trackingNo = order.tracking_no?.trim() || null;
+  const shippingNotice = trackingNo ? null : shippingPendingMessage(order.status);
+  const showShipping = trackingNo !== null || shippingNotice !== null;
 
   // PDF 다운로드 — 서버 프록시 경유 (Storige fileId 또는 레거시 키 존재 시).
   // 실제 인증/스트리밍은 /api/orders/:id/download/:kind 에서 수행.
@@ -155,7 +168,9 @@ export default async function OrderDetailPage(props: PageProps) {
           결제 승인을 확인하고 있어요. 잠시 후 새로고침해 주시고, 계속 이 상태라면 고객센터로
           문의해 주세요.
         </p>
-      ) : null}
+      ) : (
+        <OrderStatusGuideBanner status={order.status} />
+      )}
 
       <div className="mt-6 grid gap-6 md:grid-cols-2">
         {/* 주문 요약 */}
@@ -174,16 +189,13 @@ export default async function OrderDetailPage(props: PageProps) {
             {(order.points_used ?? 0) > 0 ? (
               <Row
                 label="포인트 사용"
-                value={`-${KRW.format(order.points_used ?? 0)}P`}
+                value={`-${KRW.format(order.points_used ?? 0)}원 (포인트)`}
               />
             ) : null}
             <Row label="결제 금액" value={`${KRW.format(order.amount)}원`} />
             <Row label="주문 일시" value={DT.format(new Date(order.created_at))} />
             {order.paid_at ? (
               <Row label="결제 일시" value={DT.format(new Date(order.paid_at))} />
-            ) : null}
-            {order.toss_payment_key ? (
-              <Row label="결제 키" value={order.toss_payment_key.slice(0, 12) + "…"} />
             ) : null}
           </dl>
         </section>
@@ -208,6 +220,32 @@ export default async function OrderDetailPage(props: PageProps) {
         </section>
       </div>
 
+      {showShipping ? (
+        <section className="mt-6 rounded-2xl border bg-card p-4 sm:p-5">
+          <h2 className="text-sm font-semibold">배송 정보</h2>
+          {trackingNo ? (
+            <dl className="mt-3 space-y-2 text-sm">
+              <Row label="택배사" value={carrierLabel(order.tracking_carrier) || "—"} />
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <dt className="text-muted-foreground">송장번호</dt>
+                <dd className="flex items-center gap-1 text-right text-foreground">
+                  <span className="font-mono tabular-nums">{trackingNo}</span>
+                  <CopyTrackingButton trackingNo={trackingNo} />
+                </dd>
+              </div>
+              {order.shipped_at ? (
+                <Row label="발송일" value={DT.format(new Date(order.shipped_at))} />
+              ) : null}
+              {order.delivered_at ? (
+                <Row label="배송 완료일" value={DT.format(new Date(order.delivered_at))} />
+              ) : null}
+            </dl>
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">{shippingNotice}</p>
+          )}
+        </section>
+      ) : null}
+
       {/* PDF 다운로드 */}
       <section className="mt-6 rounded-2xl border bg-card p-4 sm:p-5">
         <h2 className="text-sm font-semibold">PDF 파일</h2>
@@ -224,6 +262,12 @@ export default async function OrderDetailPage(props: PageProps) {
       </section>
 
       <div className="mt-6 flex flex-wrap gap-2">
+        {/* 결제 대기(결제 키 없음) — 주문서로 돌아가면 서버가 이 대기 주문을 재사용한다. */}
+        {canCancel ? (
+          <Button asChild variant="coral">
+            <Link href={`/order/${order.project_id}`}>결제 계속하기</Link>
+          </Button>
+        ) : null}
         <Button asChild variant="outline">
           <Link href={`/editor/${order.project_id}`}>프로젝트 보기</Link>
         </Button>

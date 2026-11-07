@@ -14,6 +14,7 @@
  */
 
 import type { OrderStatus } from "@/lib/db/types";
+import { CUSTOMER_CENTER_TEL } from "@/lib/orders/customer-center";
 
 const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending: ["paid", "cancelled"],
@@ -138,6 +139,15 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   refunded: "환불됨",
 };
 
+/**
+ * 상태 값 → 한국어 라벨. 사용자 응답 문구에 enum 원문을 노출하지 않기 위해 쓴다.
+ * 알 수 없는 값·빈 값은 "확인 필요".
+ */
+export function orderStatusLabel(status: string | null | undefined): string {
+  if (!status) return "확인 필요";
+  return (ORDER_STATUS_LABEL as Record<string, string>)[status] ?? "확인 필요";
+}
+
 /** UI 배지 색상 — Tailwind 클래스. */
 export const ORDER_STATUS_BADGE: Record<OrderStatus, string> = {
   pending: "bg-amber-100 text-amber-800",
@@ -148,6 +158,60 @@ export const ORDER_STATUS_BADGE: Record<OrderStatus, string> = {
   cancelled: "bg-zinc-200 text-zinc-700",
   refunded: "bg-rose-100 text-rose-800",
 };
+
+/**
+ * 주문 상세의 상태별 취소·환불 안내 (환불 정책: app/(legal)/refund/page.tsx).
+ *   - paid          : 제작 시작 전 — 전액 환불 가능, 고객센터 전화 안내.
+ *   - in_production 이후(shipped·delivered 포함) : 단순 변심 환불 불가, 인쇄 불량은 수령 후 7일 이내.
+ *   - 그 외(pending·cancelled·refunded) : null — pending 은 별도 대기 주문 안내가 있다.
+ * message 에는 고객센터 번호(CUSTOMER_CENTER_TEL)가 그대로 들어갈 수 있다 — UI 가 그 부분을 tel: 링크로 바꾼다.
+ */
+export interface OrderStatusGuide {
+  kind: "refundable" | "production_started";
+  message: string;
+  /** 환불 정책 전문 링크 노출 여부 (/refund). */
+  showRefundPolicyLink: boolean;
+}
+
+export function orderStatusGuide(status: OrderStatus): OrderStatusGuide | null {
+  switch (status) {
+    case "paid":
+      return {
+        kind: "refundable",
+        message: `제작이 시작되기 전까지 전액 환불할 수 있어요. 취소를 원하시면 고객센터(${CUSTOMER_CENTER_TEL})로 연락해 주세요.`,
+        showRefundPolicyLink: false,
+      };
+    case "in_production":
+    case "shipped":
+    case "delivered":
+      return {
+        kind: "production_started",
+        message:
+          "제작이 시작되어 단순 변심 환불은 어려워요. 인쇄 불량은 수령 후 7일 이내 고객센터로 알려 주세요.",
+        showRefundPolicyLink: true,
+      };
+    default:
+      return null;
+  }
+}
+
+/**
+ * 송장번호가 아직 없을 때 배송 정보 영역에 보여줄 안내. null 이면 배송 정보 영역 자체를 숨긴다
+ * (결제 전·취소·환불 주문). 송장이 있으면 호출 측이 송장 정보를 보여준다.
+ */
+export function shippingPendingMessage(status: OrderStatus): string | null {
+  switch (status) {
+    case "paid":
+      return "제작 준비 중이에요. 발송되면 송장번호가 표시돼요.";
+    case "in_production":
+      return "제작 중이에요. 발송되면 송장번호가 표시돼요.";
+    case "shipped":
+    case "delivered":
+      return "송장 정보가 아직 등록되지 않았어요. 궁금한 점은 고객센터로 문의해 주세요.";
+    default:
+      return null;
+  }
+}
 
 /** 본 상태가 PDF 다운로드 가능한지 (paid 이후). */
 export function canDownloadPdfs(status: OrderStatus): boolean {

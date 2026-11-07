@@ -11,7 +11,12 @@ import {
   hasPaymentKey,
   InvalidStateTransitionError,
   isUserCancellable,
+  ORDER_STATUS_LABEL,
+  orderStatusGuide,
+  orderStatusLabel,
+  shippingPendingMessage,
 } from "./state";
+import { CUSTOMER_CENTER_TEL } from "./customer-center";
 
 const ALLOWED: Array<[OrderStatus, OrderStatus]> = [
   ["pending", "paid"],
@@ -171,5 +176,65 @@ describe("decideUserCancel — POST /api/orders/[id]/cancel 판정", () => {
       const d = decideUserCancel({ status: s, toss_payment_key: null });
       if (d.kind === "cancel") expect(canTransition(s, "cancelled")).toBe(true);
     }
+  });
+});
+
+describe("orderStatusGuide — 상태별 취소·환불 안내", () => {
+  it("paid → 전액 환불 가능 + 고객센터 번호, 환불 정책 링크 없음", () => {
+    const g = orderStatusGuide("paid");
+    expect(g?.kind).toBe("refundable");
+    expect(g?.message).toContain("전액 환불");
+    expect(g?.message).toContain(CUSTOMER_CENTER_TEL);
+    expect(g?.showRefundPolicyLink).toBe(false);
+  });
+
+  it("in_production·shipped·delivered → 단순 변심 불가 + 7일 이내 불량 안내 + 정책 링크", () => {
+    const started: OrderStatus[] = ["in_production", "shipped", "delivered"];
+    for (const s of started) {
+      const g = orderStatusGuide(s);
+      expect(g?.kind, s).toBe("production_started");
+      expect(g?.message, s).toContain("단순 변심");
+      expect(g?.message, s).toContain("7일");
+      expect(g?.showRefundPolicyLink, s).toBe(true);
+    }
+  });
+
+  it("pending·cancelled·refunded → 안내 없음", () => {
+    for (const s of ["pending", "cancelled", "refunded"] as OrderStatus[]) {
+      expect(orderStatusGuide(s), s).toBeNull();
+    }
+  });
+});
+
+describe("shippingPendingMessage — 송장 없을 때 안내", () => {
+  it("paid·in_production → 발송되면 송장번호 표시 안내", () => {
+    expect(shippingPendingMessage("paid")).toContain("발송되면 송장번호가 표시돼요");
+    expect(shippingPendingMessage("in_production")).toContain("발송되면 송장번호가 표시돼요");
+  });
+
+  it("shipped·delivered 인데 송장 없음 → 고객센터 문의 안내", () => {
+    expect(shippingPendingMessage("shipped")).toContain("고객센터");
+    expect(shippingPendingMessage("delivered")).toContain("고객센터");
+  });
+
+  it("pending·cancelled·refunded → null (배송 정보 영역 숨김)", () => {
+    for (const s of ["pending", "cancelled", "refunded"] as OrderStatus[]) {
+      expect(shippingPendingMessage(s), s).toBeNull();
+    }
+  });
+});
+
+describe("orderStatusLabel — 사용자 문구용 상태 라벨", () => {
+  it("모든 상태 값은 ORDER_STATUS_LABEL 과 같은 한국어 라벨", () => {
+    for (const s of ALL_ORDER_STATUSES) {
+      expect(orderStatusLabel(s)).toBe(ORDER_STATUS_LABEL[s]);
+    }
+  });
+
+  it("모르는 값·빈 값은 enum 원문 대신 '확인 필요'", () => {
+    expect(orderStatusLabel("weird_status")).toBe("확인 필요");
+    expect(orderStatusLabel(undefined)).toBe("확인 필요");
+    expect(orderStatusLabel(null)).toBe("확인 필요");
+    expect(orderStatusLabel("")).toBe("확인 필요");
   });
 });

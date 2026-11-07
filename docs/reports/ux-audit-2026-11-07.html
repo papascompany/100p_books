@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>100p Books UI/UX 전수 점검 · 개선방안 (2026-11-07)</title>
+<style>
+  :root {
+    --bg: #fafafa; --card: #fff; --ink: #141414; --mute: #5f5f5f; --line: #e6e6e6;
+    --coral: #e8553f; --coral-soft: #fdeeea; --ok: #1f8a5b; --ok-soft: #e6f4ed;
+    --warn: #a86a00; --warn-soft: #fbf1dc; --blue: #2f6fd6; --blue-soft: #e8f0fc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121212; --card: #1c1c1c; --ink: #f2f2f2; --mute: #a8a8a8; --line: #2e2e2e;
+      --coral-soft: #3a211c; --ok-soft: #15301f; --warn-soft: #33290f; --blue-soft: #18243a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.6 -apple-system, "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    word-break: keep-all; overflow-wrap: break-word; }
+  main { max-width: 1080px; margin: 0 auto; padding: 40px 20px 80px; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.02em; }
+  h2 { font-size: 20px; margin: 48px 0 12px; letter-spacing: -0.01em; }
+  h3 { font-size: 15px; margin: 0 0 6px; }
+  p.lead { color: var(--mute); margin: 0 0 24px; }
+  .grid { display: grid; gap: 12px; }
+  .kpis { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; }
+  .kpi .n { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--mute); font-size: 13px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+  .t-ok { background: var(--ok-soft); color: var(--ok); }
+  .t-warn { background: var(--warn-soft); color: var(--warn); }
+  .t-hi { background: var(--coral-soft); color: var(--coral); }
+  .t-blue { background: var(--blue-soft); color: var(--blue); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--mute); font-weight: 600; font-size: 12px; }
+  .scroll { overflow-x: auto; }
+  svg text { fill: var(--ink); font-family: inherit; }
+  svg .mute { fill: var(--mute); }
+  .cols { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  ul.tight { margin: 6px 0 0; padding-left: 18px; }
+  ul.tight li { margin: 3px 0; }
+  .small { font-size: 13px; color: var(--mute); }
+  .lane h3 { display: flex; align-items: center; gap: 8px; }
+  .item { border-top: 1px solid var(--line); padding: 10px 0; }
+  .item:first-of-type { border-top: 0; }
+  .item b { display: block; }
+  footer { margin-top: 48px; color: var(--mute); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>UI/UX 전수 점검 결과 · 개선방안</h1>
+  <p class="lead">관리자 콘솔 · 사진 업로드 · 편집 · 주문/결제 · 마이페이지 — 2026-11-07, 브랜치 <code>claude/ux-audit-1107</code></p>
+
+  <div class="grid kpis">
+    <div class="card kpi"><div class="n">71</div><div class="l">감사 발견 사항 (관리자 27 · 업로드/편집 22 · 주문 22)</div></div>
+    <div class="card kpi"><div class="n">+4</div><div class="l">실화면(390px·데스크톱) 촬영에서 추가 발견</div></div>
+    <div class="card kpi"><div class="n" style="color:var(--ok)">50+</div><div class="l">이번 브랜치에서 수정 (높음 등급 9건 전부 포함)</div></div>
+    <div class="card kpi"><div class="n" style="color:var(--coral)">15</div><div class="l">구조 개선 제안 (아래 매트릭스·로드맵)</div></div>
+  </div>
+
+  <h2>1. 사용자 주문 플로우 — 마찰 지점과 이번 조치</h2>
+  <p class="small">점선 빨간 테두리 = 점검 시 막히거나 헷갈리던 지점. 초록 배지 = 이번에 수정. 노란 배지 = 구조 개선 제안으로 이월.</p>
+  <div class="card scroll">
+    <svg viewBox="0 0 1040 330" width="100%" style="min-width:960px" role="img" aria-label="주문 플로우 7단계와 단계별 마찰 지점">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#9a9a9a"/>
+        </marker>
+      </defs>
+      <!-- steps -->
+      <g font-size="13">
+        <!-- step boxes: x positions -->
+        <g>
+          <rect x="10" y="30" width="128" height="64" rx="12" fill="var(--card)" stroke="var(--line)"/>
+          <text x="74" y="56" text-anchor="middle" font-weight="700">① 사진 올리기</text>
+          <text x="74" y="76" text-anchor="middle" class="mute" font-size="11">/upload</text>
+        </g>
+        <g>
+          <rect x="158" y="30" width="128" height="64" rx="12" fill="var(--card)" stroke="var(--line)"/>
+          <text x="222" y="56" text-anchor="middle" font-weight="700">② 내지 자동편집</text>
+          <text x="222" y="76" text-anchor="middle" class="mute" font-size="11">/editor/[id]</text>
+        </g>
+        <g>
+          <rect x="306" y="30" width="128" height="64" rx="12" fill="var(--card)" stroke="var(--coral)" stroke-dasharray="5 4" stroke-width="2"/>
+          <text x="370" y="56" text-anchor="middle" font-weight="700">③ 표지 만들기</text>
+          <text x="370" y="76" text-anchor="middle" class="mute" font-size="11">/cover/[id]</text>
+        </g>
+        <g>
+          <rect x="454" y="30" width="128" height="64" rx="12" fill="var(--card)" stroke="var(--line)"/>
+          <text x="518" y="56" text-anchor="middle" font-weight="700">④ 주문서</text>
+          <text x="518" y="76" text-anchor="middle" class="mute" font-size="11">/order/[id]</text>
+        </g>
+        <g>
+          <rect x="602" y="30" width="128" height="64" rx="12" fill="var(--card)" stroke="var(--line)"/>
+          <text x="666" y="56" text-anchor="middle" font-weight="700">⑤ 토스 결제</text>
+          <text x="666" y="76" text-anchor="middle" class="mute" font-size="11">카드</text>
+        </g>
+        <g>
+          <rect x="750" y="30" width="128" height="64" rx="12" fill="var(--card)" stroke="var(--line)"/>
+          <text x="814" y="56" text-anchor="middle" font-weight="700">⑥ 결제 완료</text>
+          <text x="814" y="76" text-anchor="middle" class="mute" font-size="11">success / fail</text>
+        </g>
+        <g>
+          <rect x="898" y="30" width="132" height="64" rx="12" fill="var(--card)" stroke="var(--coral)" stroke-dasharray="5 4" stroke-width="2"/>
+          <text x="964" y="56" text-anchor="middle" font-weight="700">⑦ 주문·배송 조회</text>
+          <text x="964" y="76" text-anchor="middle" class="mute" font-size="11">/mypage/orders</text>
+        </g>
+        <!-- arrows -->
+        <g stroke="#9a9a9a" stroke-width="1.6" marker-end="url(#arr)">
+          <line x1="138" y1="62" x2="156" y2="62"/><line x1="286" y1="62" x2="304" y2="62"/>
+          <line x1="434" y1="62" x2="452" y2="62"/><line x1="582" y1="62" x2="600" y2="62"/>
+          <line x1="730" y1="62" x2="748" y2="62"/><line x1="878" y1="62" x2="896" y2="62"/>
+        </g>
+        <!-- skip path that existed before -->
+        <path d="M222,94 C222,128 518,128 518,96" fill="none" stroke="var(--coral)" stroke-width="1.6" stroke-dasharray="4 4" marker-end="url(#arr)"/>
+        <text x="370" y="122" text-anchor="middle" font-size="11" fill="var(--coral)">수정 전: 주 버튼이 표지를 건너뛰고 주문으로 → "주문 준비 중"에서 막힘</text>
+      </g>
+      <!-- fixes row -->
+      <g font-size="11">
+        <foreignObject x="6" y="140" width="136" height="190"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;line-height:1.5;color:var(--ink)">
+          <span class="tag t-ok">수정</span> 업로드 중 메뉴 이동 시 경고(업로드 취소 방지)<br/>
+          <span class="tag t-ok">수정</span> 기술 오류문구 → 쉬운 문구<br/>
+          <span class="tag t-ok">수정</span> 용량·형식 실패는 "제거"만<br/>
+          <span class="tag t-warn">제안</span> 업로드 직후 자동 생성
+        </div></foreignObject>
+        <foreignObject x="154" y="140" width="136" height="190"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;line-height:1.5;color:var(--ink)">
+          <span class="tag t-ok">수정</span> 주 버튼 "다음: 표지 만들기"<br/>
+          <span class="tag t-ok">수정</span> "사진 추가" 입구<br/>
+          <span class="tag t-ok">수정</span> 터치기기 "편집" 배지 상시 표시<br/>
+          <span class="tag t-warn">제안</span> PDF 다운로드는 주문 후로
+        </div></foreignObject>
+        <foreignObject x="302" y="140" width="136" height="190"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;line-height:1.5;color:var(--ink)">
+          <span class="tag t-ok">수정</span> 모바일 헤더 3줄 → 2줄<br/>
+          <span class="tag t-ok">수정</span> 미저장 이탈 경고<br/>
+          <span class="tag t-warn">제안</span> 모바일 캔버스 높이 맞춤(앞표지 하단 가림)<br/>
+          <span class="tag t-warn">제안</span> 에디터 전용 레이아웃
+        </div></foreignObject>
+        <foreignObject x="450" y="140" width="136" height="190"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;line-height:1.5;color:var(--ink)">
+          <span class="tag t-ok">수정</span> 표지/내지 수정 링크<br/>
+          <span class="tag t-ok">수정</span> 상품금액 소계·포인트 최대치<br/>
+          <span class="tag t-ok">수정</span> 약관 전체 동의<br/>
+          <span class="tag t-warn">제안</span> 결제 전 미리보기 확인 단계 · 하단 고정 결제바
+        </div></foreignObject>
+        <foreignObject x="598" y="140" width="136" height="190"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;line-height:1.5;color:var(--ink)">
+          <span class="tag t-ok">수정</span> 사용자 취소는 중립 문구 "결제를 취소했어요"<br/>
+          <span class="tag t-ok">수정</span> 내부 상태값(enum) 노출 제거
+        </div></foreignObject>
+        <foreignObject x="746" y="140" width="136" height="190"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;line-height:1.5;color:var(--ink)">
+          <span class="tag t-ok">수정</span> 주 버튼 "주문 상세"<br/>
+          <span class="tag t-ok">수정</span> 주문번호·금액 요약, 송장 안내<br/>
+          <span class="tag t-ok">수정</span> 선물 = 편집 사본임을 명시
+        </div></foreignObject>
+        <foreignObject x="894" y="140" width="140" height="190"><div xmlns="http://www.w3.org/1999/xhtml" style="font-size:11px;line-height:1.5;color:var(--ink)">
+          <span class="tag t-ok">수정</span> 택배사·송장번호(복사) 표시<br/>
+          <span class="tag t-ok">수정</span> 상태별 환불 안내 + 고객센터<br/>
+          <span class="tag t-ok">수정</span> 결제 대기 "결제 계속하기"<br/>
+          <span class="tag t-warn">제안</span> 환불 신청 기능·배송 타임라인
+        </div></foreignObject>
+      </g>
+    </svg>
+  </div>
+
+  <h2>2. 영역별 조치 현황</h2>
+  <div class="grid cols">
+    <div class="card">
+      <h3>관리자 콘솔 <span class="tag t-ok">27건 중 약 22건 수정</span></h3>
+      <ul class="tight">
+        <li><b>CMS 이미지 업로드</b>가 성공해도 항상 "실패"로 뜨고 반영 안 되던 버그 수정, 실패 토스트 렌더 예외 수정</li>
+        <li><b>날짜 필터 KST 기준</b> — 시작일 00~09시 주문이 빠지던 문제(송장 Excel 누락 위험) 수정, 할인코드 만료를 해당일 23:59로</li>
+        <li>대시보드 "오늘"·주문 시각을 <b>한국시간</b>으로 표시</li>
+        <li><b>모바일 관리자 메뉴</b> 추가(이전엔 메뉴·로그아웃 수단 없음), 활성 메뉴 중복 표시 수정</li>
+        <li>목록 API 오류를 "결과 없음"으로 보이던 문제 → 오류 문구, 검색은 Enter/버튼 적용·늦은 응답 무시, 필터 변경 시 1페이지</li>
+        <li>상태 변경 확인창 한국어 라벨, 네트워크 실패 토스트, 영문 라벨(From/To·ON/OFF·감사로그) 한국어화, 본인 계정 관리자 해제 방지</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>업로드 · 편집 <span class="tag t-ok">22건 + 실측 3건 중 약 19건 수정</span></h3>
+      <ul class="tight">
+        <li>내지 편집 주 버튼이 <b>표지 단계를 건너뛰던 동선</b> 수정</li>
+        <li>업로드 중·미저장 편집 중 <b>메뉴 이동 시 확인</b>(이전엔 조용히 취소)</li>
+        <li>"요청 실패 (500)" 같은 기술 문구 → 행동 안내 문구, 검증 실패 사진은 재시도 대신 제거</li>
+        <li>단계 표시 "1/4 · 사진 올리기" 통일, "완성"→"주문 완료", 제목 없는 포토북 표시, 빈 초안은 업로드로</li>
+        <li>모바일: "자동 편/집" 제목 끊김, 표지 헤더 3줄 → 2줄, 터치기기 편집 배지 상시 표시</li>
+        <li>스크린리더 과다 알림 정리, 이미지 아닌 파일 드롭 안내</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>주문 · 결제 · 마이페이지 <span class="tag t-ok">22건 + 실측 2건 중 15건 수정</span></h3>
+      <ul class="tight">
+        <li><b>배송 조회 불가</b>(송장이 DB엔 있는데 화면에 없음) → 택배사·송장번호·발송/완료일 표시</li>
+        <li><b>환불 정책과 화면 불일치</b> → 결제완료/제작중 상태별 환불 안내 + 고객센터 연결</li>
+        <li>결제 대기 주문 "결제 계속하기", 결제 완료 화면 주 버튼·요약, 사용자 취소 시 중립 문구</li>
+        <li>주문서: 편집 복귀 링크, 상품금액 소계, 포인트 최대치 안내, 약관 전체 동의, 입력칸 접근성</li>
+        <li>내부 정보 노출 제거(결제 키, DB 오류 원문, 상태 enum), 포인트 표기 통일</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>공통 <span class="tag t-ok">수정</span></h3>
+      <ul class="tight">
+        <li>한국어 <b>어절 단위 줄바꿈</b>(전 화면) — "변환돼/요", "남기세/요", "100/장" 끊김 해소</li>
+        <li>고객센터 번호 단일 상수화(푸터·주문 안내 공유)</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>3. 구조 개선 제안 — 효과 × 작업량</h2>
+  <p class="small">원 크기 = 영향받는 사용자 비중. 오른쪽 위로 갈수록 효과 대비 작업량이 작음(먼저 할 것).</p>
+  <div class="card scroll">
+    <svg viewBox="0 0 900 470" width="100%" style="min-width:720px" role="img" aria-label="개선 제안 15건의 효과 대비 작업량 매트릭스">
+      <rect x="70" y="20" width="400" height="200" fill="var(--ok-soft)" opacity=".55"/>
+      <rect x="470" y="20" width="400" height="200" fill="var(--coral-soft)" opacity=".55"/>
+      <rect x="70" y="220" width="400" height="200" fill="var(--bg)"/>
+      <rect x="470" y="220" width="400" height="200" fill="var(--blue-soft)" opacity=".45"/>
+      <line x1="70" y1="420" x2="870" y2="420" stroke="var(--line)"/><line x1="70" y1="20" x2="70" y2="420" stroke="var(--line)"/>
+      <line x1="470" y1="20" x2="470" y2="420" stroke="var(--line)" stroke-dasharray="3 4"/><line x1="70" y1="220" x2="870" y2="220" stroke="var(--line)" stroke-dasharray="3 4"/>
+      <text x="470" y="452" text-anchor="middle" class="mute" font-size="12">작업량 →  (왼쪽 = 작음)</text>
+      <text x="22" y="220" class="mute" font-size="12" transform="rotate(-90 22 220)" text-anchor="middle">사용자 효과 →</text>
+      <text x="80" y="40" font-size="12" font-weight="700" fill="var(--ok)">빠른 효과 (지금)</text>
+      <text x="860" y="40" font-size="12" font-weight="700" fill="var(--coral)" text-anchor="end">큰 투자 (다음)</text>
+      <text x="80" y="410" font-size="12" class="mute">여유 있을 때</text>
+      <text x="860" y="410" font-size="12" fill="var(--blue)" text-anchor="end">기반 정비 (나중)</text>
+      <g font-size="11" font-weight="600">
+        <!-- quick wins -->
+        <circle cx="140" cy="80" r="18" fill="var(--ok)" opacity=".85"/><text x="140" y="84" text-anchor="middle" fill="#fff">P1</text>
+        <circle cx="230" cy="110" r="16" fill="var(--ok)" opacity=".85"/><text x="230" y="114" text-anchor="middle" fill="#fff">P2</text>
+        <circle cx="320" cy="150" r="13" fill="var(--ok)" opacity=".85"/><text x="320" y="154" text-anchor="middle" fill="#fff">P3</text>
+        <circle cx="400" cy="95" r="15" fill="var(--ok)" opacity=".85"/><text x="400" y="99" text-anchor="middle" fill="#fff">P4</text>
+        <!-- big bets -->
+        <circle cx="540" cy="70" r="20" fill="var(--coral)" opacity=".85"/><text x="540" y="74" text-anchor="middle" fill="#fff">P5</text>
+        <circle cx="620" cy="120" r="18" fill="var(--coral)" opacity=".85"/><text x="620" y="124" text-anchor="middle" fill="#fff">P6</text>
+        <circle cx="700" cy="90" r="17" fill="var(--coral)" opacity=".85"/><text x="700" y="94" text-anchor="middle" fill="#fff">P7</text>
+        <circle cx="790" cy="160" r="15" fill="var(--coral)" opacity=".85"/><text x="790" y="164" text-anchor="middle" fill="#fff">P8</text>
+        <circle cx="560" cy="185" r="12" fill="var(--coral)" opacity=".85"/><text x="560" y="189" text-anchor="middle" fill="#fff">P9</text>
+        <!-- foundation -->
+        <circle cx="540" cy="270" r="12" fill="var(--blue)" opacity=".85"/><text x="540" y="274" text-anchor="middle" fill="#fff">P10</text>
+        <circle cx="640" cy="300" r="11" fill="var(--blue)" opacity=".85"/><text x="640" y="304" text-anchor="middle" fill="#fff">P11</text>
+        <circle cx="740" cy="260" r="11" fill="var(--blue)" opacity=".85"/><text x="740" y="264" text-anchor="middle" fill="#fff">P12</text>
+        <circle cx="820" cy="320" r="10" fill="var(--blue)" opacity=".85"/><text x="820" y="324" text-anchor="middle" fill="#fff">P13</text>
+        <!-- later -->
+        <circle cx="200" cy="290" r="10" fill="#8a8a8a" opacity=".85"/><text x="200" y="294" text-anchor="middle" fill="#fff">P14</text>
+        <circle cx="330" cy="330" r="10" fill="#8a8a8a" opacity=".85"/><text x="330" y="334" text-anchor="middle" fill="#fff">P15</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="card scroll" style="margin-top:12px">
+    <table>
+      <thead><tr><th>#</th><th>제안</th><th>왜 필요한가 (점검 근거)</th><th>효과</th><th>작업량</th></tr></thead>
+      <tbody>
+        <tr><td>P1</td><td>모바일 주문서 <b>하단 고정 결제바</b>(최종 금액 + 결제 버튼)</td><td>390px에서 결제 버튼이 긴 폼 맨 아래 — 금액 확인·결제까지 스크롤 4~5화면</td><td><span class="tag t-hi">높음</span></td><td>작음</td></tr>
+        <tr><td>P2</td><td><b>표지 모바일 캔버스 높이 맞춤</b></td><td>표지 캔버스가 너비 기준으로만 맞춰져 앞표지 하단이 도구막대에 가림(실측)</td><td><span class="tag t-hi">높음</span></td><td>작음~중간</td></tr>
+        <tr><td>P3</td><td>버튼 <b>터치 타깃 44px</b> 기준(모바일 sm 버튼 h-11)</td><td>업로드·에디터·포토북 메뉴 버튼 32~40px</td><td>중간</td><td>작음</td></tr>
+        <tr><td>P4</td><td><b>표지 규격 사전 판정</b> — 주문서 진입 시 바로 안내 + 표지 링크</td><td>규격 바뀐 표지는 입력을 다 마치고 결제 누를 때에야 작은 글씨로 409 안내</td><td><span class="tag t-hi">높음</span></td><td>작음</td></tr>
+        <tr><td>P5</td><td><b>결제 전 최종 확인 단계</b>(표지·내지 미리보기 + 3D, 주문서 상단 또는 /review)</td><td>인쇄물이라 환불 불가인데 주문서에 미리보기가 없음</td><td><span class="tag t-hi">높음</span></td><td>중간</td></tr>
+        <tr><td>P6</td><td><b>업로드 직후 자동 페이지 생성</b>, 설정 폼은 "다시 구성"으로 접기 · PDF 다운로드는 주문 후로</td><td>모바일 첫 화면이 정렬 4 + 레이아웃 2 폼과 인쇄 용어(300dpi·재단선) 카드로 시작</td><td><span class="tag t-hi">높음</span></td><td>중간</td></tr>
+        <tr><td>P7</td><td><b>에디터 전용 레이아웃</b>(사이트 헤더·푸터 제거, 캔버스 공간 확대)</td><td>에디터 sticky 툴바가 사이트 헤더 밑으로 겹치고, 편집 화면 아래 푸터가 붙음</td><td><span class="tag t-hi">높음</span></td><td>중간</td></tr>
+        <tr><td>P8</td><td><b>환불 신청 기능 + 배송 타임라인</b>(결제→제작→발송→완료)</td><td>지금은 고객센터 전화 안내까지만 — 셀프 신청·진행 상황 시각화 없음</td><td>중간</td><td>큼</td></tr>
+        <tr><td>P9</td><td><b>선물 기능 의미 결정</b>(편집 사본 공유 vs 실물 배송) — 오너 결정</td><td>"선물하기"가 실물 배송이 아니라 사본 공유 — 문구로 명시했지만 기대와 다를 수 있음. 수령 페이지 썸네일 미표시·막다른 길도 함께</td><td>중간</td><td>중간</td></tr>
+        <tr><td>P10</td><td>오류 코드 → 사용자 문구·이동 버튼 <b>매핑 계층</b>(API·클라이언트 공통)</td><td>화면마다 오류 문구 처리 방식이 달라 내부 정보가 새거나 해결 경로가 없음</td><td>중간</td><td>중간</td></tr>
+        <tr><td>P11</td><td>관리자 <b>공용 목록 훅·확인 다이얼로그·adminFetch</b></td><td>6개 목록 화면이 같은 패턴을 복붙 — 이번 수정도 화면별로 반복 적용</td><td>중간(운영자)</td><td>중간</td></tr>
+        <tr><td>P12</td><td>관리자 <b>대용량 업로드를 서명 URL 방식</b>으로</td><td>배경 10MB·폰트 5MB를 함수에 직접 전송 — Vercel 요청 한도(4.5MB) 초과 가능</td><td>중간(운영자)</td><td>중간</td></tr>
+        <tr><td>P13</td><td><b>업로드 큐를 레이아웃 수준</b>으로 올려 화면 이동 중에도 업로드 계속</td><td>이번엔 이탈 확인으로 막았지만, 근본적으로는 이동해도 업로드가 이어지는 편이 자연스러움</td><td>중간</td><td>큼</td></tr>
+        <tr><td>P14</td><td>CMS 변경 감사 로그 · 할인 코드 수정/사용 내역</td><td>콘텐츠 저장은 감사 로그에 안 남고, 할인 "내역" 버튼은 빈 목록</td><td>낮음</td><td>작음~중간</td></tr>
+        <tr><td>P15</td><td>주문 상세 금액 내역 공용 컴포넌트(주문서·완료·상세 동일 표기)</td><td>상세 화면은 할인·포인트·결제액만 있어 합계가 맞아떨어지지 않음</td><td>낮음</td><td>작음</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>4. 권장 순서</h2>
+  <div class="grid cols">
+    <div class="card lane">
+      <h3><span class="tag t-ok">지금</span> 1~2일</h3>
+      <div class="item"><b>P1 하단 고정 결제바</b><span class="small">모바일 전환율 직접 영향</span></div>
+      <div class="item"><b>P4 표지 규격 사전 판정</b><span class="small">결제 직전 막힘 제거</span></div>
+      <div class="item"><b>P2 표지 캔버스 높이 맞춤</b><span class="small">모바일 표지 편집 가림</span></div>
+      <div class="item"><b>P3 터치 타깃 44px</b><span class="small">버튼 컴포넌트 한 곳</span></div>
+    </div>
+    <div class="card lane">
+      <h3><span class="tag t-hi">다음</span> 1~2주</h3>
+      <div class="item"><b>P5 결제 전 확인 단계</b><span class="small">환불 불가 상품의 신뢰</span></div>
+      <div class="item"><b>P6 업로드 직후 자동 생성</b><span class="small">첫 사용 단계 축소</span></div>
+      <div class="item"><b>P7 에디터 전용 레이아웃</b><span class="small">P2와 함께 하면 효율적</span></div>
+      <div class="item"><b>P9 선물 의미 결정</b><span class="small">오너 결정 필요</span></div>
+    </div>
+    <div class="card lane">
+      <h3><span class="tag t-blue">나중</span> 기반 정비</h3>
+      <div class="item"><b>P8 환불 신청 · 배송 타임라인</b></div>
+      <div class="item"><b>P10 오류 매핑 계층</b></div>
+      <div class="item"><b>P11 관리자 공용 훅</b> · <b>P12 서명 URL 업로드</b></div>
+      <div class="item"><b>P13 업로드 큐 상향</b> · P14 · P15</div>
+    </div>
+  </div>
+
+  <h2>5. 점검 방법과 한계</h2>
+  <div class="card">
+    <ul class="tight">
+      <li>코드 감사 3건(관리자 / 업로드·편집 / 주문·결제) + 실제 화면 촬영: 임시 테스트 계정으로 로그인해 업로드→내지→표지→주문서까지 데스크톱·390px 모바일 22장 캡처(결제창은 열지 않음, 테스트 데이터 자동 정리).</li>
+      <li>관리자 화면은 실제 고객 주문·개인정보가 보이므로 캡처하지 않고 코드로만 점검.</li>
+      <li>토스 결제창 이후(결제 완료·실패·주문 상세의 배송 정보)는 실결제 없이 코드로 확인 — 실제 주문 데이터로 화면 확인은 오픈 후 첫 주문 때 권장.</li>
+    </ul>
+  </div>
+
+  <footer>100p Books · CTO 점검 보고 · 근거: STATUS.md §0-31, docs/LAUNCH-RUNBOOK.md 백로그</footer>
+</main>
+</body>
+</html>

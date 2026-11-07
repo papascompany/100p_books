@@ -4,6 +4,8 @@ import LaunchChecklist from "@/components/admin/LaunchChecklist";
 import StatCard from "@/components/admin/StatCard";
 import StatusBadge from "@/components/admin/StatusBadge";
 import { Button } from "@/components/ui/button";
+import { kstToday } from "@/lib/attendance/perfect-month";
+import { kstDayStartIso } from "@/lib/date/kst";
 import { createAdminSupabase } from "@/lib/db/admin";
 import type { OrderStatus } from "@/lib/db/types";
 
@@ -12,6 +14,7 @@ export const runtime = "nodejs";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const DT = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul",
   month: "2-digit",
   day: "2-digit",
   hour: "2-digit",
@@ -34,8 +37,8 @@ export default async function AdminDashboardPage() {
   const admin = createAdminSupabase();
 
   const now = new Date();
-  const startOfDay = new Date(now);
-  startOfDay.setHours(0, 0, 0, 0);
+  // "오늘" = KST 자정부터 — 서버(Vercel)는 UTC 라 setHours(0) 은 KST 09:00 이 된다.
+  const startOfDayIso = kstDayStartIso(kstToday(now.getTime()).dateStr);
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   const [
@@ -48,11 +51,11 @@ export default async function AdminDashboardPage() {
     admin
       .from("orders")
       .select("id", { count: "exact", head: true })
-      .gte("created_at", startOfDay.toISOString()),
+      .gte("created_at", startOfDayIso),
     admin
       .from("orders")
       .select("amount")
-      .gte("paid_at", startOfDay.toISOString())
+      .gte("paid_at", startOfDayIso)
       .not("paid_at", "is", null),
     admin
       .from("profiles")

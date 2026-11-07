@@ -6,6 +6,7 @@ import DataTable, { type Column } from "@/components/admin/DataTable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
+import { kstDayEndIso } from "@/lib/date/kst";
 import type { DiscountCode, DiscountType } from "@/lib/db/types";
 
 // ---------------------------------------------------------------------------
@@ -14,6 +15,7 @@ import type { DiscountCode, DiscountType } from "@/lib/db/types";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 const DT = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul",
   year: "2-digit",
   month: "2-digit",
   day: "2-digit",
@@ -23,10 +25,9 @@ const DT = new Intl.DateTimeFormat("ko-KR", {
 // Types
 // ---------------------------------------------------------------------------
 
-interface ListResponse {
-  ok: true;
-  data: { items: DiscountCode[]; total: number; page: number; pageSize: number };
-}
+type ListResponse =
+  | { ok: true; data: { items: DiscountCode[]; total: number; page: number; pageSize: number } }
+  | { ok: false; error?: { code?: string; message?: string } };
 
 interface DiscountUseRow {
   id: string;
@@ -136,7 +137,8 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
       active,
     };
     if (maxUses.trim()) body.maxUses = parseInt(maxUses, 10);
-    if (expiresAt) body.expiresAt = new Date(expiresAt).toISOString();
+    // 만료일은 KST 그 날 23:59:59.999 까지 유효(new Date(ymd) 는 UTC 자정 = KST 09:00 이었다).
+    if (expiresAt) body.expiresAt = kstDayEndIso(expiresAt);
 
     setSubmitting(true);
     try {
@@ -261,7 +263,7 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
           {/* 만료일 */}
           <div>
             <label className="block text-[11px] font-medium text-muted-foreground">
-              만료일 (빈칸 = 무기한)
+              만료일 (해당일 23:59까지 · 빈칸 = 무기한)
             </label>
             <Input
               type="date"
@@ -498,10 +500,13 @@ export default function DiscountsClient() {
 
   const [items, setItems] = React.useState<DiscountCode[]>([]);
   const [total, setTotal] = React.useState(0);
+  // 입력값(qInput)과 적용값(q) 분리 — Enter·"검색" 버튼에서만 적용.
+  const [qInput, setQInput] = React.useState("");
   const [q, setQ] = React.useState("");
   const [activeFilter, setActiveFilter] = React.useState<"" | "true" | "false">("");
   const [page, setPage] = React.useState(1);
   const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   const [createOpen, setCreateOpen] = React.useState(false);
   const [deleteTarget, setDeleteTarget] = React.useState<DiscountCode | null>(null);
@@ -510,30 +515,40 @@ export default function DiscountsClient() {
   // 조회 본체 — 선행 로딩 표시 없이 응답만 반영한다(effect·핸들러 공용). state 반영은
   // promise 콜백에서만 한다(react-hooks/set-state-in-effect 는 await 경계를 보지 않는다).
   const runFetch = React.useCallback(
-    () =>
+    (signal?: AbortSignal) =>
       (async () => {
         const params = new URLSearchParams();
-        if (q.trim()) params.set("q", q.trim());
+        if (q) params.set("q", q);
         if (activeFilter) params.set("active", activeFilter);
         params.set("page", String(page));
         params.set("pageSize", String(PAGE_SIZE));
 
         const r = await fetch(`/api/admin/discounts?${params.toString()}`, {
           cache: "no-store",
+          signal,
         });
-        return (await r.json()) as ListResponse | { ok: false };
+        return (await r.json().catch(() => null)) as ListResponse | null;
       })()
         .then((j) => {
+          if (signal?.aborted) return;
           if (!j || j.ok !== true) {
             setItems([]);
             setTotal(0);
+            setError((j && j.ok === false ? j.error?.message : undefined) ?? "할인 코드 조회 실패");
             return;
           }
+          setError(null);
           setItems(j.data.items);
           setTotal(j.data.total);
         })
+        .catch(() => {
+          if (signal?.aborted) return;
+          setItems([]);
+          setTotal(0);
+          setError("네트워크 오류로 할인 코드를 불러오지 못했습니다.");
+        })
         .finally(() => {
-          setLoading(false);
+          if (!signal?.aborted) setLoading(false);
         }),
     [q, activeFilter, page],
   );
@@ -549,7 +564,10 @@ export default function DiscountsClient() {
   }
 
   React.useEffect(() => {
-    void runFetch();
+    // 조건이 바뀌면 이전 요청을 취소 — 늦게 온 이전 응답이 최신 결과를 덮지 않게 한다.
+    const ac = new AbortController();
+    void runFetch(ac.signal);
+    return () => ac.abort();
   }, [runFetch]);
 
   // 이벤트 핸들러용 수동 재조회 — 로딩 표시 후 조회.
@@ -694,8 +712,13 @@ export default function DiscountsClient() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            setPage(1);
-            fetchData();
+            const nextQ = qInput.trim();
+            if (nextQ === q && page === 1) {
+              void fetchData();
+            } else {
+              setQ(nextQ);
+              setPage(1);
+            }
           }}
           className="flex flex-wrap items-end gap-2 rounded-2xl border bg-card p-3 shadow-soft"
         >
@@ -721,8 +744,8 @@ export default function DiscountsClient() {
               코드 검색 (prefix)
             </span>
             <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value.toUpperCase())}
+              value={qInput}
+              onChange={(e) => setQInput(e.target.value.toUpperCase())}
               placeholder="예: SUMMER"
               className="mt-1 h-10 font-mono"
             />
@@ -740,18 +763,30 @@ export default function DiscountsClient() {
           </Button>
         </form>
 
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+
         {/* 테이블 */}
         <DataTable
           columns={columns}
           rows={items}
           rowKey={(r) => r.id}
-          empty={loading ? "불러오는 중…" : "조건에 맞는 할인 코드가 없습니다."}
+          empty={
+            loading
+              ? "불러오는 중…"
+              : error
+                ? "목록을 불러오지 못했습니다."
+                : "조건에 맞는 할인 코드가 없습니다."
+          }
         />
 
         {/* 페이지네이션 */}
         <div className="flex items-center justify-between text-sm">
           <span className="text-xs text-muted-foreground">
-            총 {total}건 · {page} / {totalPages}
+            총 {total.toLocaleString("ko-KR")}건 · {page} / {totalPages}
           </span>
           <div className="flex gap-1">
             <Button

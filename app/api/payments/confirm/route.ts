@@ -22,7 +22,7 @@ import {
   type ReserveOrderCreditsResult,
   restoreOrderCredits,
 } from "@/lib/orders/refund";
-import { assertTransition } from "@/lib/orders/state";
+import { assertTransition, orderStatusLabel } from "@/lib/orders/state";
 import {
   buildConfirmIdempotencyKey,
   classifyTossConfirmError,
@@ -151,7 +151,7 @@ export async function POST(req: Request) {
       }
       return fail(
         "ORDER_NOT_PENDING",
-        `이미 처리된 주문입니다 (현재 상태: ${order.status}).`,
+        `이미 처리된 주문입니다 (현재 상태: ${orderStatusLabel(order.status)}).`,
         409,
       );
     }
@@ -390,7 +390,7 @@ async function reconcileCancelledOrder(
   expected: ExpectedPayment,
 ): Promise<NextResponse<ApiFail>> {
   const notPending = () =>
-    fail("ORDER_NOT_PENDING", `이미 처리된 주문입니다 (현재 상태: ${order.status}).`, 409);
+    fail("ORDER_NOT_PENDING", `이미 처리된 주문입니다 (현재 상태: ${orderStatusLabel(order.status)}).`, 409);
 
   let payment: TossConfirmResponse;
   try {
@@ -748,7 +748,7 @@ function reserveFailure(
     case "NOT_PENDING":
       return fail(
         "ORDER_NOT_PENDING",
-        `이미 처리된 주문입니다 (현재 상태: ${r.status ?? "unknown"}).`,
+        `이미 처리된 주문입니다 (현재 상태: ${orderStatusLabel(r.status)}).`,
         409,
       );
     case "ORDER_CHANGED":

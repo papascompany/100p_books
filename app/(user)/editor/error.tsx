@@ -16,8 +16,8 @@ export default function EditorError({
       error={error}
       reset={reset}
       title="편집 화면에 문제가 생겼어요"
-      description="마지막으로 저장된 내용은 프로젝트에 남아 있어요. 저장 전의 최근 편집은 사라졌을 수 있어요."
-      primaryLink={{ href: "/projects", label: "내 프로젝트로" }}
+      description="마지막으로 저장된 내용은 포토북에 남아 있어요. 저장 전의 최근 편집은 사라졌을 수 있어요."
+      primaryLink={{ href: "/projects", label: "내 포토북으로" }}
       secondaryLink={{ href: "/", label: "홈으로 가기" }}
     />
   );

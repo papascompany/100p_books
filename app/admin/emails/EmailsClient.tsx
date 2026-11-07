@@ -6,9 +6,11 @@ import DataTable, { type Column } from "@/components/admin/DataTable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
+import { kstDayEndIso, kstDayStartIso } from "@/lib/date/kst";
 import { isStaleSending } from "@/lib/email/retry-policy";
 
 const DT = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul",
   year: "2-digit",
   month: "2-digit",
   day: "2-digit",
@@ -62,6 +64,8 @@ const STATUS_TONE: Record<EmailJobStatus, string> = {
 export default function EmailsClient() {
   const { toast } = useToast();
   const [status, setStatus] = React.useState<EmailJobStatus | "">("");
+  // 입력값(qInput)과 적용값(q) 분리 — Enter·"검색" 버튼에서만 적용(키 입력마다 요청하지 않음).
+  const [qInput, setQInput] = React.useState("");
   const [q, setQ] = React.useState("");
   const [from, setFrom] = React.useState("");
   const [to, setTo] = React.useState("");
@@ -70,43 +74,52 @@ export default function EmailsClient() {
   const [items, setItems] = React.useState<Row[]>([]);
   const [total, setTotal] = React.useState(0);
   const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
   const [busyId, setBusyId] = React.useState<string | null>(null);
 
   // 조회 본체 — 선행 로딩 표시 없이 응답만 반영한다(effect·핸들러 공용). state 반영은
   // promise 콜백에서만 한다(react-hooks/set-state-in-effect 는 await 경계를 보지 않는다).
   const runFetch = React.useCallback(
-    () =>
+    (signal?: AbortSignal) =>
       (async () => {
         const params = new URLSearchParams();
         if (status) params.set("status", status);
         if (q) params.set("q", q);
-        if (from) params.set("from", new Date(from).toISOString());
-        if (to) {
-          const toDate = new Date(to);
-          toDate.setHours(23, 59, 59, 999);
-          params.set("to", toDate.toISOString());
-        }
+        // 날짜는 KST 달력 기준 — to 는 그 날 23:59:59.999(KST)까지 포함
+        if (from) params.set("from", kstDayStartIso(from));
+        if (to) params.set("to", kstDayEndIso(to));
         params.set("page", String(page));
         params.set("pageSize", String(PAGE_SIZE));
 
         const r = await fetch(`/api/admin/emails?${params.toString()}`, {
           cache: "no-store",
+          signal,
         });
-        return (await r.json()) as
+        return (await r.json().catch(() => null)) as
           | { ok: true; data: { items: Row[]; total: number } }
-          | { ok: false };
+          | { ok: false; error?: { code?: string; message?: string } }
+          | null;
       })()
         .then((j) => {
+          if (signal?.aborted) return;
           if (!j || j.ok !== true) {
             setItems([]);
             setTotal(0);
+            setError((j && j.ok === false ? j.error?.message : undefined) ?? "이메일 잡 조회 실패");
             return;
           }
+          setError(null);
           setItems(j.data.items);
           setTotal(j.data.total);
         })
+        .catch(() => {
+          if (signal?.aborted) return;
+          setItems([]);
+          setTotal(0);
+          setError("네트워크 오류로 이메일 잡 목록을 불러오지 못했습니다.");
+        })
         .finally(() => {
-          setLoading(false);
+          if (!signal?.aborted) setLoading(false);
         }),
     [status, q, from, to, page],
   );
@@ -122,7 +135,10 @@ export default function EmailsClient() {
   }
 
   React.useEffect(() => {
-    void runFetch();
+    // 조건이 바뀌면 이전 요청을 취소 — 늦게 온 이전 응답이 최신 결과를 덮지 않게 한다.
+    const ac = new AbortController();
+    void runFetch(ac.signal);
+    return () => ac.abort();
   }, [runFetch]);
 
   // 이벤트 핸들러용 수동 재조회 — 로딩 표시 후 조회.
@@ -131,7 +147,14 @@ export default function EmailsClient() {
     return runFetch();
   }, [runFetch]);
 
-  const retry = async (jobId: string) => {
+  const retry = async (jobId: string, jobStatus: EmailJobStatus) => {
+    // 취소된 잡은 의도적으로 멈춘 메일일 수 있다 — 재발송 전 한 번 확인.
+    if (
+      jobStatus === "cancelled" &&
+      !window.confirm("취소된 메일입니다. 다시 발송 대기열에 등록할까요?")
+    ) {
+      return;
+    }
     setBusyId(jobId);
     try {
       const r = await fetch(`/api/admin/emails/${jobId}/retry`, {
@@ -248,7 +271,7 @@ export default function EmailsClient() {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => retry(r.id)}
+            onClick={() => retry(r.id, r.status)}
             disabled={busyId === r.id}
             type="button"
           >
@@ -265,8 +288,13 @@ export default function EmailsClient() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          setPage(1);
-          fetchData();
+          const nextQ = qInput.trim();
+          if (nextQ === q && page === 1) {
+            void fetchData();
+          } else {
+            setQ(nextQ);
+            setPage(1);
+          }
         }}
         className="flex flex-wrap items-end gap-2 rounded-2xl border bg-card p-3 shadow-soft"
       >
@@ -298,31 +326,37 @@ export default function EmailsClient() {
           </span>
           <Input
             type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
+            value={qInput}
+            onChange={(e) => setQInput(e.target.value)}
             placeholder="example@gmail.com"
             className="h-10 w-56"
           />
         </label>
         <label className="block">
           <span className="block text-[11px] font-medium text-muted-foreground">
-            From
+            시작일
           </span>
           <Input
             type="date"
             value={from}
-            onChange={(e) => setFrom(e.target.value)}
+            onChange={(e) => {
+              setFrom(e.target.value);
+              setPage(1);
+            }}
             className="h-10 w-40"
           />
         </label>
         <label className="block">
           <span className="block text-[11px] font-medium text-muted-foreground">
-            To
+            종료일
           </span>
           <Input
             type="date"
             value={to}
-            onChange={(e) => setTo(e.target.value)}
+            onChange={(e) => {
+              setTo(e.target.value);
+              setPage(1);
+            }}
             className="h-10 w-40"
           />
         </label>
@@ -331,16 +365,28 @@ export default function EmailsClient() {
         </Button>
       </form>
 
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+
       <DataTable
         columns={columns}
         rows={items}
         rowKey={(r) => r.id}
-        empty={loading ? "불러오는 중…" : "조건에 맞는 잡이 없습니다."}
+        empty={
+          loading
+            ? "불러오는 중…"
+            : error
+              ? "목록을 불러오지 못했습니다."
+              : "조건에 맞는 잡이 없습니다."
+        }
       />
 
       <div className="flex items-center justify-between text-sm">
         <span className="text-xs text-muted-foreground">
-          총 {total}건 · {page} / {totalPages}
+          총 {total.toLocaleString("ko-KR")}건 · {page} / {totalPages}
         </span>
         <div className="flex gap-1">
           <Button

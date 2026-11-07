@@ -133,10 +133,11 @@ export default function GenerateControls({
       aria-labelledby="generate-heading"
       className="rounded-xl border bg-white/70 p-5 shadow-soft dark:bg-white/[0.03]"
     >
-      <div className="mb-5 flex items-baseline justify-between gap-3">
+      {/* 390px 에서 설명문과 한 줄에 놓이면 제목이 "자동 편/집"으로 끊겼다 — 모바일은 설명을 아래로. */}
+      <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
         <h2
           id="generate-heading"
-          className="font-display text-xl font-semibold tracking-tight"
+          className="shrink-0 whitespace-nowrap font-display text-xl font-semibold tracking-tight"
         >
           자동 편집
         </h2>

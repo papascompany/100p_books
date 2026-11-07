@@ -207,7 +207,7 @@ export async function POST(req: Request) {
       if (balance < usePoints) {
         return fail(
           "POINTS_INSUFFICIENT",
-          `포인트 잔액이 부족합니다. (보유 ${balance}, 사용 ${usePoints})`,
+          `포인트 잔액이 부족합니다. (보유 ${balance.toLocaleString("ko-KR")}P · 사용 ${usePoints.toLocaleString("ko-KR")}P)`,
           400,
           { balance, requested: usePoints },
         );

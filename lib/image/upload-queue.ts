@@ -6,6 +6,7 @@ import { create } from "zustand";
 import type { Photo } from "@/lib/db/types";
 import {
   CLIENT_THUMB_LONG_EDGE,
+  MAX_FILE_BYTES,
   SIGN_BATCH_SIZE,
   UPLOAD_CONCURRENCY,
 } from "./constants";
@@ -34,7 +35,13 @@ export interface UploadItem {
   effectiveFile?: File;
   status: UploadStatus;
   progress: number; // 0..1
+  /** 사용자에게 보여줄 실패 사유(상태 코드 등 기술 정보는 담지 않는다 — console 로만). */
   error?: string;
+  /**
+   * 실패 종류. "invalid" 는 형식·용량 검증 실패라 재시도해도 같은 결과다 —
+   * UI 는 재시도 대신 제거만 보여준다. 그 외 실패(네트워크·서버)는 "upload".
+   */
+  errorKind?: UploadErrorKind;
   photoId?: string;
   storageKey?: string;
   /** 배치 서명으로 받은 Storage 업로드 URL. */
@@ -51,6 +58,8 @@ export interface UploadItem {
   orderIdx: number;
   createdAt: number;
 }
+
+export type UploadErrorKind = "invalid" | "upload";
 
 /** 서버에 이미 업로드된 사진을 그리드에 복원하기 위한 seed (UP-2). */
 export interface ServerPhotoSeed {
@@ -96,6 +105,49 @@ interface UploadStoreState {
 }
 
 // ─────────────────────────────────────────────────────────────
+// 사용자 문구
+// ─────────────────────────────────────────────────────────────
+
+/** 사용자에게 보이는 실패 문구 — 상태 코드·영문 원문은 console 로만 남긴다. */
+export const UPLOAD_ERROR_MESSAGES = {
+  network: "연결이 불안정해 업로드하지 못했어요. 재시도를 눌러 주세요.",
+  expired: "업로드 권한이 만료됐어요. 재시도를 눌러 주세요.",
+  signedOut: "로그인이 만료됐어요. 다시 로그인한 뒤 재시도해 주세요.",
+  rateLimited: "요청이 많아 잠시 멈췄어요. 잠시 후 재시도를 눌러 주세요.",
+  tooLarge: "사진 용량이 너무 커서 올리지 못했어요.",
+  prepare: "업로드를 준비하지 못했어요. 재시도를 눌러 주세요.",
+  convert: "HEIC 사진을 변환하지 못했어요. JPEG로 바꿔 다시 올려 주세요.",
+  read: "사진을 읽지 못했어요. 손상되지 않은 사진인지 확인해 주세요.",
+  process: "사진을 저장하지 못했어요. 재시도를 눌러 주세요.",
+} as const;
+
+/** HTTP 상태 코드 → 사용자 문구. */
+export function uploadStatusMessage(status: number): string {
+  if (status === 401) return UPLOAD_ERROR_MESSAGES.signedOut;
+  if (status === 403) return UPLOAD_ERROR_MESSAGES.expired;
+  if (status === 413) return UPLOAD_ERROR_MESSAGES.tooLarge;
+  if (status === 429) return UPLOAD_ERROR_MESSAGES.rateLimited;
+  return UPLOAD_ERROR_MESSAGES.network;
+}
+
+/**
+ * 클라이언트 형식·용량 검증 — 통과하면 null, 실패하면 사용자 문구.
+ * 판정 자체는 서버와 같은 validateFile 이 하고, 여기서는 사유를 쉬운 말로 바꾼다.
+ */
+export function describeInvalidFile(file: File): string | null {
+  if (validateFile({ name: file.name, type: file.type, size: file.size }) === null) {
+    return null;
+  }
+  if (Number.isFinite(file.size) && file.size > MAX_FILE_BYTES) {
+    return `${Math.round(MAX_FILE_BYTES / 1024 / 1024)}MB 이하 사진만 올릴 수 있어요.`;
+  }
+  if (!Number.isFinite(file.size) || file.size <= 0) {
+    return "빈 파일이라 올릴 수 없어요.";
+  }
+  return "JPEG·PNG·WebP·HEIC 사진만 올릴 수 있어요.";
+}
+
+// ─────────────────────────────────────────────────────────────
 // store
 // ─────────────────────────────────────────────────────────────
 
@@ -129,13 +181,14 @@ export const useUploadStore = create<UploadStoreState>()((set, get) => ({
     const startIdx = existing.length;
     const accepted: UploadItem[] = [];
     files.forEach((file, i) => {
-      const errMsg = validateFile({ name: file.name, type: file.type, size: file.size });
+      const errMsg = describeInvalidFile(file);
       const item: UploadItem = {
         id: nanoid(10),
         file,
         status: errMsg ? "error" : "pending",
         progress: 0,
         error: errMsg ?? undefined,
+        errorKind: errMsg ? "invalid" : undefined,
         orderIdx: startIdx + i,
         createdAt: Date.now(),
       };
@@ -175,20 +228,27 @@ export const useUploadStore = create<UploadStoreState>()((set, get) => ({
   },
 
   retry: (id) => {
-    const next = get().items.map((i) =>
-      i.id === id && (i.status === "error" || i.status === "cancelled")
-        ? {
-            ...i,
-            status: "pending" as UploadStatus,
-            progress: 0,
-            error: undefined,
-            // 재시도는 새 photoId 로 다시 서명 (storage 키 충돌·1회성 URL 재사용 방지)
-            photoId: undefined,
-            storageKey: undefined,
-            uploadUrl: undefined,
-          }
-        : i,
-    );
+    const next = get().items.map((i): UploadItem => {
+      if (i.id !== id || (i.status !== "error" && i.status !== "cancelled")) {
+        return i;
+      }
+      // 검증은 재시도 때도 다시 한다 — 형식·용량 실패는 재시도해도 서버에 보내지 않는다.
+      const invalid = describeInvalidFile(i.file);
+      if (invalid) {
+        return { ...i, status: "error", error: invalid, errorKind: "invalid" };
+      }
+      return {
+        ...i,
+        status: "pending",
+        progress: 0,
+        error: undefined,
+        errorKind: undefined,
+        // 재시도는 새 photoId 로 다시 서명 (storage 키 충돌·1회성 URL 재사용 방지)
+        photoId: undefined,
+        storageKey: undefined,
+        uploadUrl: undefined,
+      };
+    });
     set({ items: next, overall: recomputeOverall(next) });
     queueRef?.tick();
   },
@@ -341,8 +401,14 @@ async function postJson<T>(url: string, body: unknown, signal?: AbortSignal): Pr
     | { ok: boolean; data?: T; error?: { message?: string; details?: unknown } }
     | null;
   if (!res.ok || !json?.ok) {
+    // 상태 코드·서버 원문은 진단용으로만 남기고, 화면에는 상태별 쉬운 문구를 쓴다.
+    // 단, 도메인 거절(400 장수 한도·404·409 결제 후 잠금)은 서버가 사용자용 한국어 문구를 준다.
+    console.warn("[upload] request failed", url, res.status, json?.error?.message);
+    const serverMessage = json?.error?.message;
+    const useServerMessage =
+      !!serverMessage && (res.status === 400 || res.status === 404 || res.status === 409);
     throw new UploadApiError(
-      json?.error?.message ?? `요청 실패 (${res.status})`,
+      useServerMessage ? serverMessage : uploadStatusMessage(res.status),
       res.status,
       parseResetAt(json?.error?.details),
     );
@@ -415,10 +481,14 @@ function putWithProgress(
       if (ev.lengthComputable) onProgress(ev.loaded / ev.total);
     };
     xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error(`업로드 실패 (${xhr.status})`));
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+        return;
+      }
+      console.warn("[upload] storage PUT failed", xhr.status);
+      reject(new UploadApiError(uploadStatusMessage(xhr.status), xhr.status));
     };
-    xhr.onerror = () => reject(new Error("네트워크 오류"));
+    xhr.onerror = () => reject(new Error(UPLOAD_ERROR_MESSAGES.network));
     xhr.onabort = () => reject(new Error("취소됨"));
     if (signal) {
       if (signal.aborted) {
@@ -698,21 +768,29 @@ export class UploadQueue {
                 uploadUrl: sig.uploadUrl,
               });
             } else {
+              console.warn("[upload] sign-upload returned no entry", idx);
               s._patch(item.id, {
                 status: "error",
-                error: "서명 URL 응답이 비어있습니다.",
+                error: UPLOAD_ERROR_MESSAGES.prepare,
+                errorKind: "upload",
               });
             }
           });
         } catch (e) {
           if (this.destroyed) return;
-          const msg = e instanceof Error ? e.message : "업로드 준비에 실패했습니다.";
-          const isAbort = signal.aborted || msg.includes("취소");
+          const raw = e instanceof Error ? e.message : "";
+          const isAbort = signal.aborted || raw.includes("취소");
+          const msg =
+            e instanceof UploadApiError ? e.message : UPLOAD_ERROR_MESSAGES.prepare;
+          if (!isAbort && !(e instanceof UploadApiError)) {
+            console.warn("[upload] sign-upload failed", e);
+          }
           const s = useUploadStore.getState();
           for (const item of batch) {
             s._patch(item.id, {
               status: isAbort ? "cancelled" : "error",
               error: isAbort ? "취소됨" : msg,
+              errorKind: isAbort ? undefined : "upload",
             });
           }
           if (isAbort) return;
@@ -736,18 +814,22 @@ export class UploadQueue {
 
     const store = useUploadStore.getState();
     const patch = (p: Partial<UploadItem>) => store._patch(item.id, p);
+    /** 실패 시 단계별 사용자 문구를 고르기 위한 현재 단계. */
+    let stage: "prepare" | "convert" | "read" | "upload" = "prepare";
 
     try {
       const { photoId, storageKey, uploadUrl } = item;
       if (!photoId || !storageKey || !uploadUrl) {
-        throw new Error("업로드 준비 정보가 없습니다. 다시 시도해 주세요.");
+        throw new Error("missing signed upload info");
       }
 
       // 1) HEIC 변환
+      stage = "convert";
       patch({ status: "converting", progress: 0.02 });
       const effective = await convertHeicIfNeeded(item.file);
 
       // 2) EXIF + probe
+      stage = "read";
       patch({ status: "reading", progress: 0.08, effectiveFile: effective });
       const [exif, dims] = await Promise.all([
         extractExifMeta(effective),
@@ -772,6 +854,7 @@ export class UploadQueue {
       });
 
       // 4) PUT 업로드 (진행률 12% → 95%)
+      stage = "upload";
       await putWithProgress(
         uploadUrl,
         effective,
@@ -801,11 +884,21 @@ export class UploadQueue {
       }
       this.scheduleComplete();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "알 수 없는 오류";
-      const isAbort = msg.includes("취소") || abort.signal.aborted;
+      const raw = e instanceof Error ? e.message : "";
+      const isAbort = raw.includes("취소") || abort.signal.aborted;
+      let msg: string;
+      if (e instanceof UploadApiError) {
+        msg = e.message;
+      } else if (stage === "upload") {
+        msg = UPLOAD_ERROR_MESSAGES.network;
+      } else {
+        msg = UPLOAD_ERROR_MESSAGES[stage];
+      }
+      if (!isAbort) console.warn(`[upload] ${stage} failed`, e);
       patch({
         status: isAbort ? "cancelled" : "error",
         error: isAbort ? "취소됨" : msg,
+        errorKind: isAbort ? undefined : "upload",
       });
     } finally {
       this.aborters.delete(item.id);
@@ -876,18 +969,25 @@ export class UploadQueue {
         if (item.photoId && insertedIds.has(item.photoId)) {
           store._patch(item.id, { status: "done", progress: 1 });
         } else {
+          // 서버 사유(영문·기술 원문)는 진단용 — 화면에는 쉬운 문구.
+          console.warn(
+            "[upload] complete rejected",
+            item.photoId,
+            item.photoId ? failedMap.get(item.photoId) : undefined,
+          );
           store._patch(item.id, {
             status: "error",
-            error:
-              (item.photoId && failedMap.get(item.photoId)) ??
-              "서버 처리 중 실패",
+            error: UPLOAD_ERROR_MESSAGES.process,
+            errorKind: "upload",
           });
         }
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "complete 호출 실패";
+      const msg =
+        e instanceof UploadApiError ? e.message : UPLOAD_ERROR_MESSAGES.process;
+      if (!(e instanceof UploadApiError)) console.warn("[upload] complete failed", e);
       for (const item of batch) {
-        store._patch(item.id, { status: "error", error: msg });
+        store._patch(item.id, { status: "error", error: msg, errorKind: "upload" });
       }
     } finally {
       // 남아있는 항목이 있으면 재스케줄

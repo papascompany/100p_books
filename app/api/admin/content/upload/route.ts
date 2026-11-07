@@ -30,7 +30,7 @@ function safeSection(raw: unknown): string {
  *   field "file"    : 단일 이미지
  *   field "section" : 자산 분류 prefix (예: "hero", "features"). 미지정/부적합 시 "misc".
  *
- *   응답: { url, path }
+ *   응답: { ok: true, data: { url, path } } (실패: { ok: false, error: { code, message } })
  *
  *   site-assets 는 public 버킷이므로 getPublicUrl 로 공개 URL 반환.
  *   withAdmin 보호 (관리자만).

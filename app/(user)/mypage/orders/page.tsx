@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { createServerSupabase } from "@/lib/db/server";
 import type { OrderStatus } from "@/lib/db/types";
+import { carrierLabel } from "@/lib/orders/carriers";
 import {
   isUserCancellable,
   ORDER_STATUS_BADGE,
@@ -33,6 +34,8 @@ interface OrderRow {
   toss_payment_key: string | null;
   created_at: string;
   paid_at: string | null;
+  tracking_no: string | null;
+  tracking_carrier: string | null;
   project_id: string;
   projects: {
     id: string;
@@ -57,7 +60,7 @@ export default async function MyOrdersPage() {
   const { data, error } = await supabase
     .from("orders")
     .select(
-      "id, qty, amount, status, toss_payment_key, created_at, paid_at, project_id, projects(id, title, book_size_id, book_sizes(name))",
+      "id, qty, amount, status, toss_payment_key, created_at, paid_at, tracking_no, tracking_carrier, project_id, projects(id, title, book_size_id, book_sizes(name))",
     )
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
@@ -80,7 +83,7 @@ export default async function MyOrdersPage() {
     return (
       <div className="container py-10">
         <p className="text-sm text-destructive">
-          주문 내역을 불러오지 못했습니다: {error.message}
+          주문을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
         </p>
       </div>
     );
@@ -134,6 +137,14 @@ export default async function MyOrdersPage() {
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {o.projects?.book_sizes?.name ?? "—"} · 수량 {o.qty}권
                   </p>
+                  {o.tracking_no?.trim() ? (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {carrierLabel(o.tracking_carrier) || "택배"} · 송장{" "}
+                      <span className="font-mono tabular-nums text-foreground">
+                        {o.tracking_no.trim()}
+                      </span>
+                    </p>
+                  ) : null}
                 </div>
                 <span
                   className={
@@ -158,7 +169,13 @@ export default async function MyOrdersPage() {
                   ) : null}
                   {/* 결제 대기(결제 키 없음) 주문 — 결제창 이탈로 남은 주문을 직접 정리 (DEBT-6) */}
                   {isUserCancellable(o.status, o.toss_payment_key) ? (
-                    <CancelOrderButton orderId={o.id} orderTitle={o.projects?.title} />
+                    <>
+                      <CancelOrderButton orderId={o.id} orderTitle={o.projects?.title} />
+                      {/* 주문서로 돌아가면 서버(orders/create)가 이 대기 주문을 재사용한다. */}
+                      <Button asChild size="sm" variant="coral">
+                        <Link href={`/order/${o.project_id}`}>결제 계속하기</Link>
+                      </Button>
+                    </>
                   ) : null}
                   <Button asChild size="sm" variant="outline">
                     <Link href={`/mypage/orders/${o.id}`}>주문 상세</Link>

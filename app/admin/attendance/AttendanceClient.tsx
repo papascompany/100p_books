@@ -233,7 +233,7 @@ export default function AttendanceClient() {
           {list.monthStatus === "current"
             ? `이번 달 (어제까지만 채울 수 있음 — 오늘 ${list.todayKst} 은 회원 본인 출석)`
             : "지난 달 (채워서 만근이 되면 보너스 즉시 지급)"}{" "}
-          · {list.mode === "search" ? "검색 결과" : "출석자"} {total}명
+          · {list.mode === "search" ? "검색 결과" : "출석자"} {total.toLocaleString("ko-KR")}명
         </p>
       ) : null}
 
@@ -252,7 +252,7 @@ export default function AttendanceClient() {
 
       <div className="flex items-center justify-between text-sm">
         <span className="text-xs text-muted-foreground">
-          총 {total}명 · {page} / {totalPages}
+          총 {total.toLocaleString("ko-KR")}명 · {page} / {totalPages}
         </span>
         <div className="flex gap-1">
           <Button
