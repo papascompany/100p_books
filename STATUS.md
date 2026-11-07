@@ -51,7 +51,7 @@
 - 검증(로컬 darwin, Node 26 — engine 24 경고만): typecheck 0 · lint 0/0 · vitest **91파일 1,537 pass / 1 skip**(+2파일·42건) · build 성공.
   e2e·a11y 는 PR CI 로 판정. 관리자 출석 화면·탈퇴 모달은 인증이 필요해 브라우저 실측 미실시.
 - **병합·배포(11-07)**: PR #41 CI 5건 green → 사용자 승인으로 rebase 병합(main `a633623`, 2026-11-06T17:04Z) → main CI 3잡 success · Vercel 운영 success ·
-  운영 `/`·`/attendance` 200, `/admin/attendance` 비로그인 307(관리자 보호), 첫 페이지에 "02-2273-5131" 노출 확인. 원격 브랜치 `claude/owner-decisions-attendance-1106` 은 남김(삭제는 승인 후).
+  운영 `/`·`/attendance` 200, `/admin/attendance` 비로그인 307(관리자 보호), 첫 페이지에 "02-2273-5131" 노출 확인. 원격 브랜치 `claude/owner-decisions-attendance-1106` 은 11-07 오너 승인 후 삭제(tip f1a9983 트리 = a633623 확인) — 원격은 main 만 남음.
 - **릴리스 전 최종 확인(런북 §8, 2026-11-07, main `c001e86` = 운영 배포본)**: test:pdf 5(darwin-arm64 해시 일치) · 운영 URL e2e 12 · a11y 25 / 1 skip ·
   `e2e:auth` **5 passed**(로컬 서버 + 운영 Supabase — 골든 플로우 + 편집 무결성 QA-1/4/2, 1.8m, 임시 프로젝트·스토리지 afterAll 정리 로그 확인, load 8.5).
   typecheck·lint·vitest·build 는 같은 코드로 11-06 통과(§0-30 위). **코드 측 오픈 준비 완료** — 남은 것은 오너 운영 액션·사업자 정보뿐(런북 상단 표).
