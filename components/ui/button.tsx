@@ -46,9 +46,10 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-12 px-8 text-base",
-        sm: "h-10 px-6 text-sm",
+        /* 모바일은 터치 타깃 44px(h-11) — WCAG 2.5.5·iOS HIG. 데스크톱(md+)은 기존 40px 유지. */
+        sm: "h-11 px-5 text-sm md:h-10 md:px-6",
         lg: "h-14 px-10 text-base",
-        icon: "h-10 w-10 bg-soft-cloud text-ink",
+        icon: "h-11 w-11 bg-soft-cloud text-ink md:h-10 md:w-10",
       },
     },
     defaultVariants: {

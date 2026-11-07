@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize } from "@/lib/db/types";
+import { isCoverFormatOutdated } from "@/lib/layout/cover";
 import { isPageDoc } from "@/lib/layout/types";
 
 export const dynamic = "force-dynamic";
@@ -61,14 +62,17 @@ export default async function OrderPage(props: PageProps) {
   const pages = pageCount ?? 0;
 
   const stored = project.cover_json as unknown;
-  const hasCover =
+  const coverDoc =
     !!stored &&
     typeof stored === "object" &&
     isPageDoc(stored) &&
-    stored.layoutMode === "cover";
+    stored.layoutMode === "cover"
+      ? stored
+      : null;
+  const hasCover = coverDoc !== null;
 
   // 미준비 안내
-  if (pages === 0 || !hasCover) {
+  if (pages === 0 || !coverDoc) {
     return (
       <div className="container py-10">
         <div className="mx-auto max-w-xl rounded-2xl border bg-card p-6 sm:p-8">
@@ -98,6 +102,31 @@ export default async function OrderPage(props: PageProps) {
               </Button>
             </li>
           </ul>
+        </div>
+      </div>
+    );
+  }
+
+  // 표지 규격 사전 판정 — 결제 버튼에서야 409(COVER_FORMAT_OUTDATED)로 알게 하지 않고,
+  // 주소·약관을 입력하기 전에 표지 편집기로 안내한다(주문 생성·결제 승인과 같은 판정).
+  if (isCoverFormatOutdated({ bookSize, pageCount: pages, coverWidthMm: coverDoc.widthMm })) {
+    return (
+      <div className="container py-10">
+        <div className="mx-auto max-w-xl rounded-2xl border bg-card p-6 sm:p-8">
+          <h1 className="font-display text-2xl font-semibold">표지를 한 번 더 맞춰 주세요</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            표지를 만든 뒤 페이지 수가 바뀌었거나 인쇄 규격이 갱신되어, 책등 폭이 지금 포토북과
+            달라요. 이대로 인쇄하면 표지가 어긋나요. 표지 편집에서 &lsquo;새 규격으로 다시
+            만들기&rsquo;를 누르면 첫 사진과 제목은 그대로 이어져요.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Button asChild>
+              <Link href={`/cover/${project.id}`}>표지 맞추러 가기</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href={`/editor/${project.id}`}>내지 보기</Link>
+            </Button>
+          </div>
         </div>
       </div>
     );

@@ -8,7 +8,7 @@
 > 이중 사용 창, `0032`(클라이언트 직접 쓰기 봉쇄)로 `profiles.role` 권한 상승 표면이 닫혔다.
 > postcheck 요약(`docs/sql/0032-postcheck-summary.sql`) 운영 실행 **27행 전부 `pass=true`**(2026-09-28).
 >
-> 최종 업데이트: 2026-11-07
+> 최종 업데이트: 2026-11-08
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
 > 운영 빌드: PR #39(2026-11-03, Dependabot #38 — next 16.4.3 등 8종 · postcss-selector-parser 6.1.5, §0-28) · PR #36(2026-10-27, Dependabot #33·#35 통합 — canvas 1.0.13 PDF baseline 갱신 · vite 8, §0-27) · `af92b5a`(2026-10-24, Dependabot #28·#29 통합 PR #30 — next 16.4.2 · react 19.3.1 · canvas 1.0.11 · vite 7.3.7 · axe 4.14 a11y 수정, §0-26) · `0804742`(2026-10-13, Storige 검증 결과 중첩 파싱·STORAGE_NOT_S3 — §0-24) · `44edc75`(2026-10-12, tailwindcss-animate devDeps 이동 → prod audit 0) · `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
@@ -25,7 +25,15 @@
 
 ---
 
-## 🆕 최근 작업 (2026-09-17 ~ 11-07)
+## 🆕 최근 작업 (2026-09-17 ~ 11-08)
+
+### 0-32. UI/UX 개선 "지금" 4건 — P1~P4 (2026-11-08) — 브랜치 `claude/ux-quickwins-1108`
+
+- **P1 모바일 하단 고정 결제바**(`OrderForm.tsx`): 폼 안 결제 버튼이 화면 아래에 있을 때만(IntersectionObserver) 최종 금액 + 결제/막힌 이유 버튼을 보여준다. 막혔으면 "배송지 입력하기"(첫 미입력 칸으로 스크롤·포커스) / "약관 동의하기". md 이상·버튼이 보이거나 지나친 뒤에는 숨김 — e2e 의 `/결제하기$/` 조회와 충돌 없음.
+- **P2 표지 모바일 캔버스 높이 맞춤**(`CoverEditor.tsx`): 앞·뒤표지 면 확대 폭에 "뷰포트 − 캔버스 위 영역 − 하단 sticky 도구막대" 높이 상한. 390×844 실측 캔버스 하단 690px < 도구막대 698px(수정 전 앞표지 하단이 가려짐). 책등은 좁은 글자 편집용 확대라 상한 미적용(기존 동작 유지).
+- **P3 터치 타깃 44px**: `Button` size `sm`·`icon` 을 모바일 `h-11`(md+ 기존 40px), 포토북 카드 더보기·빈 페이지 추가·페이지 삭제 확인 버튼도 모바일 44px.
+- **P4 표지 규격 사전 판정**: `isCoverFormatOutdated()`(`lib/layout/cover.ts`, 테스트 4건)로 판정을 단일화 — 주문서 진입 시 "표지를 한 번 더 맞춰 주세요" + 표지 링크(결제 버튼에서 409 로 알던 것), `orders/create`·`payments/confirm`·표지 에디터 배너가 같은 함수 사용.
+- **검증**: typecheck 0 · lint 0/0 · vitest 93파일 1,582 pass / 1 skip · build OK · `e2e:auth` 5 passed · 390px 실측(표지 앞·뒤·책등 측정값, 주문서 상단 바 표시·결제 버튼 근처 숨김). P4 화면은 규격 불일치 표지를 만들기 어려워 단위 테스트로만 확인.
 
 ### 0-31. UI/UX 전수 점검 + 즉시 수정 (2026-11-07) — PR #43 rebase 병합 `de81b63`(11-08, PR·main CI 3잡·Vercel 통과, 운영 `/` 200 · `/admin` 비로그인 307, 원격 브랜치 삭제)
 

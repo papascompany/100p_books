@@ -58,6 +58,7 @@ import {
   buildDefaultCoverDoc,
   buildSpineText,
   calcCoverDimensions,
+  isCoverFormatOutdated,
   SPINE_TEXT_MIN_MM,
 } from "@/lib/layout/cover";
 import { isPageDoc, PAGEDOC_VERSION, type PageDoc } from "@/lib/layout/types";
@@ -263,13 +264,18 @@ export default function CoverEditor({
   const [coverSegment, setCoverSegment] = useState<CoverSegment>("front");
   const scrollBoxRef = useRef<HTMLDivElement>(null);
   const [stageBoxWidth, setStageBoxWidth] = useState<number | null>(null);
+  /** 모바일 하단 sticky 도구막대 — 면 확대 시 캔버스가 이 아래로 가려지지 않게 높이를 잰다. */
+  const mobileToolbarRef = useRef<HTMLDivElement | null>(null);
 
   // 표지 차원 (책등 두께 표시용)
   const dims = calcCoverDimensions({ bookSize, pageCount });
   const spineTooNarrow = dims.spineMm < SPINE_TEXT_MIN_MM;
   // 구버전(2배 폭) 규격으로 저장된 cover_json 감지 — 자동 변환 없이 배너로 안내.
-  const legacyWidthMismatch =
-    Math.abs(currentDoc.widthMm - dims.totalWidthMm) > 0.5;
+  const legacyWidthMismatch = isCoverFormatOutdated({
+    bookSize,
+    pageCount,
+    coverWidthMm: currentDoc.widthMm,
+  });
 
   // 이탈 경고 — 하드 내비게이션(새로고침/탭 닫기) + 헤더 등 `<a>` 링크 소프트 내비게이션.
   // 에디터 자체 이동(flushAndNavigate)은 버튼 + router.push 라 이 가드를 거치지 않고 저장 후 이동한다.
@@ -892,7 +898,17 @@ export default function CoverEditor({
     // 책등처럼 좁은 면도 화면 폭을 채워 편집 가능(벡터 렌더라 선명도 유지).
     const maxWidthPx =
       ((totalMm * PREVIEW_DPI) / 25.4) * SEGMENT_MAX_FIT_SCALE;
-    const width = Math.min(containerW * (totalMm / visibleMm), maxWidthPx);
+    // 높이 상한 — 선택 면이 화면 폭을 채우면 앞·뒤표지처럼 세로가 긴 면은 캔버스 높이가
+    // 뷰포트를 넘어 하단 sticky 도구막대에 가려졌다(390×844 실측). 페이지 맨 위 기준으로
+    // "캔버스 위 영역 + 도구막대"를 뺀 높이 안에 들어오도록 폭을 줄인다(면 양옆이 조금 보인다).
+    const totalHMm = currentDoc.heightMm + 4; // bleed 포함 캔버스 높이
+    const boxTopInDoc = box.getBoundingClientRect().top + window.scrollY;
+    const toolbarH = mobileToolbarRef.current?.offsetHeight ?? 0;
+    const availH = Math.max(240, window.innerHeight - boxTopInDoc - toolbarH - 8);
+    // 책등은 좁은 글자를 편집하려고 화면 폭까지 확대하는 용도라(세로 스크롤 감수) 상한을 걸지 않는다.
+    const heightCapW =
+      coverSegment === "spine" ? Number.POSITIVE_INFINITY : availH * (totalMm / totalHMm);
+    const width = Math.min(containerW * (totalMm / visibleMm), maxWidthPx, heightCapW);
     setStageBoxWidth(width);
 
     const centerTrimMm =
@@ -910,7 +926,7 @@ export default function CoverEditor({
       });
     }, 200);
     return () => clearTimeout(t);
-  }, [isMobile, coverSegment, currentDoc.widthMm, dims.bookWidthMm, dims.spineMm]);
+  }, [isMobile, coverSegment, currentDoc.widthMm, currentDoc.heightMm, dims.bookWidthMm, dims.spineMm]);
 
   return (
     <div className="flex min-h-[calc(100dvh-4rem)] flex-col">
@@ -1251,7 +1267,10 @@ export default function CoverEditor({
 
       {/* 하단 (모바일) — Toolbar (safe-area 패딩 포함) */}
       {readOnly ? null : (
-        <div className="sticky bottom-0 z-20 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden">
+        <div
+          ref={mobileToolbarRef}
+          className="sticky bottom-0 z-20 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur md:hidden"
+        >
           <Toolbar
             mobile
             onPick={onToolPick}

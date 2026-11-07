@@ -180,7 +180,7 @@ function CardMenu({ projectId, projectTitle, hasCover, onDeleted }: CardMenuProp
             aria-label="더보기 메뉴"
             disabled={deleting}
             className={cn(
-              "absolute right-2 top-2 z-10 flex size-8 items-center justify-center rounded-full",
+              "absolute right-2 top-2 z-10 flex size-11 items-center justify-center rounded-full md:size-8",
               "bg-black/40 text-white backdrop-blur-sm transition-opacity",
               /* 터치 기기(모바일)에는 hover 가 없으므로 상시 노출, md 이상에서만 hover 노출 */
               "opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100",

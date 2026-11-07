@@ -87,6 +87,19 @@ export function calcCoverDimensions(
   };
 }
 
+/** 저장된 표지 폭과 현재 인쇄 규격의 허용 오차(mm). */
+export const COVER_WIDTH_TOLERANCE_MM = 0.5;
+
+/**
+ * 저장된 표지가 현재 인쇄 규격과 맞지 않는지 — 규격 개정 이전(2배 폭) 표지이거나,
+ * 표지를 만든 뒤 페이지 수가 바뀌어 책등 폭이 달라진 경우다. 이대로 인쇄하면 크롭마크가 어긋난다.
+ * 주문서 진입 안내 · 주문 생성 · 결제 승인 · 표지 에디터 배너가 모두 이 판정을 쓴다.
+ */
+export function isCoverFormatOutdated(args: CalcCoverDimensionsArgs & { coverWidthMm: number }): boolean {
+  const expected = calcCoverDimensions(args);
+  return Math.abs(expected.totalWidthMm - args.coverWidthMm) > COVER_WIDTH_TOLERANCE_MM;
+}
+
 export interface BuildCoverDocArgs {
   bookSize: BookSize;
   pageCount: number;

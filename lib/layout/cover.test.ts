@@ -5,6 +5,7 @@ import {
   buildDefaultCoverDoc,
   buildSpineText,
   calcCoverDimensions,
+  isCoverFormatOutdated,
   SPINE_TEXT_MIN_MM,
 } from "./cover";
 import { PAGEDOC_VERSION } from "./types";
@@ -208,5 +209,24 @@ describe("buildSpineText", () => {
     });
     expect(out).not.toBeNull();
     expect(out?.placeholder).toBe("제목");
+  });
+});
+
+describe("isCoverFormatOutdated", () => {
+  it("현재 규격과 같은 폭이면 false", () => {
+    const dims = calcCoverDimensions({ bookSize: A5, pageCount: 24 });
+    expect(isCoverFormatOutdated({ bookSize: A5, pageCount: 24, coverWidthMm: dims.totalWidthMm })).toBe(false);
+  });
+  it("허용 오차(0.5mm) 안이면 false, 넘으면 true", () => {
+    const w = calcCoverDimensions({ bookSize: A5, pageCount: 24 }).totalWidthMm;
+    expect(isCoverFormatOutdated({ bookSize: A5, pageCount: 24, coverWidthMm: w + 0.5 })).toBe(false);
+    expect(isCoverFormatOutdated({ bookSize: A5, pageCount: 24, coverWidthMm: w + 0.6 })).toBe(true);
+  });
+  it("표지를 만든 뒤 페이지 수가 바뀌어 책등 폭이 달라지면 true", () => {
+    const madeAt10 = calcCoverDimensions({ bookSize: A5, pageCount: 10 }).totalWidthMm;
+    expect(isCoverFormatOutdated({ bookSize: A5, pageCount: 30, coverWidthMm: madeAt10 })).toBe(true);
+  });
+  it("구버전 2배 폭 표지는 true", () => {
+    expect(isCoverFormatOutdated({ bookSize: A5, pageCount: 24, coverWidthMm: 604 })).toBe(true);
   });
 });
