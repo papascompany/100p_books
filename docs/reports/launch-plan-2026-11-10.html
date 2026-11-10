@@ -1,0 +1,234 @@
+<title>100p Books 오픈 계획</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* Layout: one reading column; the 11-day Gantt is the centerpiece and may scroll sideways on phones. Tokens follow the app's own palette (ink · canvas · coral). */
+:root {
+  --bg: #fafafa; --surface: #ffffff; --ink: #141414; --mute: #6b6b74; --line: #e4e4e7; --soft: #f4f4f5;
+  --coral: #ff6b5e; --coral-ink: #c8392c; --coral-soft: #ffe7e4;
+  --ok: #1f8a4c; --ok-soft: #e3f4ea; --warn: #a86400; --warn-soft: #fdf1dc; --weekend: #efeff2;
+  --font-body: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-num: "Bebas Neue", "Impact", "Arial Narrow", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141210; --surface: #1d1a18; --ink: #ece7e1; --mute: #a39c95; --line: #36312d; --soft: #2a2623;
+  --coral: #ff7d71; --coral-ink: #ff9a90; --coral-soft: #3d2320;
+  --ok: #5cc98a; --ok-soft: #1b3326; --warn: #e8a948; --warn-soft: #3a2d17; --weekend: #24211e; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #141210; --surface: #1d1a18; --ink: #ece7e1; --mute: #a39c95; --line: #36312d; --soft: #2a2623;
+  --coral: #ff7d71; --coral-ink: #ff9a90; --coral-soft: #3d2320;
+  --ok: #5cc98a; --ok-soft: #1b3326; --warn: #e8a948; --warn-soft: #3a2d17; --weekend: #24211e; color-scheme: dark }
+
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.65; word-break: keep-all; overflow-wrap: break-word; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-block: 40px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 44px; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.3; margin: 0; }
+h1 { font-size: clamp(26px, 4vw, 34px); font-weight: 700; }
+h2 { font-size: 20px; font-weight: 700; }
+p { margin: 0; }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); font-weight: 500; }
+.muted { color: var(--mute); }
+section { display: grid; gap: 16px; min-width: 0; }
+
+/* hero */
+.hero { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: end; border-bottom: 1px solid var(--line); padding-bottom: 28px; }
+.dday { text-align: right; }
+.dday .n { font-family: var(--font-num); font-size: 88px; line-height: .9; color: var(--coral); }
+.dday .d { font-size: 13px; color: var(--mute); }
+@media (max-width: 560px) { .hero { grid-template-columns: 1fr; } .dday { text-align: left; } .dday .n { font-size: 64px; } }
+
+.verdict { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.verdict > div { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; display: grid; gap: 6px; align-content: start; }
+.verdict b { font-size: 15px; }
+.verdict .tag { font-size: 12px; font-weight: 700; }
+.tag.ok { color: var(--ok); } .tag.crit { color: var(--coral-ink); } .tag.warn { color: var(--warn); }
+@media (max-width: 760px) { .verdict { grid-template-columns: 1fr; } }
+
+/* gantt */
+.gantt-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.gantt { display: grid; grid-template-columns: 210px repeat(11, minmax(52px, 1fr)); min-width: 790px; font-size: 13px; }
+.gantt .hd { padding: 10px 4px; text-align: center; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.gantt .hd small { display: block; color: var(--mute); font-size: 11px; }
+.gantt .hd.we { background: var(--weekend); }
+.gantt .hd.open { color: var(--coral-ink); font-weight: 700; }
+.gantt .grp { grid-column: 1 / -1; padding: 8px 14px; background: var(--soft); font-size: 12px; font-weight: 700; color: var(--mute); letter-spacing: .04em; border-top: 1px solid var(--line); }
+.gantt .lbl { grid-column: 1; padding: 7px 14px; border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gantt .lbl code { font-size: 11px; color: var(--mute); margin-right: 6px; font-family: inherit; font-weight: 700; }
+.gantt .bar { align-self: center; height: 22px; margin: 0 3px; border-radius: 6px; background: var(--soft); border: 1px solid var(--line); font-size: 11px; display: flex; align-items: center; padding: 0 8px; white-space: nowrap; overflow: hidden; color: var(--mute); }
+.gantt .bar.dev { background: var(--ok-soft); border-color: transparent; color: var(--ok); }
+.gantt .bar.crit { background: var(--coral); border-color: transparent; color: #fff; font-weight: 700; }
+.gantt .bar.own { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
+.gantt .bar.gate { background: var(--ink); color: var(--bg); border-color: transparent; font-weight: 700; }
+.gantt .bar.buf { background: repeating-linear-gradient(135deg, var(--soft) 0 6px, var(--weekend) 6px 12px); }
+.gantt .cell { border-top: 1px solid var(--line); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--mute); }
+.legend span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -2px; background: var(--sw); }
+
+/* tables */
+.tbl-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px; }
+th, td { text-align: left; padding: 11px 14px; border-top: 1px solid var(--line); vertical-align: top; }
+thead th { border-top: 0; font-size: 12px; color: var(--mute); font-weight: 500; background: var(--soft); }
+td.id { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+td.date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.crit { background: var(--coral-soft); color: var(--coral-ink); }
+.pill.must { background: var(--warn-soft); color: var(--warn); }
+.pill.opt { background: var(--soft); color: var(--mute); }
+.pill.s { background: var(--ok-soft); color: var(--ok); }
+
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.box ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.box.nogo { border-color: var(--coral); }
+.box h3 { font-size: 15px; }
+footer { font-size: 12px; color: var(--mute); border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div style="display:grid;gap:10px">
+      <div class="eyebrow">CTO 보고 · 2026-11-10(화)</div>
+      <h1>100p Books 서비스 오픈 계획</h1>
+      <p class="muted">11월 20일(금) 오픈을 목표로, 남은 개발 이슈 8건과 오너 액션 9건을 날짜별로 배치했습니다. 기능 개발은 11/16(월)에 동결하고, 11/18(수)에 GO/NO-GO를 판정합니다.</p>
+    </div>
+    <div class="dday"><div class="n">D-10</div><div class="d">11/20 금요일 오픈</div></div>
+  </header>
+
+  <section>
+    <h2>결론</h2>
+    <div class="verdict">
+      <div><span class="tag ok">코드</span><b>오픈을 막는 코드 이슈는 없습니다</b><p class="muted">업로드 → 편집 → 주문 → 결제 → 인쇄 검증 경로는 운영에서 동작합니다. 남은 8건은 품질·운영 안정화 작업입니다.</p></div>
+      <div><span class="tag crit">크리티컬 패스</span><b>토스 라이브 키와 실물 테스트 인쇄</b><p class="muted">지금 결제 키는 체험 상점 테스트 키라 실제 결제가 되지 않습니다. 라이브 심사가 11/16까지 끝나지 않으면 오픈일이 밀립니다.</p></div>
+      <div><span class="tag warn">일정</span><b>11/16 프리즈 · 11/17 실결제 리허설 · 11/18 판정</b><p class="muted">주말(11/14~15)은 지연분을 흡수하는 버퍼로 비워 둡니다.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>일정표</h2>
+    <div class="legend">
+      <span style="--sw:var(--coral)">크리티컬 패스</span>
+      <span style="--sw:var(--warn-soft)">오너 액션</span>
+      <span style="--sw:var(--ok-soft)">개발</span>
+      <span style="--sw:var(--ink)">검증·오픈 관문</span>
+    </div>
+    <div class="gantt-scroll">
+      <div class="gantt" role="table" aria-label="11월 10일부터 20일까지 일정표">
+        <div class="hd"></div>
+        <div class="hd">10<small>화</small></div><div class="hd">11<small>수</small></div><div class="hd">12<small>목</small></div><div class="hd">13<small>금</small></div>
+        <div class="hd we">14<small>토</small></div><div class="hd we">15<small>일</small></div>
+        <div class="hd">16<small>월</small></div><div class="hd">17<small>화</small></div><div class="hd">18<small>수</small></div><div class="hd">19<small>목</small></div><div class="hd open">20<small>금 · 오픈</small></div>
+
+        <div class="grp">오너 액션</div>
+        <div class="lbl"><code>O5</code>운영 도메인 결정</div><div class="bar own" style="grid-column:2/5">결정</div>
+        <div class="lbl"><code>O4</code>Upstash 연결</div><div class="bar own" style="grid-column:3/5">5분</div>
+        <div class="lbl"><code>O1</code>토스 라이브 심사 → 키</div><div class="bar crit" style="grid-column:3/9">신청 → 심사 → 라이브 키·웹훅</div>
+        <div class="lbl"><code>O2</code>실물 테스트 인쇄</div><div class="bar crit" style="grid-column:4/11">발주 → 제작 → 수령·확인</div>
+        <div class="lbl"><code>O7</code>Storige 통지</div><div class="bar own" style="grid-column:4/6">붙여넣기</div>
+        <div class="lbl"><code>O3</code>Resend 키 + DNS</div><div class="bar own" style="grid-column:4/7">키·도메인 인증</div>
+        <div class="lbl"><code>O6</code>카카오 콘솔(선택)</div><div class="bar own" style="grid-column:5/7">설정</div>
+        <div class="lbl"><code>O8</code>랜딩 문구 재확인</div><div class="bar own" style="grid-column:9/12">최종</div>
+
+        <div class="grp">개발 (CTO)</div>
+        <div class="lbl"><code>D1</code>금액 내역 공용 컴포넌트</div><div class="bar dev" style="grid-column:3/4">P15</div>
+        <div class="lbl"><code>D2</code>오류 문구 매핑</div><div class="bar dev" style="grid-column:3/5">P10</div>
+        <div class="lbl"><code>D3</code>관리자 업로드 서명 URL</div><div class="bar dev" style="grid-column:4/6">P12</div>
+        <div class="lbl"><code>D4</code>다중 선택 저장 좌표</div><div class="bar dev" style="grid-column:4/5">재현·수정</div>
+        <div class="lbl"><code>D5</code>PDF 메모리 x64 실측</div><div class="bar dev" style="grid-column:5/6">실측</div>
+        <div class="lbl"><code>D6</code>썸네일·제목·PATCH 2회</div><div class="bar dev" style="grid-column:5/6">정리</div>
+        <div class="lbl"><code>—</code>버퍼</div><div class="bar buf" style="grid-column:6/8">지연분 흡수</div>
+
+        <div class="grp">검증 · 오픈</div>
+        <div class="lbl"><code>G1</code>코드 프리즈 · 전체 회귀</div><div class="bar gate" style="grid-column:8/9">프리즈</div>
+        <div class="lbl"><code>G2</code>실결제·환불 리허설</div><div class="bar gate" style="grid-column:9/10">리허설</div>
+        <div class="lbl"><code>G3</code>실물·iOS·인증 E2E</div><div class="bar gate" style="grid-column:10/11">GO/NO-GO</div>
+        <div class="lbl"><code>G4</code>운영 리허설</div><div class="bar gate" style="grid-column:11/12">리허설</div>
+        <div class="lbl"><code>G5</code>서비스 오픈</div><div class="bar crit" style="grid-column:12/13">오픈</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>다음 개발 이슈 — 오픈 전 처리 (CTO)</h2>
+    <p class="muted">UX 점검에서 남은 15건 중 오픈 전에 고객·운영자가 바로 부딪히는 3건(P10·P12·P15)과, 편집물·인쇄 품질 관련 확인 작업을 골랐습니다. 큰 작업(P8·P13)은 오픈 후로 미룹니다.</p>
+    <div class="tbl-scroll"><table>
+      <thead><tr><th>#</th><th>작업</th><th>왜 오픈 전에</th><th>작업량</th><th>일정</th></tr></thead>
+      <tbody>
+        <tr><td class="id">D1</td><td>주문 금액 내역 공용 컴포넌트 (UX P15)</td><td>주문 상세에는 할인·포인트·결제액만 있어 합계가 맞지 않습니다. 첫 고객의 금액 문의를 줄입니다.</td><td><span class="pill s">작음</span></td><td class="date">11/11</td></tr>
+        <tr><td class="id">D2</td><td>오류 코드 → 사용자 문구·이동 버튼 매핑 (UX P10)</td><td>화면마다 오류 처리 방식이 달라 내부 코드가 보이거나 다음 행동이 없는 화면이 있습니다.</td><td><span class="pill must">중간</span></td><td class="date">11/11~12</td></tr>
+        <tr><td class="id">D3</td><td>관리자 리소스 업로드를 서명 URL 방식으로 (UX P12)</td><td>지금은 파일이 서버 함수를 거쳐 Vercel 한도 4.5MB를 넘으면 실패합니다. 배경 이미지 한도는 10MB라 클립아트·배경을 채우기 전에 고쳐야 합니다.</td><td><span class="pill must">중간</span></td><td class="date">11/12~13</td></tr>
+        <tr><td class="id">D4</td><td>여러 개 선택 중 자동저장 좌표 재현·수정</td><td>선택 그룹 기준의 상대 좌표로 저장될 수 있다는 추정이 남아 있습니다. 사실이면 인쇄물 배치가 어긋납니다.</td><td><span class="pill s">작음~중간</span></td><td class="date">11/12</td></tr>
+        <tr><td class="id">D5</td><td>PDF 콜라주 6컷 메모리 x64 실측</td><td>측정은 로컬 arm64에서만 했습니다. 운영과 같은 Linux x64에서 100페이지 메모리를 확정합니다.</td><td><span class="pill s">작음</span></td><td class="date">11/13</td></tr>
+        <tr><td class="id">D6</td><td>내 포토북 카드 썸네일·"Untitled" 제목 · 표지 저장 중복 요청</td><td>첫 사용자가 보는 목록이 아이콘과 Untitled로만 채워집니다.</td><td><span class="pill s">작음</span></td><td class="date">11/13</td></tr>
+        <tr><td class="id">D7</td><td>카카오 로그인 실제 왕복 1회 확인</td><td>라이브러리 업그레이드 후 OAuth 콜백은 자동 테스트로 검증되지 않았습니다(O6 이후).</td><td><span class="pill opt">확인</span></td><td class="date">11/17</td></tr>
+        <tr><td class="id">D8</td><td>iOS Safari 실기기 핀치·더블탭 확인</td><td>편집 제스처 QA는 Chromium 에뮬레이션으로만 했습니다.</td><td><span class="pill opt">확인</span></td><td class="date">11/18</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>오너 액션 — 마감일 순</h2>
+    <div class="tbl-scroll"><table>
+      <thead><tr><th>#</th><th>할 일</th><th>늦어지면</th><th>구분</th><th>마감</th></tr></thead>
+      <tbody>
+        <tr><td class="id">O5</td><td>운영 도메인 결정 — <code>100pbooks.vercel.app</code> 유지 또는 자체 도메인</td><td>카카오 Redirect·Resend 발신 도메인·토스 웹훅 주소가 모두 이 값에 묶여 다시 등록해야 합니다.</td><td><span class="pill must">필수</span></td><td class="date">11/12</td></tr>
+        <tr><td class="id">O4</td><td>Upstash Redis 연결 (Vercel 마켓플레이스, 5분)</td><td>가입·업로드 남용 제한이 꺼진 채로 오픈합니다.</td><td><span class="pill must">필수</span></td><td class="date">11/12</td></tr>
+        <tr><td class="id">O1</td><td><b>토스 라이브 계약·심사 신청</b> → 라이브 키를 Vercel에 반영 → 웹훅을 라이브 단계에 재등록</td><td><b>실결제가 불가능해 오픈할 수 없습니다.</b></td><td><span class="pill crit">크리티컬</span></td><td class="date">신청 11/11<br>키 11/16</td></tr>
+        <tr><td class="id">O2</td><td><b>실물 테스트 인쇄 1부 발주</b> — 인쇄소 수동 발주 절차 확정, 글자 굵기(canvas 1.1 판단) 확인</td><td>첫 주문 품질을 오픈 후에야 알게 됩니다.</td><td><span class="pill crit">크리티컬</span></td><td class="date">발주 11/13<br>수령 11/18</td></tr>
+        <tr><td class="id">O7</td><td>Storige 통지 붙여넣기 1회 (<code>docs/STORIGE-NOTICE.md</code>)</td><td>Storige가 스토리지를 옮기면 업로드가 예고 없이 막힐 수 있습니다.</td><td><span class="pill must">필수</span></td><td class="date">11/13</td></tr>
+        <tr><td class="id">O3</td><td>Resend 키 + 발신 도메인 DNS(SPF·DKIM·DMARC)</td><td>주문 확인·배송 메일이 큐에 쌓이기만 합니다(키 등록 시 일괄 발송).</td><td><span class="pill must">필수</span></td><td class="date">11/14</td></tr>
+        <tr><td class="id">O6</td><td>카카오 개발자 콘솔 + Supabase 설정</td><td>카카오 버튼이 숨겨진 채 이메일 가입만으로 오픈합니다.</td><td><span class="pill opt">선택</span></td><td class="date">11/14</td></tr>
+        <tr><td class="id">O9</td><td>클립아트·배경 리소스 업로드 (D3 이후)</td><td>편집 팔레트가 "표시할 리소스가 없어요"로 보입니다.</td><td><span class="pill opt">선택</span></td><td class="date">11/17</td></tr>
+        <tr><td class="id">O8</td><td>랜딩 수치·후기 문구 재확인</td><td>11/6 "현행 유지"로 결정했지만, 오픈부터는 "5,000+ 제작·4.9★"가 실제 고객에게 보입니다(실제 주문 0·후기 0). 표시광고 관점에서 마지막으로 확인해 주세요.</td><td><span class="pill must">권고</span></td><td class="date">11/19</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="two">
+    <div class="box nogo">
+      <h3>11/18 GO/NO-GO 기준</h3>
+      <ul>
+        <li>라이브 키가 반영되고 실결제 소액 1건 → 관리자 "전액 환불"이 정상 처리됨</li>
+        <li>실물 인쇄물 품질 합격(글자 굵기·재단선·색)</li>
+        <li>전체 회귀 통과: typecheck·lint·test·PDF 회귀·build·운영 E2E·접근성·인증 E2E</li>
+        <li>관리자 "서비스 런치 체크" 카드 차단 항목 0</li>
+      </ul>
+      <p class="muted">하나라도 실패하면 오픈일을 다시 잡습니다.</p>
+    </div>
+    <div class="box">
+      <h3>오픈 당일·직후 운영</h3>
+      <ul>
+        <li>오픈일 배포 동결 — 핫픽스만 PR·CI 통과 후 반영</li>
+        <li>하루 3회: 런치 체크 카드 · 메일 cron 대기량 · Vercel 오류 로그</li>
+        <li>금요일 오픈이라 주말 고객센터(02-2273-5131) 응대 담당을 정해 주세요</li>
+        <li>환불은 관리자 주문 상세 "전액 환불"만 사용(부분 환불 모델 없음)</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="two">
+    <div class="box">
+      <h3>오픈 후 (11/23~)</h3>
+      <ul>
+        <li>UX P8 환불 신청·배송 타임라인 (큼)</li>
+        <li>UX P13 업로드 큐를 화면 이동과 무관하게 (큼)</li>
+        <li>UX P11 관리자 공용 목록 훅 · P14 CMS 감사 로그·할인 내역</li>
+        <li>인쇄소 자동 발주 1단계 (계획서 있음)</li>
+        <li>에러 추적 서비스 (오너 보류 중) · 스테이징 DB → 인증 E2E를 CI로</li>
+        <li>Tailwind 4 · canvas 1.1 (O2 결과에 따라)</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3>위험과 대응</h3>
+      <ul>
+        <li><b>토스 심사 지연</b> — 11/11에 신청하고 11/14에 진행 상황을 확인합니다. 11/18까지 키가 없으면 오픈일을 다시 잡습니다.</li>
+        <li><b>인쇄 품질 불합격</b> — PDF 렌더를 수정하고 다시 테스트 인쇄합니다(2~3일 추가).</li>
+        <li><b>에러 추적 없이 오픈</b> — 첫 주는 Vercel 로그를 직접 확인하는 것으로 대신합니다.</li>
+        <li><b>개발 지연</b> — 주말 버퍼로 흡수하고, 넘치면 D6를 오픈 후로 미룹니다.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>근거: <code>docs/LAUNCH-RUNBOOK.md</code> "서비스 오픈 계획"(일정 정본) · <code>STATUS.md</code> §0-35 · <code>docs/reports/ux-audit-2026-11-07.html</code></footer>
+</div>
