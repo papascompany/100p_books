@@ -95,10 +95,11 @@ test.describe("인증 골든 플로우 — 업로드→편집→표지→주문"
     const nextLink = page.getByRole("link", { name: /다음/ });
     await expect(nextLink).toBeVisible({ timeout: 120_000 });
 
-    // ── 4. 내지 자동 편집 — pages 행이 생겨야 주문 단계가 열린다.
+    // ── 4. 내지 자동 생성 — 업로드 "다음" 은 ?autogen=1 로 들어가 0페이지면 기본값(촬영시각 순·
+    //      폴라로이드)으로 자동 생성한다(P6, lib/editor/autogen.ts). 골든 플로우는 **수동 클릭 없이**
+    //      주문 링크가 열리는 것까지 확인해 자동 생성 회귀를 잡는다.
     await nextLink.click();
     await expect(page).toHaveURL(new RegExp(`/editor/${projectId}`));
-    await page.getByRole("button", { name: "자동 편집하기" }).click();
 
     // 페이지가 생성되면 TopBar 의 주문 CTA 가 disabled 버튼에서 링크로 바뀐다
     // (TopBar.tsx:121-134 — pageCount === 0 이면 비활성 버튼).

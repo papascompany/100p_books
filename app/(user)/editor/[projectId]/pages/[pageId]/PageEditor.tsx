@@ -851,10 +851,10 @@ export default function PageEditor({
     /*
      * CSS 변수 --toolbar-h: MobileToolbar 전체 높이.
      * 퀵 바(48px) + 탭 바(56px) + 상단 보더(1px) + iOS safe-area (EC-11).
-     * 모바일 캔버스 높이 계산: calc(100dvh - 헤더높이 - --toolbar-h)
+     * 모바일 캔버스 높이 계산: calc(100dvh - 상단 툴바높이 - --toolbar-h) — 사이트 헤더는 ChromeGate 가 숨긴다.
      */
     <div
-      className="flex min-h-[calc(100dvh-4rem)] flex-col"
+      className="flex min-h-dvh flex-col"
       style={
         {
           "--toolbar-h": "calc(105px + env(safe-area-inset-bottom))",
@@ -1052,7 +1052,9 @@ export default function PageEditor({
         )}
 
         {/* 중앙 — Stage */}
-        <main
+        {/* 레이아웃 <main> 안이라 랜드마크 중복을 피해 section 으로 둔다. */}
+        <section
+          aria-label="편집 캔버스"
           className={cn(
             // min-w-0: flex 자식의 min-width:auto 가 캔버스 폭을 강제해 md(768~1100px)에서
             // 3단이 가로로 넘치고 우측 속성 패널이 잘렸다. FabricStage 는 wrapper 폭에 맞춰 축소된다.
@@ -1089,7 +1091,7 @@ export default function PageEditor({
               </Button>
             </div>
           )}
-        </main>
+        </section>
 
         {/* 우측 (lg 이상) — SelectionPanel */}
         {readOnly ? null : (

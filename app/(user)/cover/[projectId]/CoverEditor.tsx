@@ -929,7 +929,7 @@ export default function CoverEditor({
   }, [isMobile, coverSegment, currentDoc.widthMm, currentDoc.heightMm, dims.bookWidthMm, dims.spineMm]);
 
   return (
-    <div className="flex min-h-[calc(100dvh-4rem)] flex-col">
+    <div className="flex min-h-dvh flex-col">
       {/* 상단 헤더 — 모바일(md 미만)은 2줄로 고정: ① 뒤로 + 단계 ② 제목 + [더보기·저장·다음].
           예전엔 버튼 4개가 줄바꿈되며 3줄 이상으로 늘어 캔버스 높이를 잡아먹었다. */}
       <header className="sticky top-0 z-30 flex flex-wrap items-center gap-2 border-b bg-background/95 px-3 py-2 backdrop-blur md:px-6">
@@ -1160,7 +1160,8 @@ export default function CoverEditor({
         {/* min-w-0 — flex 자식의 기본 min-width:auto 가 캔버스 폭을 강제해 md(768~1100px)에서
             3단 레이아웃이 가로로 넘치고 우측 속성 패널이 화면 밖으로 밀렸다. 0 으로 두면
             FabricStage 가 wrapper.clientWidth 에 맞춰 축소된다. */}
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-start gap-3">
+        {/* 레이아웃 <main> 안이라 랜드마크 중복을 피해 section 으로 둔다. */}
+        <section aria-label="편집 캔버스" className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-start gap-3">
           <ReadOnlyNotice message={lockMessage} />
           {legacyWidthMismatch && !readOnly ? (
             <div
@@ -1245,7 +1246,7 @@ export default function CoverEditor({
               ) : null}
             </div>
           </div>
-        </main>
+        </section>
 
         {/* 우측 (lg 이상) — SelectionPanel */}
         {readOnly ? null : (

@@ -8,7 +8,7 @@
 > 이중 사용 창, `0032`(클라이언트 직접 쓰기 봉쇄)로 `profiles.role` 권한 상승 표면이 닫혔다.
 > postcheck 요약(`docs/sql/0032-postcheck-summary.sql`) 운영 실행 **27행 전부 `pass=true`**(2026-09-28).
 >
-> 최종 업데이트: 2026-11-08
+> 최종 업데이트: 2026-11-10
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
 > 운영 빌드: PR #39(2026-11-03, Dependabot #38 — next 16.4.3 등 8종 · postcss-selector-parser 6.1.5, §0-28) · PR #36(2026-10-27, Dependabot #33·#35 통합 — canvas 1.0.13 PDF baseline 갱신 · vite 8, §0-27) · `af92b5a`(2026-10-24, Dependabot #28·#29 통합 PR #30 — next 16.4.2 · react 19.3.1 · canvas 1.0.11 · vite 7.3.7 · axe 4.14 a11y 수정, §0-26) · `0804742`(2026-10-13, Storige 검증 결과 중첩 파싱·STORAGE_NOT_S3 — §0-24) · `44edc75`(2026-10-12, tailwindcss-animate devDeps 이동 → prod audit 0) · `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
@@ -25,7 +25,16 @@
 
 ---
 
-## 🆕 최근 작업 (2026-09-17 ~ 11-08)
+## 🆕 최근 작업 (2026-09-17 ~ 11-10)
+
+### 0-33. UI/UX 개선 "다음" 3건 — P5·P6·P7 (2026-11-10) — 브랜치 `claude/ux-next-1110`, 서브에이전트 3 병렬
+
+- **P5 결제 전 확인 카드**(`app/(user)/order/[projectId]/OrderPreviewCard.tsx`·`order-preview.ts`): 주문서 상단 "인쇄 전 확인" — 표지 썸네일(`POST /api/cover/preview` 72dpi 재사용) + 내지 앞 6쪽(`PagePreview` 재사용, 썸네일 서명은 `admin.storage` — 0032 가드 형태 준수) + 3D 미리보기(`Cover3DPreview` 모달) + 표지/내지 수정. 실패 시 회색 칸, 체크박스 추가 없음. 주문서 진입마다 표지 72dpi 렌더 1회가 추가된다.
+- **P6 업로드 직후 자동 생성**(`lib/editor/autogen.ts`, `EditorClient`): 업로드 "다음" → `/editor/[id]?autogen=1` → 0페이지·미잠금·사진 있음이면 기본값(촬영시각 순·폴라로이드)으로 1회 생성(ref 로 이중 실행 방지, 쿼리는 즉시 제거, 기존 페이지 덮어쓰기 없음). 페이지가 있으면 설정 폼은 접힌 "다시 구성하기", PDF 카드는 하단 접힌 "인쇄용 파일 받기 (고급)". 실패 시 토스트 + 폼 펼침.
+  - e2e: golden-flow 는 **수동 클릭 없이** 주문 링크까지(자동 생성 회귀 감지), editor-integrity 는 폼이 보일 때만 수동 클릭.
+- **P7 에디터 전용 레이아웃**(`components/layout/ChromeGate.tsx`·`lib/layout/chrome.ts`): `/cover/[id]`·`/editor/[id]/pages/[pageId]` 에서 사이트 Header·Footer 미렌더(파일 이동 없이 usePathname 게이트), 에디터 루트 `min-h-dvh`, 중첩 `<main>` → `section[aria-label=편집 캔버스]`.
+- **검증**: typecheck 0 · lint 0/0 · vitest 96파일 1,616 pass / 1 skip(0032 가드 1건은 `admin.storage` 형태로 수정 후 통과) · build OK · `e2e:auth` 5 passed · 실화면(390px·데스크톱): 자동 생성 후 쿼리 제거, 표지 화면 헤더·푸터 0, 주문서 확인 카드·3D 미리보기, 페이지·콘솔 오류 0.
+- **P9 선물 의미(사본 공유 vs 실물 배송)는 오너 결정 대기**.
 
 ### 0-32. UI/UX 개선 "지금" 4건 — P1~P4 (2026-11-08) — PR #44 rebase 병합 `e1c8ab7`(PR·main CI 3잡·Vercel 통과, 운영 `/` 200 · `/admin` 비로그인 307, 원격 브랜치 삭제)
 

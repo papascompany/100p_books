@@ -1,14 +1,21 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import GenerateControls from "./GenerateControls";
+import GenerateControls, { requestLayoutGenerate } from "./GenerateControls";
 import PdfActions from "./PdfActions";
 import PreviewGrid, { type PageSummary } from "./PreviewGrid";
 import TopBar from "./TopBar";
 import ReadOnlyNotice from "@/components/editor/ReadOnlyNotice";
 import { toast } from "@/components/ui/use-toast";
 import type { BookSize, LayoutMode } from "@/lib/db/types";
+import {
+  AUTOGEN_DEFAULTS,
+  editorEntryHref,
+  shouldAutoGenerate,
+} from "@/lib/editor/autogen";
 import { normalizeLockMessage } from "@/lib/editor/lock-ui";
 
 export interface EditorClientProps {
@@ -25,7 +32,15 @@ export interface EditorClientProps {
   lockMessage: string | null;
   /** 저장된 표지가 있는지 — TopBar 주 버튼(표지 만들기 / 주문) 결정. */
   hasCover: boolean;
+  /**
+   * 업로드 직후 진입(`?autogen=1`, 서버 페이지 판정) — 0페이지·잠기지 않음·사진 있음이면 마운트 시
+   * 한 번 기본값으로 자동 생성한다(P6). 쿼리는 처리 후 지운다.
+   */
+  autogenRequested: boolean;
 }
+
+/** 업로드 직후 자동 생성 진행 상태 — running 동안 생성 폼 대신 진행 안내를 보여준다. */
+type AutogenStatus = "idle" | "running" | "done" | "failed";
 
 /** 내지 목록 조회 — state 는 건드리지 않고 응답만 돌려준다(실패 시 throw). */
 async function requestPages(
@@ -60,7 +75,9 @@ export default function EditorClient({
   bookSize,
   lockMessage,
   hasCover,
+  autogenRequested,
 }: EditorClientProps) {
+  const router = useRouter();
   const [pages, setPages] = useState<PageSummary[]>([]);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   /** 초기 1회 로드 전용 — true 인 동안만 PreviewGrid 가 스켈레톤을 그린다. */
@@ -72,6 +89,20 @@ export default function EditorClient({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<boolean>(false);
   const hasLoadedRef = useRef(false);
+  // 자동 생성 여부는 마운트 시점 props(서버 판정 pageCount)로 한 번만 정한다 — 이후 페이지가
+  // 생겨도, 쿼리를 지운 뒤 서버 props 가 바뀌어도 다시 판정하지 않는다(덮어쓰기 금지).
+  const [autogenStatus, setAutogenStatus] = useState<AutogenStatus>(() =>
+    shouldAutoGenerate({
+      requested: autogenRequested,
+      pageCount: initialPageCount,
+      photoCount,
+      locked: normalizeLockMessage(lockMessage) !== null,
+    })
+      ? "running"
+      : "idle",
+  );
+  /** StrictMode 이중 effect·재렌더에서도 자동 생성 요청을 한 번만 보낸다. */
+  const autogenHandledRef = useRef(false);
 
   // 조회 본체 — 선행 상태 표시 없이 응답만 반영한다. state 반영은 promise 콜백에서만
   // 한다(effect 에서 호출되므로 — react-hooks/set-state-in-effect 는 await 경계를 보지 않는다).
@@ -110,6 +141,35 @@ export default function EditorClient({
     setLoadError(null);
     return fetchPages();
   }, [fetchPages]);
+
+  // 업로드 직후 자동 생성 — `?autogen=1` 처리는 마운트당 1회. 쿼리는 생성 여부와 무관하게 지워
+  // 새로고침·뒤로가기로 다시 트리거되지 않게 한다. state 반영은 promise 콜백에서만 한다.
+  useEffect(() => {
+    if (!autogenRequested || autogenHandledRef.current) return;
+    autogenHandledRef.current = true;
+    router.replace(editorEntryHref(projectId), { scroll: false });
+    if (autogenStatus !== "running") return;
+    requestLayoutGenerate(projectId, AUTOGEN_DEFAULTS).then(
+      (res) => {
+        setLayoutMode(res.layoutMode);
+        toast({
+          description: `사진 ${photoCount}장으로 ${res.pageCount}페이지를 만들었어요.`,
+          variant: "success",
+        });
+        return refresh().then(() => setAutogenStatus("done"));
+      },
+      (e: unknown) => {
+        // 실패 — 0페이지 그대로라 생성 폼이 펼쳐진 채로 다시 나타나 수동 재시도할 수 있다.
+        toast({
+          description: `페이지를 자동으로 만들지 못했어요. ${
+            e instanceof Error ? e.message : "자동 편집 실패"
+          } — 아래에서 다시 시도해 주세요.`,
+          variant: "destructive",
+        });
+        setAutogenStatus("failed");
+      },
+    );
+  }, [autogenRequested, autogenStatus, photoCount, projectId, refresh, router]);
 
   const handleReorder = useCallback(
     async (pageIds: string[]) => {
@@ -222,6 +282,7 @@ export default function EditorClient({
   // 잠금 판정은 한 곳에서 — 배너·TopBar 비활성·생성/편집 차단이 같은 값을 본다.
   const lockNotice = normalizeLockMessage(lockMessage);
   const locked = lockNotice !== null;
+  const autogenRunning = autogenStatus === "running";
 
   return (
     <div className="space-y-8">
@@ -235,19 +296,33 @@ export default function EditorClient({
         hasCover={hasCover}
       />
 
-      <GenerateControls
-        projectId={projectId}
-        photoCount={photoCount}
-        currentPageCount={pageCount}
-        initialLayoutMode={initialLayoutMode}
-        onGenerated={(res) => {
-          setLayoutMode(res.layoutMode);
-          void refresh();
-        }}
-        disabled={locked}
-      />
-
-      <PdfActions projectId={projectId} pageCount={pageCount} />
+      {autogenRunning ? (
+        <section
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-3 rounded-xl border bg-white/70 p-5 text-sm shadow-soft dark:bg-white/[0.03]"
+        >
+          <Loader2 className="size-5 shrink-0 animate-spin text-coral" aria-hidden />
+          <span>
+            <span className="block font-medium">사진으로 페이지를 만들고 있어요…</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              촬영시각 순 · 폴라로이드로 만들어요. 만든 뒤 다시 구성할 수 있어요.
+            </span>
+          </span>
+        </section>
+      ) : (
+        <GenerateControls
+          projectId={projectId}
+          photoCount={photoCount}
+          currentPageCount={pageCount}
+          initialLayoutMode={initialLayoutMode}
+          onGenerated={(res) => {
+            setLayoutMode(res.layoutMode);
+            void refresh();
+          }}
+          disabled={locked}
+        />
+      )}
 
       <section aria-labelledby="preview-heading" className="space-y-3">
         <div className="flex items-baseline justify-between">
@@ -258,11 +333,13 @@ export default function EditorClient({
             페이지 프리뷰
           </h2>
           <p className="text-xs text-muted-foreground" aria-live="polite">
-            {loading
-              ? "불러오는 중…"
-              : refreshing
-                ? "갱신 중…"
-                : `${pageCount}페이지 · ${layoutMode === "polaroid" ? "폴라로이드" : "콜라주"}`}
+            {autogenRunning
+              ? "만드는 중…"
+              : loading
+                ? "불러오는 중…"
+                : refreshing
+                  ? "갱신 중…"
+                  : `${pageCount}페이지 · ${layoutMode === "polaroid" ? "폴라로이드" : "콜라주"}`}
           </p>
         </div>
         {loadError ? (
@@ -274,7 +351,8 @@ export default function EditorClient({
           projectId={projectId}
           pages={pages}
           photoUrls={photoUrls}
-          loading={loading}
+          // 자동 생성 중에는 빈 상태("위에서 자동 편집하기를…") 대신 스켈레톤.
+          loading={loading || autogenRunning}
           bookSize={bookSize}
           onReorder={locked ? rejectLockedReorder : handleReorder}
           onInsert={locked ? undefined : handleInsert}
@@ -282,6 +360,9 @@ export default function EditorClient({
           busy={busy}
         />
       </section>
+
+      {/* 고급 — 인쇄용 PDF. 기본 접힘, 편집 흐름 맨 아래(P6). */}
+      <PdfActions projectId={projectId} pageCount={pageCount} />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth/session";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { createServerSupabase } from "@/lib/db/server";
 import type { BookSize } from "@/lib/db/types";
+import { AUTOGEN_PARAM, isAutogenRequested } from "@/lib/editor/autogen";
 import { readProjectLockNotice } from "@/lib/editor/lock-notice";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,7 @@ export const runtime = "nodejs";
 
 interface PageProps {
   params: Promise<{ projectId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 /**
@@ -20,6 +22,7 @@ interface PageProps {
  */
 export default async function EditorPage(props: PageProps) {
   const params = await props.params;
+  const searchParams = await props.searchParams;
   try {
     await requireUser();
   } catch {
@@ -90,6 +93,7 @@ export default async function EditorPage(props: PageProps) {
         bookSize={bookSize}
         lockMessage={lockMessage}
         hasCover={(coverCount ?? 0) > 0}
+        autogenRequested={isAutogenRequested(searchParams[AUTOGEN_PARAM])}
       />
     </div>
   );

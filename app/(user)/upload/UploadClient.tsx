@@ -9,6 +9,7 @@ import FileGridItem from "./components/FileGridItem";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import type { BookSize } from "@/lib/db/types";
+import { editorEntryHref } from "@/lib/editor/autogen";
 import { useLeaveGuard } from "@/lib/hooks/use-leave-guard";
 import { MAX_PHOTOS_PER_PROJECT } from "@/lib/image/constants";
 import {
@@ -444,7 +445,8 @@ export default function UploadClient({
               aria-disabled={!allDone}
             >
               {allDone ? (
-                <Link href={`/editor/${projectId}`}>
+                // ?autogen=1 — 내지 목록이 0페이지면 기본값으로 바로 페이지를 만든다(P6).
+                <Link href={editorEntryHref(projectId, { autogen: true })}>
                   다음: 페이지 만들기 <ArrowRight className="size-4" aria-hidden />
                 </Link>
               ) : (
