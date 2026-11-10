@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { userErrorFromJson } from "@/lib/errors/user-message";
 
 interface ClaimApiSuccess {
   ok: true;
@@ -60,10 +61,7 @@ export function GiftClaimButton({
       const json = (await res.json()) as ClaimApiResponse;
 
       if (!res.ok || !json.ok) {
-        const msg =
-          (json as ClaimApiError).error?.message ??
-          "사본 받기에 실패했어요.";
-        setError(msg);
+        setError(userErrorFromJson(json, "사본 받기에 실패했어요.", res.status).message);
         setClaiming(false);
         return;
       }

@@ -17,6 +17,7 @@ import {
   shouldAutoGenerate,
 } from "@/lib/editor/autogen";
 import { normalizeLockMessage } from "@/lib/editor/lock-ui";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 
 export interface EditorClientProps {
   projectId: string;
@@ -55,7 +56,7 @@ async function requestPages(
     error?: { message: string };
   };
   if (!res.ok || !json.ok || !json.data) {
-    throw new Error(json.error?.message ?? "페이지 로드 실패");
+    throw new Error(userMessageFromJson(json, "페이지를 불러오지 못했어요. 새로고침해 주세요."));
   }
   return json.data;
 }
@@ -196,7 +197,7 @@ export default function EditorClient({
           error?: { message: string };
         };
         if (!res.ok || !json.ok) {
-          throw new Error(json.error?.message ?? "순서 변경에 실패했어요.");
+          throw new Error(userMessageFromJson(json, "순서 변경에 실패했어요."));
         }
         toast({ description: "페이지 순서를 변경했어요.", variant: "success" });
       } catch (e) {
@@ -226,7 +227,7 @@ export default function EditorClient({
           error?: { message: string };
         };
         if (!res.ok || !json.ok || !json.data) {
-          throw new Error(json.error?.message ?? "페이지 추가에 실패했어요.");
+          throw new Error(userMessageFromJson(json, "페이지 추가에 실패했어요."));
         }
         toast({
           description: `페이지를 추가했어요 (페이지 ${json.data.pageNo}).`,
@@ -266,7 +267,7 @@ export default function EditorClient({
           error?: { message: string };
         };
         if (!res.ok || !json.ok) {
-          throw new Error(json.error?.message ?? "삭제에 실패했어요.");
+          throw new Error(userMessageFromJson(json, "삭제에 실패했어요."));
         }
         await refresh();
       } catch (e) {

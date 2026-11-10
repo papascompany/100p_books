@@ -5,7 +5,10 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { GiftDialog } from "@/components/orders/GiftDialog";
+import OrderAmountLines from "@/components/orders/OrderAmountLines";
 import { Button } from "@/components/ui/button";
+import type { AmountLinesInput } from "@/lib/orders/amount-lines";
+import { GENERIC_USER_ERROR_MESSAGE, userErrorFromJson } from "@/lib/errors/user-message";
 
 export interface SuccessClientProps {
   projectId: string;
@@ -13,6 +16,8 @@ export interface SuccessClientProps {
   paymentKey: string;
   tossOrderId: string;
   amount: number;
+  /** 주문 행 기반 금액 내역 — 없으면 결제 금액 한 줄만 보인다. */
+  amountInput: AmountLinesInput | null;
 }
 
 type Phase = "confirming" | "success" | "failed";
@@ -83,7 +88,15 @@ export default function SuccessClient(props: SuccessClientProps) {
         const json = (await res.json()) as ConfirmResponse;
         if (!res.ok || !json.ok || !json.data) {
           setRetryable(RETRYABLE_CONFIRM_CODES.has(json.error?.code ?? ""));
-          throw new Error(json.error?.message ?? "결제 확정 실패");
+          setError(
+            userErrorFromJson(
+              json,
+              "결제 결과를 확인하지 못했어요. 주문 내역에서 결제 여부를 먼저 확인해 주세요.",
+              res.status,
+            ).message,
+          );
+          setPhase("failed");
+          return;
         }
         setPhase("success");
         setConfirmedOrderId(json.data.orderId || null);
@@ -94,8 +107,10 @@ export default function SuccessClient(props: SuccessClientProps) {
         } catch {
           // 접근 불가 환경 — 무시
         }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "결제 확정 실패");
+      } catch {
+        // 네트워크 오류 등 — 원문(예: "Failed to fetch")은 노출하지 않는다.
+        setError("결제 결과를 확인하지 못했어요. 주문 내역에서 결제 여부를 먼저 확인해 주세요.");
+        setRetryable(true);
         setPhase("failed");
       }
     })();
@@ -123,7 +138,7 @@ export default function SuccessClient(props: SuccessClientProps) {
           결제 확정 실패
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {error ?? "알 수 없는 오류가 발생했습니다."}
+          {error ?? GENERIC_USER_ERROR_MESSAGE}
         </p>
         <p className="mt-2 text-xs text-muted-foreground">
           결제가 이미 처리되었다면 마이페이지에서 확인할 수 있습니다.
@@ -166,10 +181,14 @@ export default function SuccessClient(props: SuccessClientProps) {
             </dd>
           </div>
         ) : null}
-        <div className="flex items-baseline justify-between gap-3">
-          <dt className="text-muted-foreground">결제 금액</dt>
-          <dd className="font-semibold text-foreground">{KRW.format(props.amount)}원</dd>
-        </div>
+        {props.amountInput ? (
+          <OrderAmountLines input={props.amountInput} />
+        ) : (
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="text-muted-foreground">결제 금액</dt>
+            <dd className="font-semibold text-foreground">{KRW.format(props.amount)}원</dd>
+          </div>
+        )}
       </dl>
       {pdfError ? (
         <p className="mx-auto mt-3 max-w-md rounded-md border border-coral-200 bg-coral-50 p-2 text-xs text-coral-700 dark:border-coral-700 dark:bg-coral-950/30 dark:text-coral-300">

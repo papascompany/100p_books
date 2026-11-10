@@ -6,16 +6,12 @@ import { fail, ok } from "@/app/api/_lib/response";
 import { withAdmin } from "@/lib/admin/auth";
 import { logAdminAction } from "@/lib/admin/audit";
 import {
-  RESOURCES_BUCKET,
-  extOf,
-  pathFor,
-  validateUpload,
   RESOURCE_CONSTRAINTS,
+  finalizeResourceUpload,
+  isResourceId,
+  validateResourceMeta,
 } from "@/lib/admin/resources";
 import { createAdminSupabase } from "@/lib/db/admin";
-import type { ResourceType } from "@/lib/db/types";
-import { UNTRUSTED_INPUT_OPTIONS, loadHardenedSharp } from "@/lib/image/sharp-safe";
-import { sniffAllowedImage } from "@/lib/image/sniff";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,162 +38,52 @@ export const GET = withAdmin(async (req) => {
   return ok({ items: data ?? [] });
 });
 
+
+const FinalizeSchema = z.object({
+  type: z.enum(TYPE_VALUES),
+  resourceId: z.string().refine(isResourceId, "resourceId 가 올바르지 않습니다."),
+  filename: z.string().min(1).max(255),
+  name: z.string().trim().min(1, "name 을 입력하세요.").max(80),
+  meta: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+
 /**
- * POST — multipart/form-data 업로드.
+ * POST — 직접 업로드 finalize (JSON).
  *
- * 필드:
- *   type: ResourceType
- *   name: string
- *   file: File
- *   meta: JSON string (optional)
- *
- * 흐름:
- *   1. validate (size/ext) + (배경 한정) 매직 바이트로 실제 형식 판정 — sharp 디코드 전에 거부
- *   2. resources INSERT (storage_key 는 pathFor 로 계산)
- *   3. storage upload (실패 시 row 삭제)
- *   4. (배경 한정) sharp probe — width >= 2400px 검증, 실패 시 삭제
+ * 흐름 (파일 본문은 이 라우트를 거치지 않는다 — Vercel 4.5MB 본문 제한):
+ *   1. POST /api/admin/resources/upload-url 로 서명 토큰 발급
+ *   2. 브라우저가 Storage 로 직접 PUT
+ *   3. 이 라우트: { type, resourceId, filename, name, meta } — path 는 서버가
+ *      type+resourceId+ext 로 재계산하고, 객체 존재·실제 크기·매직 바이트(·배경 2400px)를
+ *      재검증한 뒤 resources INSERT. 실패 시 업로드된 객체를 삭제한다.
  */
 export const POST = withAdmin(async (req, _ctx, user) => {
-  const form = await req.formData().catch(() => null);
-  if (!form) return fail("INVALID_BODY", "multipart/form-data 가 필요합니다.", 400);
-
-  const type = form.get("type");
-  const name = form.get("name");
-  const file = form.get("file");
-  const metaRaw = form.get("meta");
-
-  if (typeof type !== "string" || !TYPE_VALUES.includes(type as ResourceType)) {
-    return fail("INVALID_TYPE", "type 이 유효하지 않습니다.", 400);
+  const raw = (await req.json().catch(() => null)) as unknown;
+  if (!raw || typeof raw !== "object") {
+    return fail("INVALID_BODY", "application/json 본문이 필요합니다.", 400);
   }
-  if (typeof name !== "string" || !name.trim()) {
-    return fail("INVALID_NAME", "name 을 입력하세요.", 400);
+  const parsed = FinalizeSchema.safeParse(raw);
+  if (!parsed.success) {
+    return fail("INVALID_BODY", "요청 본문이 올바르지 않습니다.", 400, parsed.error.flatten());
   }
-  if (!(file instanceof File)) {
-    return fail("INVALID_FILE", "file 이 누락되었습니다.", 400);
-  }
-  const t = type as ResourceType;
-  const v = validateUpload(t, file);
-  if (!v.ok) return fail("INVALID_FILE", v.error ?? "파일 검증 실패", 400);
+  const { type, resourceId, filename, name } = parsed.data;
+  const meta = parsed.data.meta ?? null;
 
-  const buf = Buffer.from(await file.arrayBuffer());
-
-  // 🛡 배경은 아래에서 sharp 로 읽으므로, 확장자·MIME(위조 가능)이 아니라 실제 바이트로 형식을 먼저 확인한다 (SEC-1).
-  if (t === "background") {
-    const allowedMimes = RESOURCE_CONSTRAINTS.background.mimes;
-    const sniffed = sniffAllowedImage(buf, allowedMimes);
-    if (!sniffed.mime) {
-      return fail(
-        "INVALID_FILE",
-        `배경 파일의 실제 형식이 허용되지 않습니다 (감지: ${sniffed.format}, 허용: ${allowedMimes.join(", ")}).`,
-        400,
-      );
-    }
-  }
-
-  let meta: Record<string, unknown> | null = null;
-  if (typeof metaRaw === "string" && metaRaw.length > 0) {
-    try {
-      const parsed = JSON.parse(metaRaw);
-      if (parsed && typeof parsed === "object") {
-        meta = parsed as Record<string, unknown>;
-      }
-    } catch {
-      return fail("INVALID_META", "meta 가 올바른 JSON 이 아닙니다.", 400);
-    }
-  }
-
-  // type 별 메타 필수 필드 체크
-  if (t === "font") {
-    const m = meta ?? {};
-    const required = ["family", "licenseName"] as const;
-    for (const k of required) {
-      if (!m[k] || typeof m[k] !== "string") {
-        return fail(
-          "INVALID_META",
-          `폰트 메타 필수: ${required.join(", ")}`,
-          400,
-        );
-      }
-    }
-  }
+  const metaErr = validateResourceMeta(type, meta);
+  if (metaErr) return fail("INVALID_META", metaErr, 400);
 
   const admin = createAdminSupabase();
-
-  // 1) DB row INSERT (storage_key 는 row id 가 필요하므로 placeholder 후 update)
-  const ext = extOf(file.name);
-  const { data: inserted, error: insErr } = await admin
-    .from("resources")
-    .insert({
-      type: t,
-      name: name.trim(),
-      storage_key: "pending",
-      meta,
-      active: true,
-    })
-    .select("id, type, name, storage_key, meta, active, created_at")
-    .single();
-  if (insErr || !inserted) {
-    return fail("INSERT_FAILED", insErr?.message ?? "DB 등록 실패", 500);
-  }
-
-  const storageKey = pathFor(t, inserted.id, ext);
-
-  // 2) Storage 업로드
-  const { error: upErr } = await admin.storage
-    .from(RESOURCES_BUCKET)
-    .upload(storageKey, buf, {
-      contentType: file.type || undefined,
-      upsert: true,
-    });
-  if (upErr) {
-    await admin.from("resources").delete().eq("id", inserted.id);
-    return fail("UPLOAD_FAILED", upErr.message, 500);
-  }
-
-  // 3) 배경 — sharp 로 width 검증
-  if (t === "background") {
-    try {
-      const sharp = await loadHardenedSharp();
-      const meta2 = await sharp(buf, UNTRUSTED_INPUT_OPTIONS).metadata();
-      if (!meta2.width || meta2.width < 2400) {
-        await admin.storage.from(RESOURCES_BUCKET).remove([storageKey]);
-        await admin.from("resources").delete().eq("id", inserted.id);
-        return fail(
-          "BACKGROUND_TOO_SMALL",
-          `배경 이미지는 가로 2400px 이상이어야 합니다 (현재: ${meta2.width ?? "?"}px).`,
-          400,
-        );
-      }
-    } catch (err) {
-      // probe 실패는 차단하지 않고 그대로 진행 (sharp 미설치/포맷 미지원).
-      console.warn("[admin/resources] sharp probe 실패", err);
-    }
-  }
-
-  // 4) storage_key 갱신
-  const { data: final, error: updErr } = await admin
-    .from("resources")
-    .update({ storage_key: storageKey })
-    .eq("id", inserted.id)
-    .select("id, type, name, storage_key, meta, active, created_at")
-    .single();
-  if (updErr || !final) {
-    await admin.storage.from(RESOURCES_BUCKET).remove([storageKey]);
-    await admin.from("resources").delete().eq("id", inserted.id);
-    return fail("UPDATE_FAILED", updErr?.message ?? "메타 갱신 실패", 500);
-  }
+  const r = await finalizeResourceUpload(admin, { type, resourceId, filename, name, meta });
+  if (!r.ok) return fail(r.code, r.message, r.status, r.details);
 
   await logAdminAction({
     actor: { id: user.id, email: user.email },
     action: "resource.create",
     targetType: "resource",
-    targetId: final.id,
-    details: { type: final.type, name: final.name, storage_key: final.storage_key },
+    targetId: r.item.id,
+    details: { type: r.item.type, name: r.item.name, storage_key: r.item.storage_key },
     request: req,
   });
 
-  return ok(
-    { item: final, constraint: RESOURCE_CONSTRAINTS[t] },
-    { status: 201 },
-  );
+  return ok({ item: r.item, constraint: RESOURCE_CONSTRAINTS[type] }, { status: 201 });
 });

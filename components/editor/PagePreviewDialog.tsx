@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 
 /**
  * 단일 페이지 PNG 미리보기 다이얼로그.
@@ -67,7 +68,7 @@ export default function PagePreviewDialog({
         error?: { message: string };
       };
       if (!res.ok || !json.ok || !json.data) {
-        throw new Error(json.error?.message ?? "미리보기 생성에 실패했어요.");
+        throw new Error(userMessageFromJson(json, "미리보기 생성에 실패했어요."));
       }
       return json.data.pngDataUrl;
     })()

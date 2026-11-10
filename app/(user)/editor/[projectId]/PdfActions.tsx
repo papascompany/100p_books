@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 
 export interface PdfActionsProps {
   projectId: string;
@@ -59,7 +60,7 @@ export default function PdfActions({ projectId, pageCount }: PdfActionsProps) {
       };
 
       if (!res.ok || !json.ok || !json.data) {
-        throw new Error(json.error?.message ?? "PDF 빌드에 실패했습니다.");
+        throw new Error(userMessageFromJson(json, "PDF를 만들지 못했어요. 잠시 후 다시 시도해 주세요."));
       }
 
       const { coverUrl, interiorUrl } = json.data;

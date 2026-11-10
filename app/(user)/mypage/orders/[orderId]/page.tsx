@@ -5,12 +5,14 @@ import CancelOrderButton from "../CancelOrderButton";
 import OrderPdfButtons from "./OrderPdfButtons";
 import CopyTrackingButton from "@/components/orders/CopyTrackingButton";
 import { GiftDialog } from "@/components/orders/GiftDialog";
+import OrderAmountLines from "@/components/orders/OrderAmountLines";
 import OrderStatusGuideBanner from "@/components/orders/OrderStatusGuideBanner";
 import ReviewDialog from "@/components/reviews/ReviewDialog";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/session";
 import { createServerSupabase } from "@/lib/db/server";
 import type { OrderAddress, OrderStatus } from "@/lib/db/types";
+import { amountInputFromOrder } from "@/lib/orders/amount-lines";
 import { carrierLabel } from "@/lib/orders/carriers";
 import { PENDING_ORDER_EXPIRY_HOURS } from "@/lib/orders/pending-expiry";
 import {
@@ -25,7 +27,6 @@ import {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const KRW = new Intl.NumberFormat("ko-KR");
 const DT = new Intl.DateTimeFormat("ko-KR", {
   year: "numeric",
   month: "2-digit",
@@ -179,20 +180,8 @@ export default async function OrderDetailPage(props: PageProps) {
           <dl className="mt-3 space-y-2 text-sm">
             <Row label="책 사이즈" value={order.projects?.book_sizes?.name ?? "—"} />
             <Row label="수량" value={`${order.qty}권`} />
-            <Row label="배송비" value="무료" />
-            {(order.discount_amount ?? 0) > 0 ? (
-              <Row
-                label="할인 코드"
-                value={`-${KRW.format(order.discount_amount ?? 0)}원`}
-              />
-            ) : null}
-            {(order.points_used ?? 0) > 0 ? (
-              <Row
-                label="포인트 사용"
-                value={`-${KRW.format(order.points_used ?? 0)}원 (포인트)`}
-              />
-            ) : null}
-            <Row label="결제 금액" value={`${KRW.format(order.amount)}원`} />
+            {/* 금액 줄 구성은 주문서·결제 완료와 같은 정본(UX P15) — 소계에서 차감하면 결제 금액과 맞는다. */}
+            <OrderAmountLines input={amountInputFromOrder(order)} />
             <Row label="주문 일시" value={DT.format(new Date(order.created_at))} />
             {order.paid_at ? (
               <Row label="결제 일시" value={DT.format(new Date(order.paid_at))} />

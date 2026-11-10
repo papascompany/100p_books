@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
+import { userErrorFromJson } from "@/lib/errors/user-message";
 
 // ─── Radix Dialog 래퍼 (shadcn 패턴) ───────────────────────────────────────
 
@@ -157,9 +158,7 @@ export function GiftDialog({ orderId, children }: GiftDialogProps) {
       const json = (await res.json()) as GiftApiResponse;
 
       if (!res.ok || !json.ok) {
-        const errMsg =
-          (json as GiftApiError).error?.message ?? "사본 보내기에 실패했어요.";
-        setApiError(errMsg);
+        setApiError(userErrorFromJson(json, "사본 보내기에 실패했어요.", res.status).message);
         setPhase("form");
         return;
       }

@@ -18,6 +18,7 @@ import {
   type ServerPhotoSeed,
 } from "@/lib/image/upload-queue";
 import { cn } from "@/lib/utils";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 
 const UPLOAD_LEAVE_MESSAGE =
   "업로드가 진행 중이에요. 이 페이지를 나가면 남은 사진 업로드가 취소돼요.";
@@ -174,7 +175,7 @@ export default function UploadClient({
           error?: { message?: string };
         };
         if (!res.ok || !json.ok) {
-          throw new Error(json.error?.message ?? "휴지통 이동 실패");
+          throw new Error(userMessageFromJson(json, "휴지통으로 옮기지 못했어요. 잠시 후 다시 시도해 주세요."));
         }
         toast({
           title: "휴지통으로 옮겼어요.",
@@ -221,7 +222,7 @@ export default function UploadClient({
           error?: { message?: string };
         };
         if (!res.ok || !json.ok) {
-          throw new Error(json.error?.message ?? "휴지통 이동 실패");
+          throw new Error(userMessageFromJson(json, "휴지통으로 옮기지 못했어요. 잠시 후 다시 시도해 주세요."));
         }
       } catch (e) {
         toast({
@@ -256,7 +257,7 @@ export default function UploadClient({
       });
       const json = (await res.json()) as { ok: boolean; error?: { message?: string } };
       if (!res.ok || !json.ok) {
-        throw new Error(json.error?.message ?? "변경 실패");
+        throw new Error(userMessageFromJson(json, "변경하지 못했어요. 잠시 후 다시 시도해 주세요."));
       }
     } catch (e) {
       setBookSizeError(e instanceof Error ? e.message : "변경 실패");

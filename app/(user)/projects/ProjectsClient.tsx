@@ -24,29 +24,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 import { cn } from "@/lib/utils";
 
 import type { ProjectRow } from "./page";
 
 interface Props {
   projects: ProjectRow[];
-}
-
-/** cover_json Fabric canvas 에서 첫 번째 image 객체의 src를 추출 */
-function extractCoverThumb(coverJson: Record<string, unknown> | null): string | null {
-  if (!coverJson) return null;
-  try {
-    const objects = coverJson.objects as Array<Record<string, unknown>> | undefined;
-    if (!Array.isArray(objects)) return null;
-    for (const obj of objects) {
-      if (obj.type === "image" && typeof obj.src === "string") {
-        return obj.src;
-      }
-    }
-  } catch {
-    // 파싱 실패 시 null 반환
-  }
-  return null;
 }
 
 /**
@@ -155,7 +139,7 @@ function CardMenu({ projectId, projectTitle, hasCover, onDeleted }: CardMenuProp
       });
       const json = (await res.json()) as { ok: boolean; error?: { message?: string } };
       if (!res.ok || !json.ok) {
-        throw new Error(json.error?.message ?? "삭제 실패");
+        throw new Error(userMessageFromJson(json, "삭제하지 못했어요. 잠시 후 다시 시도해 주세요.", res.status));
       }
       toast({ title: "포토북이 삭제됐어요.", variant: "success" });
       setConfirmOpen(false);
@@ -280,7 +264,7 @@ interface ProjectCardProps {
 
 function ProjectCard({ project, onDeleted }: ProjectCardProps) {
   const router = useRouter();
-  const thumbSrc = extractCoverThumb(project.cover_json);
+  const thumbSrc = project.thumb_url;
   const title = displayTitle(project.title);
   // 사진이 하나도 없는 초안 — 빈 에디터 대신 사진 올리기부터.
   const isEmptyDraft = project.status === "draft" && project.photo_count === 0;
@@ -304,6 +288,8 @@ function ProjectCard({ project, onDeleted }: ProjectCardProps) {
             alt={`${title} 표지`}
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            // 1시간 서명 URL 이라 요청마다 주소가 바뀐다 — 최적화 캐시가 적중하지 않으니 원본(이미 썸네일)을 그대로 쓴다.
+            unoptimized
             className="object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (

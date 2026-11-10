@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import SuccessClient from "./SuccessClient";
 import { Button } from "@/components/ui/button";
+import { createServerSupabase } from "@/lib/db/server";
+import { amountInputFromOrder, type AmountLinesInput } from "@/lib/orders/amount-lines";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -50,9 +52,23 @@ export default async function OrderSuccessPage(props: PageProps) {
     );
   }
 
+  // 금액 내역(UX P15) — 주문 행 저장값으로 주문서·상세와 같은 줄 구성을 보여 준다.
+  // 조회 실패나 금액 불일치(콜백 위조 등)면 결제 금액 한 줄로 폴백한다(RLS 로 본인 주문만 조회됨).
+  let amountInput: AmountLinesInput | null = null;
+  const supabase = await createServerSupabase();
+  const { data: orderRow } = await supabase
+    .from("orders")
+    .select("amount, discount_amount, points_used")
+    .eq("id", ourOrderId)
+    .maybeSingle();
+  if (orderRow && orderRow.amount === amount) {
+    amountInput = amountInputFromOrder(orderRow);
+  }
+
   return (
     <div className="container py-10">
       <SuccessClient
+        amountInput={amountInput}
         projectId={params.projectId}
         orderId={ourOrderId}
         paymentKey={paymentKey}

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ensureFontLoaded } from "@/lib/fabric/fonts";
 import { cn } from "@/lib/utils";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 
 export type ResourceTab = "font" | "clipart" | "background";
 
@@ -88,7 +89,7 @@ export default function ResourcePalette({
           error?: { message: string };
         };
         if (!res.ok || !json.ok || !json.data) {
-          throw new Error(json.error?.message ?? "리소스 로드 실패");
+          throw new Error(userMessageFromJson(json, "리소스를 불러오지 못했어요. 잠시 후 다시 시도해 주세요."));
         }
         return json.data.items;
       })()

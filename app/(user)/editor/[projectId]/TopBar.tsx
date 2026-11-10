@@ -11,6 +11,7 @@ import {
   READ_ONLY_BADGE_LABEL,
   resolveTitleFieldLockState,
 } from "@/lib/editor/lock-ui";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 
 export interface TopBarProps {
   projectId: string;
@@ -78,7 +79,7 @@ export default function TopBar({
         error?: { message: string };
       };
       if (!res.ok || !json.ok) {
-        throw new Error(json.error?.message ?? "제목 저장 실패");
+        throw new Error(userMessageFromJson(json, "제목을 저장하지 못했어요. 잠시 후 다시 시도해 주세요."));
       }
       lastSavedRef.current = clean;
       setTitle(clean);

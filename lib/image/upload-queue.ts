@@ -14,6 +14,7 @@ import { extractExifMeta } from "./exif";
 import { convertHeicIfNeeded } from "./heic";
 import { probeImage } from "./probe";
 import { validateFile } from "./validate";
+import { userErrorFromJson } from "@/lib/errors/user-message";
 
 // ─────────────────────────────────────────────────────────────
 // 타입
@@ -404,11 +405,12 @@ async function postJson<T>(url: string, body: unknown, signal?: AbortSignal): Pr
     // 상태 코드·서버 원문은 진단용으로만 남기고, 화면에는 상태별 쉬운 문구를 쓴다.
     // 단, 도메인 거절(400 장수 한도·404·409 결제 후 잠금)은 서버가 사용자용 한국어 문구를 준다.
     console.warn("[upload] request failed", url, res.status, json?.error?.message);
-    const serverMessage = json?.error?.message;
-    const useServerMessage =
-      !!serverMessage && (res.status === 400 || res.status === 404 || res.status === 409);
+    const useServerMessage = res.status === 400 || res.status === 404 || res.status === 409;
     throw new UploadApiError(
-      useServerMessage ? serverMessage : uploadStatusMessage(res.status),
+      // 서버 문구는 안전 판정(한국어·내부 식별자 없음)을 통과하거나 코드 매핑이 있을 때만 쓴다.
+      useServerMessage
+        ? userErrorFromJson(json, uploadStatusMessage(res.status), res.status).message
+        : uploadStatusMessage(res.status),
       res.status,
       parseResetAt(json?.error?.details),
     );

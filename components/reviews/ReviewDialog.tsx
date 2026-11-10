@@ -16,6 +16,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/use-toast";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 
 interface ReviewDialogProps {
   orderId: string;
@@ -102,7 +103,7 @@ export default function ReviewDialog({ orderId, trigger, onSuccess }: ReviewDial
         setUploading(false);
 
         if (!upRes.ok || !upJson.ok) {
-          throw new Error(upJson.error?.message ?? "이미지 업로드에 실패했어요.");
+          throw new Error(userMessageFromJson(upJson, "이미지 업로드에 실패했어요."));
         }
         imageKeys = upJson.data?.imageKeys ?? [];
       }
@@ -125,7 +126,7 @@ export default function ReviewDialog({ orderId, trigger, onSuccess }: ReviewDial
       };
 
       if (!res.ok || !json.ok) {
-        throw new Error(json.error?.message ?? "후기 등록에 실패했어요.");
+        throw new Error(userMessageFromJson(json, "후기 등록에 실패했어요."));
       }
 
       toast({
