@@ -154,7 +154,7 @@ describe("선물 수령 — 발신자가 원본 주문자가 아니면 거부·�
     const res = await claim();
     const json = await readJson(res);
     expect(res.status).toBe(404);
-    expect(json.error).toEqual({ code: "NOT_FOUND", message: "유효하지 않은 선물 링크입니다." });
+    expect(json.error).toEqual({ code: "NOT_FOUND", message: "유효하지 않은 포토북 사본 링크입니다." });
     expect(db.find("gifts", (r) => r.id === gift.id)?.status).toBe("expired");
     expect(db.calls).not.toContain("insert:projects");
     expect(db.calls).not.toContain("insert:photos");

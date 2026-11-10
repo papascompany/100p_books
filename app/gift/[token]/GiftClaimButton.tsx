@@ -42,7 +42,7 @@ export function GiftClaimButton({
         className="w-full sm:w-auto gap-2"
       >
         <BookOpen className="h-4 w-4" aria-hidden="true" />
-        내 책장 열기
+        내 포토북 열기
       </Button>
     );
   }
@@ -62,7 +62,7 @@ export function GiftClaimButton({
       if (!res.ok || !json.ok) {
         const msg =
           (json as ClaimApiError).error?.message ??
-          "선물 수령에 실패했습니다.";
+          "사본 받기에 실패했어요.";
         setError(msg);
         setClaiming(false);
         return;
@@ -90,12 +90,12 @@ export function GiftClaimButton({
         {claiming ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            수령 중…
+            받는 중…
           </>
         ) : (
           <>
             <BookOpen className="h-4 w-4" aria-hidden="true" />
-            내 책장에 받기
+            내 포토북으로 받기
           </>
         )}
       </Button>

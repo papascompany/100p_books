@@ -96,7 +96,7 @@ export async function POST(req: Request, props: RouteCtx) {
     if (!giftableStatuses.has(order.status)) {
       return fail(
         "ORDER_NOT_GIFTABLE",
-        "결제 완료 이후의 주문만 선물할 수 있어요.",
+        "결제 완료 이후의 주문만 포토북 사본을 보낼 수 있어요.",
         400,
       );
     }
@@ -117,7 +117,7 @@ export async function POST(req: Request, props: RouteCtx) {
     if ((existingGiftCount ?? 0) > 0) {
       return fail(
         "GIFT_ALREADY_EXISTS",
-        "이 주문은 이미 선물로 발송되었어요. 주문 1건당 한 번만 선물할 수 있어요.",
+        "이 주문으로 이미 포토북 사본을 보냈어요. 주문 1건당 한 번만 보낼 수 있어요.",
         409,
       );
     }
@@ -172,13 +172,15 @@ export async function POST(req: Request, props: RouteCtx) {
       if ((giftErr as { code?: string } | null)?.code === "23505") {
         return fail(
           "GIFT_ALREADY_EXISTS",
-          "이미 이 주문으로 발송된 선물이 있습니다.",
+          "이미 이 주문으로 보낸 포토북 사본이 있어요.",
           409,
         );
       }
+      // DB 원문은 응답에 싣지 않고 서버 로그로만 남긴다.
+      console.error("[gift] insert failed", giftErr?.message);
       return fail(
         "GIFT_INSERT_FAILED",
-        giftErr?.message ?? "선물 발송에 실패했습니다.",
+        "포토북 사본을 보내지 못했어요. 잠시 후 다시 시도해 주세요.",
         500,
       );
     }
@@ -186,8 +188,8 @@ export async function POST(req: Request, props: RouteCtx) {
     // 6) 수신자 알림 enqueue (실패해도 선물 자체는 정상 응답)
     const baseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
     const shareUrl = baseUrl
-      ? `${baseUrl}/gifts/${inserted.gift_token}`
-      : `/gifts/${inserted.gift_token}`;
+      ? `${baseUrl}/gift/${inserted.gift_token}`
+      : `/gift/${inserted.gift_token}`;
 
     await enqueueEmail({
       template: "gift.received",

@@ -100,3 +100,20 @@ describe("TEMPLATE_BY_ORDER_STATUS 매핑", () => {
     expect(TEMPLATE_BY_ORDER_STATUS.refunded).toBe("order.refunded");
   });
 });
+
+describe("renderEmailTemplate — gift.received 링크 경로", () => {
+  // 수령 페이지는 app/gift/[token] — 예전에 `/gifts/` 로 만들어 링크가 404 였다(2026-11-10 수정).
+  it("받기 링크는 /gift/<token> 이고 /gifts/ 가 아니다", () => {
+    const out = renderEmailTemplate("gift.received", {
+      kind: "gift",
+      giftToken: "11111111-1111-4111-8111-111111111111",
+      senderName: "보낸이",
+      recipientName: "받는이",
+      bookSizeName: "A5",
+      pageCount: 24,
+    });
+    expect(out.text).toContain("/gift/11111111-1111-4111-8111-111111111111");
+    expect(out.text).not.toContain("/gifts/");
+    expect(out.html).not.toContain("/gifts/");
+  });
+});

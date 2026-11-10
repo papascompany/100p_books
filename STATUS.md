@@ -34,7 +34,12 @@
   - e2e: golden-flow 는 **수동 클릭 없이** 주문 링크까지(자동 생성 회귀 감지), editor-integrity 는 폼이 보일 때만 수동 클릭.
 - **P7 에디터 전용 레이아웃**(`components/layout/ChromeGate.tsx`·`lib/layout/chrome.ts`): `/cover/[id]`·`/editor/[id]/pages/[pageId]` 에서 사이트 Header·Footer 미렌더(파일 이동 없이 usePathname 게이트), 에디터 루트 `min-h-dvh`, 중첩 `<main>` → `section[aria-label=편집 캔버스]`.
 - **검증**: typecheck 0 · lint 0/0 · vitest 96파일 1,616 pass / 1 skip(0032 가드 1건은 `admin.storage` 형태로 수정 후 통과) · build OK · `e2e:auth` 5 passed · 실화면(390px·데스크톱): 자동 생성 후 쿼리 제거, 표지 화면 헤더·푸터 0, 주문서 확인 카드·3D 미리보기, 페이지·콘솔 오류 0.
-- **P9 선물 의미(사본 공유 vs 실물 배송)는 오너 결정 대기**.
+- **P9 선물 — 2026-11-10 오너 결정: 사본 공유 유지**.
+  - 명칭 "포토북 사본 보내기"(GiftDialog·결제 완료·주문 상세·수령 페이지·메일·사용자 노출 API 문구), 실물 배송이 아님을 명시.
+  - 수령 페이지 표지 미리보기 복구: cover_json(PageDoc)의 `photoId` → `thumb_key` → `admin.storage` 서명(1h), pending + `giftSenderOwnsOrder` 통과 시에만, 쓰기 없음. `PagePreview` 로 앞표지 영역 표시.
+  - 막다른 길: 보낸 사람 본인 → "내가 보낸 사본이에요" + 링크 복사 + 주문 내역, 수령 완료 링크를 연 제3자 → 홈·내 포토북.
+  - **🔴 기존 버그 수정 — 받기 링크 404**: `app/api/orders/[id]/gift/route.ts`(공유 URL)·`lib/email/templates.ts`(메일 CTA)가 `/gifts/<token>` 을 만들었지만 페이지는 `/gift/[token]`(운영 실측 `/gifts/…` 404 · `/gift/…` 200). 둘 다 `/gift/` 로, 회귀 테스트 추가. 이전에 발송된 링크가 있었다면 404 였다 — 운영 `gifts` 행 존재 여부는 미확인.
+  - 남은 것(기존 동작): 수령 페이지 GET 이 기한 지난 pending 을 `expired` 로 UPDATE 한다(§0-13 "GET 은 읽기만" 원칙과 불일치) — 백로그.
 
 ### 0-32. UI/UX 개선 "지금" 4건 — P1~P4 (2026-11-08) — PR #44 rebase 병합 `e1c8ab7`(PR·main CI 3잡·Vercel 통과, 운영 `/` 200 · `/admin` 비로그인 307, 원격 브랜치 삭제)
 
