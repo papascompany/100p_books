@@ -27,6 +27,23 @@
 
 ## 🆕 최근 작업 (2026-09-17 ~ 11-10)
 
+### 0-36. 오픈 전 개발 D1~D6 (2026-11-10) — PR #50(CI 3잡·Vercel 통과, 로컬 `e2e:auth` 5 passed) · D5 는 측정만
+
+서브에이전트 4(D2·D3·D4·D5) + 메인(D1·D6·통합). 마이그레이션 없음.
+- **D1(UX P15)** `lib/orders/amount-lines.ts` + `components/orders/OrderAmountLines.tsx` — 주문서·결제 완료·주문 상세 금액 줄 구성 통일(상세는 `소계 = amount + discount + points` 역산으로 합계 일치).
+- **D2(UX P10)** `lib/errors/user-message.ts`(약 70 코드) — 내부 코드·원문 비노출, 로그인/고객센터 이동, 사용자 화면 30여 곳 적용, 결제 실패 페이지 코드 노출 제거.
+- **D3(UX P12)** 관리자 리소스 서명 URL 직접 업로드(`/api/admin/resources/upload-url` → Storage PUT → JSON finalize: 경로 재계산·크기·매직 바이트 재검증·실패 시 삭제). 4.5MB 본문 한도 해소. 병합 후 운영에서 배경 업로드 1회 확인 필요. 잔여: finalize 미호출 고아 객체(정리 cron 없음).
+- **D4** ActiveSelection 중 자동저장이 그룹 상대 좌표를 저장하던 **실제 버그** 수정(재현 leftMm -42.33 vs 54.50) — `fabricToPageDoc(..., { offsetPx })` 가 직렬화 동안만 절대 변환 적용·복원. 테스트 4.
+- **D6** 카드 썸네일이 PageDoc(`photo`/`photoId`) 형식을 못 읽어 항상 아이콘 → 표지 첫 사진 → 첫 업로드 사진 서명 URL(`lib/projects/card-thumb.ts`). 표지 수동 저장·이동·미리보기 전 대기 자동저장 취소(PATCH 2회 해소). 제목은 기존에 "제목 없는 포토북" 처리돼 있었음.
+- **D5 PDF 메모리 linux-x64 실측**(OrbStack amd64 Rosetta 에뮬레이션, 운영 `buildInteriorPdf`+`buildCoverPdf`, 20×20 100p, 1769MB 하드 캡 컨테이너 포함, OOM 0):
+  | 시나리오 | 최대 RSS | 한도 대비 | 비고 |
+  |---|---|---|---|
+  | 폴라로이드 100p · 12MP | 1,165~1,235MB | 66~70% | arm64 935MB 대비 +25~32% |
+  | collage-6 100p · 12MP | 1,005~1,072MB | 57~61% | arm64 862~924MB |
+  | collage-6 100p · **48MP** | 1,084~1,207MB | 61~68% | 1vCPU 렌더 296.6s(에뮬레이션) |
+  → **메모리 통과**(§0-19 의 "48MP collage-6 OOM 확실" 외삽은 축소 디코드 후 해당 없음, `RENDER_CONCURRENCY=4` 유지). **시간은 미확정** — 48MP·사진 6회 재사용 스트레스에서 원본 캐시 적중 0%(601회 다운로드)라 300s 한도 위험. 실제 프로젝트(사진 ≤100장, collage-6 ≈17p)는 해당 정도가 훨씬 작음. 하네스는 scratch.
+- 검증: typecheck 0 · lint 0/0 · vitest 1,652 / 1 skip · test:pdf 5 · build 성공 · `e2e:auth` 5 passed(로컬 빌드, 운영 Supabase 임시 계정 정리) · PR CI 3잡·Vercel 통과.
+
 ### 0-35. 서비스 오픈 계획 수립 — 2026-11-20(금) 오픈 (2026-11-10) — 문서만, 코드 변경 없음
 
 - 오너 요청("다음 개발 이슈 정리 + 11/20까지 개발 마무리·오픈 계획")으로 런북에 **"🚀 서비스 오픈 계획"** 절을 신설했다. 일정의 정본은 런북 그 절이고, 보고서는 `docs/reports/launch-plan-2026-11-10.html` 이다.
