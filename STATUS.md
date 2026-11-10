@@ -27,7 +27,7 @@
 
 ## 🆕 최근 작업 (2026-09-17 ~ 11-10)
 
-### 0-36. 오픈 전 개발 D1~D6 (2026-11-10) — PR #50(CI 3잡·Vercel 통과, 로컬 `e2e:auth` 5 passed) · D5 는 측정만
+### 0-36. 오픈 전 개발 D1~D6 (2026-11-10) — PR #50 rebase 병합 `16b2ac7`(PR·main CI 3잡·Vercel 통과, 로컬 `e2e:auth` 5 passed, 운영 `/`·`/upload`·`/projects` 200 · `/admin` 307, 원격 브랜치 삭제) · D5 는 측정만
 
 서브에이전트 4(D2·D3·D4·D5) + 메인(D1·D6·통합). 마이그레이션 없음.
 - **D1(UX P15)** `lib/orders/amount-lines.ts` + `components/orders/OrderAmountLines.tsx` — 주문서·결제 완료·주문 상세 금액 줄 구성 통일(상세는 `소계 = amount + discount + points` 역산으로 합계 일치).
