@@ -35,6 +35,7 @@
 - **D3(UX P12)** 관리자 리소스 서명 URL 직접 업로드(`/api/admin/resources/upload-url` → Storage PUT → JSON finalize: 경로 재계산·크기·매직 바이트 재검증·실패 시 삭제). 4.5MB 본문 한도 해소. 병합 후 운영에서 배경 업로드 1회 확인 필요. 잔여: finalize 미호출 고아 객체(정리 cron 없음).
 - **D4** ActiveSelection 중 자동저장이 그룹 상대 좌표를 저장하던 **실제 버그** 수정(재현 leftMm -42.33 vs 54.50) — `fabricToPageDoc(..., { offsetPx })` 가 직렬화 동안만 절대 변환 적용·복원. 테스트 4.
 - **D6** 카드 썸네일이 PageDoc(`photo`/`photoId`) 형식을 못 읽어 항상 아이콘 → 표지 첫 사진 → 첫 업로드 사진 서명 URL(`lib/projects/card-thumb.ts`). 표지 수동 저장·이동·미리보기 전 대기 자동저장 취소(PATCH 2회 해소). 제목은 기존에 "제목 없는 포토북" 처리돼 있었음.
+- **D3 운영 실측(2026-11-10, Aside 브라우저 · 오너 로그인)**: `/admin/resources/background` 에서 6.8MB(4800×3200, "QA TEST" 표시) JPEG 업로드 → 서명 URL 직접 PUT → finalize 등록 성공(약 6초, 4.5MB 초과 파일 — 옛 방식이면 실패). 테스트 리소스 `57165fe7-…`("QA TEST 업로드 확인(삭제 예정)")는 **비활성화** — 공개 `/api/resources?type=background` 빈 목록 확인. 영구 삭제는 오너 확인 후.
 - **D5 PDF 메모리 linux-x64 실측**(OrbStack amd64 Rosetta 에뮬레이션, 운영 `buildInteriorPdf`+`buildCoverPdf`, 20×20 100p, 1769MB 하드 캡 컨테이너 포함, OOM 0):
   | 시나리오 | 최대 RSS | 한도 대비 | 비고 |
   |---|---|---|---|
