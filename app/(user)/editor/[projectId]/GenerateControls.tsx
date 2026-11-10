@@ -1,7 +1,7 @@
 "use client";
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Sparkles } from "lucide-react";
+import { ChevronDown, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -50,6 +50,43 @@ export interface GenerateResult {
   templateId: CollageTemplateId | null;
 }
 
+export interface GenerateRequest {
+  sortMode: SortMode;
+  layoutMode: LayoutMode;
+  /** 콜라주일 때만 보낸다. */
+  templateId?: CollageTemplateId;
+}
+
+/**
+ * 자동 편집 요청 본체 — "자동 편집하기" 버튼과 업로드 직후 자동 생성(P6, EditorClient)이 같은
+ * 함수를 쓴다. 실패 시 서버 메시지로 throw.
+ */
+export async function requestLayoutGenerate(
+  projectId: string,
+  { sortMode, layoutMode, templateId }: GenerateRequest,
+): Promise<GenerateResult> {
+  const body = {
+    projectId,
+    sortMode,
+    layoutMode,
+    ...(layoutMode === "collage" && templateId ? { templateId } : {}),
+  };
+  const res = await fetch("/api/layout/generate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = (await res.json()) as {
+    ok: boolean;
+    data?: GenerateResult;
+    error?: { message: string };
+  };
+  if (!res.ok || !json.ok || !json.data) {
+    throw new Error(json.error?.message ?? "자동 편집 실패");
+  }
+  return json.data;
+}
+
 export interface GenerateControlsProps {
   projectId: string;
   photoCount: number;
@@ -83,31 +120,12 @@ export default function GenerateControls({
     setSubmitting(true);
     setError(null);
     try {
-      const body = {
-        projectId,
+      const data = await requestLayoutGenerate(projectId, {
         sortMode,
         layoutMode,
-        ...(layoutMode === "collage" ? { templateId } : {}),
-      };
-      const res = await fetch("/api/layout/generate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
+        templateId,
       });
-      const json = (await res.json()) as {
-        ok: boolean;
-        data?: {
-          pageCount: number;
-          layoutMode: LayoutMode;
-          sortMode: SortMode;
-          templateId: CollageTemplateId | null;
-        };
-        error?: { message: string };
-      };
-      if (!res.ok || !json.ok || !json.data) {
-        throw new Error(json.error?.message ?? "자동 편집 실패");
-      }
-      onGenerated(json.data);
+      onGenerated(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "자동 편집 실패");
     } finally {
@@ -128,24 +146,10 @@ export default function GenerateControls({
     void runGenerate();
   }
 
-  return (
-    <section
-      aria-labelledby="generate-heading"
-      className="rounded-xl border bg-white/70 p-5 shadow-soft dark:bg-white/[0.03]"
-    >
-      {/* 390px 에서 설명문과 한 줄에 놓이면 제목이 "자동 편/집"으로 끊겼다 — 모바일은 설명을 아래로. */}
-      <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
-        <h2
-          id="generate-heading"
-          className="shrink-0 whitespace-nowrap font-display text-xl font-semibold tracking-tight"
-        >
-          자동 편집
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          정렬·레이아웃을 정하고 버튼 한 번에 페이지를 만들어요.
-        </p>
-      </div>
-
+  // 생성 폼 본체 — 0페이지면 펼친 섹션으로, 페이지가 있으면 접힌 "다시 구성하기" 안에 둔다(P6).
+  // 재생성 확인 다이얼로그는 Portal 이라 <details> 가 닫혀 있어도 정상 표시된다.
+  const form = (
+    <>
       {/* 정렬 */}
       <fieldset className="mb-6">
         <legend className="mb-2 text-sm font-medium text-foreground">정렬</legend>
@@ -367,6 +371,59 @@ export default function GenerateControls({
           </DialogPrimitive.Portal>
         </DialogPrimitive.Root>
       ) : null}
+    </>
+  );
+
+  if (hasExistingPages) {
+    return (
+      <details
+        aria-label="다시 구성하기"
+        className="group rounded-xl border bg-white/70 shadow-soft dark:bg-white/[0.03]"
+      >
+        <summary
+          className={cn(
+            "flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-5 py-3",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            "[&::-webkit-details-marker]:hidden",
+          )}
+        >
+          <span className="min-w-0">
+            <span className="block font-display text-base font-semibold tracking-tight">
+              다시 구성하기
+            </span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              정렬·레이아웃을 바꿔 페이지를 새로 만들어요.
+            </span>
+          </span>
+          <ChevronDown
+            className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+            aria-hidden
+          />
+        </summary>
+        <div className="border-t px-5 pb-5 pt-5">{form}</div>
+      </details>
+    );
+  }
+
+  return (
+    <section
+      aria-labelledby="generate-heading"
+      className="rounded-xl border bg-white/70 p-5 shadow-soft dark:bg-white/[0.03]"
+    >
+      {/* 390px 에서 설명문과 한 줄에 놓이면 제목이 "자동 편/집"으로 끊겼다 — 모바일은 설명을 아래로. */}
+      <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
+        <h2
+          id="generate-heading"
+          className="shrink-0 whitespace-nowrap font-display text-xl font-semibold tracking-tight"
+        >
+          자동 편집
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          정렬·레이아웃을 정하고 버튼 한 번에 페이지를 만들어요.
+        </p>
+      </div>
+
+      {form}
     </section>
   );
 }

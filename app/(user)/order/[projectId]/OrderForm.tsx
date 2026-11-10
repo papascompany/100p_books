@@ -1,9 +1,9 @@
 "use client";
 
 import { CheckCircle2, Coins, Loader2, Minus, Plus, Search, Tag, XCircle } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import OrderPreviewCard, { type OrderPreviewCardProps } from "./OrderPreviewCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
@@ -21,6 +21,8 @@ export interface OrderFormProps {
   bookSizeName: string;
   pageCount: number;
   userEmail: string | null;
+  /** "인쇄 전 확인" 카드 데이터 — 서버 page.tsx 가 조회. */
+  preview: Omit<OrderPreviewCardProps, "projectId" | "pageCount">;
 }
 
 interface AddressState {
@@ -555,35 +557,23 @@ export default function OrderForm(props: OrderFormProps) {
 
   return (
     <div className="grid gap-6 md:grid-cols-[1fr,360px]">
-      {/* 좌측 — 입력 폼 */}
-      <div className="space-y-6">
+      {/* 좌측 — 입력 폼 (min-w-0: 미리보기 가로 스크롤 띠가 그리드 열을 밀어내지 않게) */}
+      <div className="min-w-0 space-y-6">
         <header>
           <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">
             주문서
           </h1>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <p className="text-sm text-muted-foreground">
-              {props.projectTitle} · {props.bookSizeName} · {props.pageCount}p
-            </p>
-            <div className="flex items-center gap-1 text-xs">
-              <Link
-                href={`/cover/${props.projectId}`}
-                className="inline-flex min-h-8 items-center rounded-md px-2 text-muted-foreground underline underline-offset-2 hover:text-foreground"
-              >
-                표지 수정
-              </Link>
-              <span aria-hidden className="text-muted-foreground/60">
-                ·
-              </span>
-              <Link
-                href={`/editor/${props.projectId}`}
-                className="inline-flex min-h-8 items-center rounded-md px-2 text-muted-foreground underline underline-offset-2 hover:text-foreground"
-              >
-                내지 수정
-              </Link>
-            </div>
-          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {props.projectTitle} · {props.bookSizeName} · {props.pageCount}p
+          </p>
         </header>
+
+        {/* 인쇄 전 확인 — 표지·내지 썸네일 + 3D 미리보기 + 수정 링크 */}
+        <OrderPreviewCard
+          projectId={props.projectId}
+          pageCount={props.pageCount}
+          {...props.preview}
+        />
 
         {/* 수량 */}
         <section className="rounded-2xl border border-hairline bg-card p-4 sm:p-5 shadow-soft">

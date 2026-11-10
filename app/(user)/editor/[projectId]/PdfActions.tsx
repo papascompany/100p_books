@@ -1,9 +1,10 @@
 "use client";
 
-import { Download, FileDown, Loader2 } from "lucide-react";
+import { ChevronDown, Download, FileDown, Loader2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export interface PdfActionsProps {
   projectId: string;
@@ -19,7 +20,8 @@ interface BuildResult {
 }
 
 /**
- * PDF 빌드 + 다운로드 액션 카드.
+ * PDF 빌드 + 다운로드 액션 카드 — 일반 사용자에게는 필요 없는 고급 기능이라 내지 목록 하단에
+ * 기본 접힘(`<details>`)으로 둔다(P6). 접혀 있어도 빌드 진행·결과 상태는 유지된다.
  *   - "표지 PDF", "내지 PDF", "전체 다운로드" 3개 버튼.
  *   - 클릭 시 POST /api/pdf/build → 빌드는 서버에서 동기 실행(수십 초~수 분)이라
  *     응답이 곧 완료. 중간 진행률은 제공되지 않으므로(진행률 SSE 는 인메모리 잡
@@ -77,128 +79,143 @@ export default function PdfActions({ projectId, pageCount }: PdfActionsProps) {
   const disabled = pageCount === 0;
 
   return (
-    <section
-      aria-labelledby="pdf-actions-heading"
-      className="rounded-2xl border bg-card p-4 sm:p-5"
+    <details
+      aria-label="인쇄용 파일 받기 (고급)"
+      className="group rounded-2xl border bg-card"
     >
-      <header className="mb-3 flex items-baseline justify-between">
-        <h3
-          id="pdf-actions-heading"
-          className="font-display text-lg font-semibold tracking-tight"
-        >
-          PDF 다운로드
-        </h3>
-        <p className="text-xs text-muted-foreground">
-          300dpi · 재단선 2mm 포함
+      <summary
+        className={cn(
+          "flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-4 py-3 sm:px-5",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+          "[&::-webkit-details-marker]:hidden",
+        )}
+      >
+        <span className="min-w-0">
+          <span className="block text-sm font-medium">
+            인쇄용 파일 받기 (고급)
+          </span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            주문만 하실 거라면 받지 않아도 돼요.
+          </span>
+        </span>
+        <ChevronDown
+          className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+          aria-hidden
+        />
+      </summary>
+
+      <div className="border-t px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
+        <p className="mb-3 text-xs text-muted-foreground">
+          직접 인쇄하거나 보관할 때 쓰는 고해상도 PDF예요(300dpi · 가장자리 재단 여유 2mm 포함).
         </p>
-      </header>
 
-      {disabled ? (
-        <p className="text-sm text-muted-foreground">
-          내지 페이지를 먼저 생성하세요.
-        </p>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!!busy}
-            onClick={() => void build("cover")}
-            aria-label="표지 PDF 다운로드"
-          >
-            {busy === "cover" ? (
-              <Loader2 className="animate-spin" />
-            ) : (
-              <FileDown />
-            )}
-            표지 PDF
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!!busy}
-            onClick={() => void build("interior")}
-            aria-label="내지 PDF 다운로드"
-          >
-            {busy === "interior" ? (
-              <Loader2 className="animate-spin" />
-            ) : (
-              <FileDown />
-            )}
-            내지 PDF
-          </Button>
-          <Button
-            variant="gradient"
-            size="sm"
-            disabled={!!busy}
-            onClick={() => void build("all")}
-            aria-label="표지 + 내지 PDF 모두 다운로드"
-          >
-            {busy === "all" ? (
-              <Loader2 className="animate-spin" />
-            ) : (
-              <Download />
-            )}
-            전체 다운로드
-          </Button>
-        </div>
-      )}
-
-      {/* 빌드 진행 — 서버가 중간 진행률을 주지 않으므로 indeterminate 로 정직하게 */}
-      {busy ? (
-        <div className="mt-4 space-y-2" aria-live="polite">
-          <p className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
-            PDF를 만들고 있어요 — 페이지 수에 따라 몇 분까지 걸릴 수 있어요.
-            화면을 닫지 말고 기다려 주세요.
+        {disabled ? (
+          <p className="text-sm text-muted-foreground">
+            페이지를 먼저 만들어 주세요.
           </p>
-          <div
-            role="progressbar"
-            aria-label="PDF 생성 중"
-            className="h-1.5 overflow-hidden rounded-full bg-muted"
-          >
-            <div className="h-full w-full animate-pulse rounded-full bg-coral/50" />
-          </div>
-        </div>
-      ) : null}
-
-      {/* 완료 — 파일별 명시적 저장 버튼 (자동 다운로드 차단 대비 + 두 번째 파일용) */}
-      {!busy && result ? (
-        <div className="mt-4 space-y-2" aria-live="polite">
-          <p className="text-xs text-muted-foreground">
-            PDF가 준비됐어요. 다운로드가 시작되지 않았거나 파일이 더 있다면 아래
-            버튼으로 저장해 주세요.
-          </p>
+        ) : (
           <div className="flex flex-wrap gap-2">
-            {result.coverUrl ? (
-              <Button asChild variant="outline" size="sm">
-                <a href={result.coverUrl} rel="noopener">
-                  <FileDown />
-                  표지 PDF 저장
-                </a>
-              </Button>
-            ) : null}
-            {result.interiorUrl ? (
-              <Button asChild variant="outline" size="sm">
-                <a href={result.interiorUrl} rel="noopener">
-                  <FileDown />
-                  내지 PDF 저장
-                </a>
-              </Button>
-            ) : null}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!!busy}
+              onClick={() => void build("cover")}
+              aria-label="표지 PDF 다운로드"
+            >
+              {busy === "cover" ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <FileDown />
+              )}
+              표지 PDF
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!!busy}
+              onClick={() => void build("interior")}
+              aria-label="내지 PDF 다운로드"
+            >
+              {busy === "interior" ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <FileDown />
+              )}
+              내지 PDF
+            </Button>
+            <Button
+              variant="gradient"
+              size="sm"
+              disabled={!!busy}
+              onClick={() => void build("all")}
+              aria-label="표지 + 내지 PDF 모두 다운로드"
+            >
+              {busy === "all" ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <Download />
+              )}
+              전체 다운로드
+            </Button>
           </div>
-        </div>
-      ) : null}
+        )}
 
-      {error ? (
-        <p
-          role="alert"
-          className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive"
-        >
-          {error}
-        </p>
-      ) : null}
-    </section>
+        {/* 빌드 진행 — 서버가 중간 진행률을 주지 않으므로 indeterminate 로 정직하게 */}
+        {busy ? (
+          <div className="mt-4 space-y-2" aria-live="polite">
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
+              PDF를 만들고 있어요 — 페이지 수에 따라 몇 분까지 걸릴 수 있어요.
+              화면을 닫지 말고 기다려 주세요.
+            </p>
+            <div
+              role="progressbar"
+              aria-label="PDF 생성 중"
+              className="h-1.5 overflow-hidden rounded-full bg-muted"
+            >
+              <div className="h-full w-full animate-pulse rounded-full bg-coral/50" />
+            </div>
+          </div>
+        ) : null}
+
+        {/* 완료 — 파일별 명시적 저장 버튼 (자동 다운로드 차단 대비 + 두 번째 파일용) */}
+        {!busy && result ? (
+          <div className="mt-4 space-y-2" aria-live="polite">
+            <p className="text-xs text-muted-foreground">
+              PDF가 준비됐어요. 다운로드가 시작되지 않았거나 파일이 더 있다면 아래
+              버튼으로 저장해 주세요.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {result.coverUrl ? (
+                <Button asChild variant="outline" size="sm">
+                  <a href={result.coverUrl} rel="noopener">
+                    <FileDown />
+                    표지 PDF 저장
+                  </a>
+                </Button>
+              ) : null}
+              {result.interiorUrl ? (
+                <Button asChild variant="outline" size="sm">
+                  <a href={result.interiorUrl} rel="noopener">
+                    <FileDown />
+                    내지 PDF 저장
+                  </a>
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {error ? (
+          <p
+            role="alert"
+            className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive"
+          >
+            {error}
+          </p>
+        ) : null}
+      </div>
+    </details>
   );
 }
 

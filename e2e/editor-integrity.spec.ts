@@ -209,13 +209,16 @@ test.describe("편집 무결성 회귀 — 되돌리기 저장·진입 dirty·�
     const nextLink = page.getByRole("link", { name: /다음/ });
     await expect(nextLink).toBeVisible({ timeout: 120_000 });
 
-    // ── 내지 자동 편집.
+    // ── 내지 생성 — "다음" 은 ?autogen=1 로 자동 생성(P6). 이 spec 은 편집 무결성이 목적이라
+    //    자동 생성이 실패해 폼이 펼쳐졌을 때만 수동으로 누른다(자동 생성 회귀는 golden-flow 가 잡는다).
+    //    .first(): 생성 뒤에도 "자동 편집하기" 는 접힌 <details> 안 DOM 에 남아 or() 가 둘을 잡을 수 있다.
     await nextLink.click();
     await expect(page).toHaveURL(new RegExp(`/editor/${projectId}`));
-    await page.getByRole("button", { name: "자동 편집하기" }).click();
-    await expect(page.getByRole("link", { name: "주문 단계로 이동" })).toBeVisible({
-      timeout: 60_000,
-    });
+    const orderLink = page.getByRole("link", { name: "주문 단계로 이동" });
+    const generateButton = page.getByRole("button", { name: "자동 편집하기" });
+    await expect(orderLink.or(generateButton).first()).toBeVisible({ timeout: 60_000 });
+    if (await generateButton.isVisible()) await generateButton.click();
+    await expect(orderLink).toBeVisible({ timeout: 60_000 });
     const editLinks = page.getByRole("link", { name: /^페이지 \d+ 편집$/ });
     await expect(editLinks.first()).toBeVisible({ timeout: 30_000 });
     const hrefs = await editLinks.evaluateAll((els) =>
