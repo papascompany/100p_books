@@ -27,7 +27,7 @@
 
 ## 🆕 최근 작업 (2026-09-17 ~ 11-10)
 
-### 0-34. Dependabot #45·#46 검토 — `@napi-rs/canvas` 1.1 보류, 나머지 반영 (2026-11-10) — 브랜치 `claude/deps-1110`
+### 0-34. Dependabot #45·#46 검토 — `@napi-rs/canvas` 1.1 보류, 나머지 반영 (2026-11-10) — PR #48 rebase 병합 `0267206`(PR·main CI 3잡 통과 — linux pdf baseline 그대로, 운영 200/307, #45·#46 Dependabot 자동 종료). 후속 #49(zustand 5.1.0·vite 8.3.6, canvas 미포함 = ignore 동작 확인) 열림
 
 - **#45(minor/patch 11개) CI 실패 원인**: `test:pdf` 의 `pixels/text@linux-x64` 불일치 — `@napi-rs/canvas` 1.0.13→1.1.0 이 원인(로컬 darwin 도 text 만 해시 변경, shapes·photo-shadow·photo-downscale·cover 는 동일).
   - 렌더 비교(임시 worktree 2곳): 위치·크기·글꼴·줄바꿈 동일, 차이는 글자 윤곽에만(변경 픽셀 0.36%) — 그러나 확대하면 **획이 얇아짐**, 텍스트 영역 잉크량 **−9.03%**. 인쇄물 글자 굵기가 바뀌므로 오너 실물 교정 전에는 받지 않는다.
