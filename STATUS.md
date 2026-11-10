@@ -27,7 +27,7 @@
 
 ## 🆕 최근 작업 (2026-09-17 ~ 11-10)
 
-### 0-33. UI/UX 개선 "다음" 3건 — P5·P6·P7 (2026-11-10) — 브랜치 `claude/ux-next-1110`, 서브에이전트 3 병렬
+### 0-33. UI/UX 개선 "다음" — P5·P6·P7·P9 (2026-11-10) — PR #47 rebase 병합 `727acee`(PR·main CI 3잡·Vercel 통과, 운영 `/` 200 · `/admin` 307 · `/gift/<uuid>` 200, 원격 브랜치 삭제), 서브에이전트 3+1
 
 - **P5 결제 전 확인 카드**(`app/(user)/order/[projectId]/OrderPreviewCard.tsx`·`order-preview.ts`): 주문서 상단 "인쇄 전 확인" — 표지 썸네일(`POST /api/cover/preview` 72dpi 재사용) + 내지 앞 6쪽(`PagePreview` 재사용, 썸네일 서명은 `admin.storage` — 0032 가드 형태 준수) + 3D 미리보기(`Cover3DPreview` 모달) + 표지/내지 수정. 실패 시 회색 칸, 체크박스 추가 없음. 주문서 진입마다 표지 72dpi 렌더 1회가 추가된다.
 - **P6 업로드 직후 자동 생성**(`lib/editor/autogen.ts`, `EditorClient`): 업로드 "다음" → `/editor/[id]?autogen=1` → 0페이지·미잠금·사진 있음이면 기본값(촬영시각 순·폴라로이드)으로 1회 생성(ref 로 이중 실행 방지, 쿼리는 즉시 제거, 기존 페이지 덮어쓰기 없음). 페이지가 있으면 설정 폼은 접힌 "다시 구성하기", PDF 카드는 하단 접힌 "인쇄용 파일 받기 (고급)". 실패 시 토스트 + 폼 펼침.
