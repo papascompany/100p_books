@@ -158,7 +158,7 @@ export function GiftDialog({ orderId, children }: GiftDialogProps) {
 
       if (!res.ok || !json.ok) {
         const errMsg =
-          (json as GiftApiError).error?.message ?? "선물 발송에 실패했습니다.";
+          (json as GiftApiError).error?.message ?? "사본 보내기에 실패했어요.";
         setApiError(errMsg);
         setPhase("form");
         return;
@@ -195,7 +195,7 @@ export function GiftDialog({ orderId, children }: GiftDialogProps) {
   const trigger = children ?? (
     <Button variant="outline" size="sm" className="gap-1.5">
       <Gift className="h-4 w-4" aria-hidden="true" />
-      선물하기
+      포토북 사본 보내기
     </Button>
   );
 
@@ -214,14 +214,15 @@ export function GiftDialog({ orderId, children }: GiftDialogProps) {
           </span>
           <div>
             <DialogPrimitive.Title className="text-base font-semibold leading-tight">
-              선물하기
+              포토북 사본 보내기
             </DialogPrimitive.Title>
             <p
               id="gift-dialog-desc"
               className="text-sm text-muted-foreground mt-0.5"
             >
-              포토북을 소중한 분께 선물해보세요. 받는 분 계정에 편집 가능한 포토북
-              사본이 생겨요. 인쇄본은 받는 분이 따로 주문해요.
+              실물 배송이 아니에요. 받는 분 계정에 편집할 수 있는 포토북 사본이
+              생기고, 인쇄본이 필요하면 받는 분이 따로 주문해요. 주문 1건당 한
+              번만 보낼 수 있어요.
             </p>
           </div>
         </div>
@@ -235,7 +236,7 @@ export function GiftDialog({ orderId, children }: GiftDialogProps) {
                 aria-hidden="true"
               />
               <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-                선물 링크가 만들어졌습니다
+                사본 받기 링크를 만들었어요
               </p>
               <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
                 {email}(으)로 이메일이 곧 발송됩니다 (수 분 내)
@@ -251,7 +252,7 @@ export function GiftDialog({ orderId, children }: GiftDialogProps) {
                   readOnly
                   value={shareUrl}
                   className="h-10 flex-1 rounded-lg border border-input bg-muted/50 px-3 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
-                  aria-label="선물 링크"
+                  aria-label="사본 받기 링크"
                   onFocus={(e) => e.target.select()}
                 />
                 <Button
@@ -259,7 +260,7 @@ export function GiftDialog({ orderId, children }: GiftDialogProps) {
                   variant="outline"
                   size="sm"
                   onClick={handleCopy}
-                  aria-label="선물 링크 복사"
+                  aria-label="사본 받기 링크 복사"
                   className="shrink-0 gap-1.5"
                 >
                   {copied ? (
@@ -392,7 +393,7 @@ export function GiftDialog({ orderId, children }: GiftDialogProps) {
                 ) : (
                   <>
                     <Gift className="h-4 w-4" aria-hidden="true" />
-                    선물 보내기
+                    사본 보내기
                   </>
                 )}
               </Button>

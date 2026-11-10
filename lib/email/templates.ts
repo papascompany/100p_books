@@ -51,7 +51,7 @@ export interface UserContext {
 
 export interface GiftContext {
   kind: "gift";
-  /** 선물 수령 URL 의 토큰 부분 (uuid) */
+  /** 포토북 사본(gift) 수령 URL 의 토큰 부분 (uuid) */
   giftToken: string;
   /** 발신자 표시명 (없으면 이메일) */
   senderName: string;
@@ -419,31 +419,33 @@ function tplUserAccountDeleted(c: UserContext): EmailContent {
 }
 
 function tplGiftReceived(c: GiftContext): EmailContent {
-  const subject = `[100p Books] ${c.senderName}님이 포토북을 선물했어요`;
-  const claimUrl = appUrl(`/gifts/${c.giftToken}`);
+  const subject = `[100p Books] ${c.senderName}님이 포토북 사본을 보냈어요`;
+  const claimUrl = appUrl(`/gift/${c.giftToken}`);
   const text = [
     `${c.recipientName}님, 안녕하세요. 100p Books 입니다.`,
     ``,
-    `${c.senderName}님이 직접 만든 포토북을 선물했어요.`,
-    `로그인 후 아래 링크에서 받아보실 수 있어요.`,
+    `${c.senderName}님이 직접 만든 포토북의 사본을 보냈어요.`,
+    `로그인 후 아래 링크에서 받으면 내 계정에 편집할 수 있는 포토북이 생겨요.`,
+    `실물 배송이 아니에요. 인쇄본이 필요하면 받은 뒤 직접 주문할 수 있어요.`,
     ``,
     c.message ? `[메시지]\n${c.message}\n` : "",
-    `[선물 정보]`,
+    `[포토북 정보]`,
     `· 책 사이즈: ${c.bookSizeName}`,
     `· 페이지 수: ${c.pageCount}p`,
     ``,
     `받기: ${claimUrl}`,
     ``,
-    `선물은 30일 이내에 받아주세요.`,
+    `30일 안에 받아주세요.`,
   ]
     .filter(Boolean)
     .join("\n");
   const html = htmlShell({
-    preheader: `${c.senderName}님이 포토북을 선물했어요`,
-    heading: "포토북이 도착했어요",
+    preheader: `${c.senderName}님이 포토북 사본을 보냈어요`,
+    heading: "포토북 사본이 도착했어요",
     bodyHtml: [
       `<p style="margin:0 0 12px 0;"><b>${escapeHtml(c.recipientName)}</b>님, 안녕하세요.</p>`,
-      `<p style="margin:0 0 12px 0;"><b>${escapeHtml(c.senderName)}</b>님이 직접 만든 포토북을 선물했어요. 로그인 후 아래 버튼에서 받아보실 수 있어요.</p>`,
+      `<p style="margin:0 0 12px 0;"><b>${escapeHtml(c.senderName)}</b>님이 직접 만든 포토북의 사본을 보냈어요. 로그인 후 아래 버튼에서 받으면 내 계정에 편집할 수 있는 포토북이 생겨요.</p>`,
+      `<p style="margin:0 0 12px 0;color:#7d7666;font-size:13px;">실물 배송이 아니에요. 인쇄본이 필요하면 받은 뒤 직접 주문할 수 있어요.</p>`,
       c.message
         ? `<blockquote style="margin:16px 0;padding:12px 16px;background:#faf9f5;border-left:3px solid #d4ccb8;border-radius:6px;color:#2b2b2b;font-size:14px;line-height:1.7;">${escapeHtml(c.message)}</blockquote>`
         : "",
@@ -451,20 +453,20 @@ function tplGiftReceived(c: GiftContext): EmailContent {
       `<tr><td style="padding:8px 14px;color:#7d7666;font-size:13px;width:120px;">책 사이즈</td><td style="padding:8px 14px;font-size:14px;font-weight:500;">${escapeHtml(c.bookSizeName)}</td></tr>`,
       `<tr><td style="padding:8px 14px;color:#7d7666;font-size:13px;">페이지 수</td><td style="padding:8px 14px;font-size:14px;font-weight:500;">${escapeHtml(`${c.pageCount}p`)}</td></tr>`,
       `</table>`,
-      `<p style="margin:8px 0 0 0;color:#7d7666;font-size:13px;">선물은 30일 이내에 받아주세요.</p>`,
+      `<p style="margin:8px 0 0 0;color:#7d7666;font-size:13px;">30일 안에 받아주세요.</p>`,
     ].join(""),
-    ctaLabel: "선물 받기",
+    ctaLabel: "내 포토북으로 받기",
     ctaHref: claimUrl,
   });
   return { subject, text, html };
 }
 
 function tplGiftClaimed(c: GiftContext): EmailContent {
-  const subject = `[100p Books] ${c.recipientName}님이 선물을 받았어요`;
+  const subject = `[100p Books] ${c.recipientName}님이 포토북 사본을 받았어요`;
   const text = [
     `${c.senderName}님, 100p Books 입니다.`,
     ``,
-    `${c.recipientName}님이 보내주신 포토북 선물을 잘 받았어요!`,
+    `${c.recipientName}님이 보내주신 포토북 사본을 잘 받았어요!`,
     c.projectTitle ? `· 프로젝트: ${c.projectTitle}` : "",
     `· 책 사이즈: ${c.bookSizeName}`,
     `· 페이지 수: ${c.pageCount}p`,
@@ -474,11 +476,11 @@ function tplGiftClaimed(c: GiftContext): EmailContent {
     .filter(Boolean)
     .join("\n");
   const html = htmlShell({
-    preheader: `${c.recipientName}님이 선물을 받았어요`,
-    heading: "선물이 잘 전달됐어요",
+    preheader: `${c.recipientName}님이 포토북 사본을 받았어요`,
+    heading: "포토북 사본이 잘 전달됐어요",
     bodyHtml: [
       `<p style="margin:0 0 12px 0;"><b>${escapeHtml(c.senderName)}</b>님, 안녕하세요.</p>`,
-      `<p style="margin:0 0 12px 0;"><b>${escapeHtml(c.recipientName)}</b>님이 보내주신 포토북 선물을 잘 받았어요!</p>`,
+      `<p style="margin:0 0 12px 0;"><b>${escapeHtml(c.recipientName)}</b>님이 보내주신 포토북 사본을 잘 받았어요!</p>`,
       `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;border-collapse:collapse;background:#faf9f5;border-radius:8px;">`,
       c.projectTitle
         ? `<tr><td style="padding:8px 14px;color:#7d7666;font-size:13px;width:120px;">프로젝트</td><td style="padding:8px 14px;font-size:14px;font-weight:500;">${escapeHtml(c.projectTitle)}</td></tr>`

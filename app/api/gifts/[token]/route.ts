@@ -114,7 +114,7 @@ type LoadResult = LoadedGift | LoadError;
 
 /** 토큰이 없을 때와 같은 응답 — 부정 gift 여부를 드러내지 않는다. */
 const GIFT_NOT_FOUND: LoadError = {
-  error: { code: "NOT_FOUND", message: "유효하지 않은 선물 링크입니다." },
+  error: { code: "NOT_FOUND", message: "유효하지 않은 포토북 사본 링크입니다." },
 };
 
 /** 호출 맥락 — 쓰기가 허용되는 경로인지 구분한다. */
@@ -375,7 +375,7 @@ export async function POST(req: Request, props: RouteCtx) {
     if (gift.sender_id === user.id) {
       return fail(
         "CANNOT_CLAIM_OWN_GIFT",
-        "본인이 보낸 선물은 받을 수 없어요.",
+        "내가 보낸 사본은 내 계정으로 받을 수 없어요. 받는 분께 링크를 전해 주세요.",
         400,
       );
     }
@@ -389,7 +389,7 @@ export async function POST(req: Request, props: RouteCtx) {
     );
 
     if (currentStatus === "expired") {
-      return fail("GIFT_EXPIRED", "만료된 선물 링크입니다.", 410);
+      return fail("GIFT_EXPIRED", "기간이 지난 포토북 사본 링크입니다.", 410);
     }
 
     // 멱등: 이미 claimed
@@ -398,7 +398,7 @@ export async function POST(req: Request, props: RouteCtx) {
         // 데이터 일관성 깨짐 — 안전하게 에러
         return fail(
           "GIFT_INCONSISTENT",
-          "이미 수령된 선물이지만 프로젝트를 찾을 수 없어요. 고객센터로 문의해 주세요.",
+          "이미 받은 사본이지만 포토북을 찾을 수 없어요. 고객센터로 문의해 주세요.",
           500,
         );
       }
@@ -417,7 +417,7 @@ export async function POST(req: Request, props: RouteCtx) {
     if (!giftableOrderStatuses.has(loaded.orderStatus)) {
       return fail(
         "GIFT_ORDER_NOT_GIFTABLE",
-        "원본 주문이 더 이상 유효하지 않아 이 선물을 받을 수 없어요.",
+        "원본 주문이 더 이상 유효하지 않아 이 사본을 받을 수 없어요.",
         410,
       );
     }
@@ -658,7 +658,7 @@ export async function POST(req: Request, props: RouteCtx) {
           alreadyClaimed: true,
         });
       }
-      return fail("GIFT_RACE", "선물 수령 처리에 실패했어요. 다시 시도해 주세요.", 409);
+      return fail("GIFT_RACE", "사본 받기 처리에 실패했어요. 다시 시도해 주세요.", 409);
     }
 
     // 5) 발신자에게 수령 완료 알림
