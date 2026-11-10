@@ -51,6 +51,11 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: tailwind-merge
         update-types: ["version-update:semver-major"]
+      # 인쇄 렌더 엔진 — 1.1.0 에서 텍스트 획이 얇아졌다(PDF 회귀 text 페이지 잉크 −9%, 2026-11-10 실측,
+      # STATUS §0-34). 인쇄물 글자 굵기가 바뀌므로 오너가 실물 교정 후 승인할 때까지 1.0.x 에 고정한다.
+      # package.json 도 정확 버전("1.0.13")으로 고정. 재평가: 실물 테스트 인쇄 → test:pdf:update.
+      - dependency-name: "@napi-rs/canvas"
+        versions: [">=1.1.0"]
 
   - package-ecosystem: github-actions
     directory: /

@@ -27,6 +27,15 @@
 
 ## 🆕 최근 작업 (2026-09-17 ~ 11-10)
 
+### 0-34. Dependabot #45·#46 검토 — `@napi-rs/canvas` 1.1 보류, 나머지 반영 (2026-11-10) — 브랜치 `claude/deps-1110`
+
+- **#45(minor/patch 11개) CI 실패 원인**: `test:pdf` 의 `pixels/text@linux-x64` 불일치 — `@napi-rs/canvas` 1.0.13→1.1.0 이 원인(로컬 darwin 도 text 만 해시 변경, shapes·photo-shadow·photo-downscale·cover 는 동일).
+  - 렌더 비교(임시 worktree 2곳): 위치·크기·글꼴·줄바꿈 동일, 차이는 글자 윤곽에만(변경 픽셀 0.36%) — 그러나 확대하면 **획이 얇아짐**, 텍스트 영역 잉크량 **−9.03%**. 인쇄물 글자 굵기가 바뀌므로 오너 실물 교정 전에는 받지 않는다.
+  - 조치: `package.json` `"@napi-rs/canvas": "1.0.13"` 정확 고정 + `.github/dependabot.yml` ignore `versions: [">=1.1.0"]`(사유·재평가 절차 주석). **재평가**: 테스트 인쇄로 굵기 확인 → 승인 시 ignore 제거·업데이트·`pnpm test:pdf:update`(linux·darwin 해시).
+- **반영**: supabase-js 2.119.0 · @upstash/redis 1.41 · @vercel/functions 3.11.1 · lucide-react 1.71 · next/eslint-config-next 16.4.5 · resend 6.37 · @playwright/test 1.65 · vitest 5.1 · **jsdom 31**(#46, 테스트 환경 전용).
+- **검증**: typecheck 0 · lint 0/0 · vitest 96파일 1,617 pass / 1 skip · test:pdf 5 OK(기존 baseline 그대로) · build OK · e2e 스모크 12 · a11y 25(+1 skip) · `e2e:auth` 5 passed.
+  - 함정: Playwright 1.65 는 새 Chromium 이 필요하다 — 로컬에서 `pnpm exec playwright install chromium` 1회(CI 는 매번 설치). `e2e:auth` 용 빌드는 `.env.local` 을 **빌드 전에** 두어야 한다(`NEXT_PUBLIC_*` 는 빌드 시 인라인 — 빠지면 로그인 폼이 "환경변수 누락"으로 멈춘다).
+
 ### 0-33. UI/UX 개선 "다음" — P5·P6·P7·P9 (2026-11-10) — PR #47 rebase 병합 `727acee`(PR·main CI 3잡·Vercel 통과, 운영 `/` 200 · `/admin` 307 · `/gift/<uuid>` 200, 원격 브랜치 삭제), 서브에이전트 3+1
 
 - **P5 결제 전 확인 카드**(`app/(user)/order/[projectId]/OrderPreviewCard.tsx`·`order-preview.ts`): 주문서 상단 "인쇄 전 확인" — 표지 썸네일(`POST /api/cover/preview` 72dpi 재사용) + 내지 앞 6쪽(`PagePreview` 재사용, 썸네일 서명은 `admin.storage` — 0032 가드 형태 준수) + 3D 미리보기(`Cover3DPreview` 모달) + 표지/내지 수정. 실패 시 회색 칸, 체크박스 추가 없음. 주문서 진입마다 표지 72dpi 렌더 1회가 추가된다.
