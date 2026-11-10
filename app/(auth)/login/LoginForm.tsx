@@ -24,6 +24,7 @@ import { getBrowserSupabase } from "@/lib/db/browser";
 import { cn } from "@/lib/utils";
 
 import { callbackErrorMessage } from "./callback-error";
+import { userErrorFromJson } from "@/lib/errors/user-message";
 
 /** 로그인 폼 모드. */
 type Mode = "signin" | "signup" | "forgot";
@@ -189,7 +190,7 @@ export default function LoginForm() {
         if (!res.ok || !json.ok) {
           setStatus({
             kind: "error",
-            message: json.error?.message ?? "회원가입에 실패했습니다.",
+            message: userErrorFromJson(json, "회원가입에 실패했어요. 잠시 후 다시 시도해 주세요.", res.status).message,
           });
           return;
         }

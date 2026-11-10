@@ -23,6 +23,34 @@ const MAX: Record<ResourceType, number> = {
   background: 10 * 1024 * 1024,
 };
 
+interface SignResponse {
+  ok: boolean;
+  data: { resourceId: string; storageKey: string; uploadUrl: string; token: string };
+  error?: { message?: string };
+}
+
+function putWithProgress(
+  url: string,
+  file: File,
+  onProgress: (percent: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url, true);
+    xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable) onProgress(Math.round((ev.loaded / ev.total) * 100));
+    };
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`storage PUT ${xhr.status}`));
+    xhr.onerror = () => reject(new Error("network"));
+    xhr.onabort = () => reject(new Error("abort"));
+    xhr.send(file);
+  });
+}
+
 export default function ResourcesClient({ type }: { type: ResourceType }) {
   const { toast } = useToast();
   const [items, setItems] = React.useState<Item[]>([]);
@@ -43,6 +71,7 @@ export default function ResourcesClient({ type }: { type: ResourceType }) {
   // 배경 메타
   const [description, setDescription] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [progress, setProgress] = React.useState<number | null>(null);
   const [resetSig, setResetSig] = React.useState(0);
 
   // 사용중 삭제 다이얼로그 state
@@ -110,6 +139,13 @@ export default function ResourcesClient({ type }: { type: ResourceType }) {
     setResetSig((n) => n + 1);
   };
 
+  const failToast = (message?: string) =>
+    toast({
+      variant: "destructive",
+      title: "업로드 실패",
+      description: message ?? "알 수 없는 오류",
+    });
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
@@ -145,22 +181,47 @@ export default function ResourcesClient({ type }: { type: ResourceType }) {
 
     setBusy(true);
     try {
-      const fd = new FormData();
-      fd.set("type", type);
-      fd.set("name", name.trim());
-      fd.set("file", file);
-      fd.set("meta", JSON.stringify(meta));
+      // 1) 서명 업로드 토큰 발급 (파일 본문은 Next 함수를 거치지 않는다 — Vercel 4.5MB 제한)
+      const signRes = await fetch("/api/admin/resources/upload-url", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          type,
+          filename: file.name,
+          size: file.size,
+          mime: file.type,
+        }),
+      });
+      const signJson = (await signRes.json().catch(() => null)) as SignResponse | null;
+      if (!signRes.ok || !signJson?.ok) {
+        failToast(signJson?.error?.message);
+        return;
+      }
+      const { resourceId, uploadUrl } = signJson.data;
+
+      // 2) Storage 로 직접 PUT (진행률 표시)
+      try {
+        await putWithProgress(uploadUrl, file, setProgress);
+      } catch {
+        failToast("스토리지 업로드에 실패했습니다. 네트워크를 확인하고 다시 시도하세요.");
+        return;
+      }
+
+      // 3) finalize — 서버가 객체·크기·형식을 재검증하고 DB 에 등록
       const r = await fetch("/api/admin/resources", {
         method: "POST",
-        body: fd,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          type,
+          resourceId,
+          filename: file.name,
+          name: name.trim(),
+          meta,
+        }),
       });
-      const j = await r.json();
+      const j = await r.json().catch(() => null);
       if (!r.ok || !j?.ok) {
-        toast({
-          variant: "destructive",
-          title: "업로드 실패",
-          description: j?.error?.message ?? "알 수 없는 오류",
-        });
+        failToast(j?.error?.message);
         return;
       }
       toast({ variant: "success", title: "업로드 완료" });
@@ -168,6 +229,7 @@ export default function ResourcesClient({ type }: { type: ResourceType }) {
       await refresh();
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   };
 
@@ -378,7 +440,7 @@ export default function ResourcesClient({ type }: { type: ResourceType }) {
             variant="gradient"
             className="w-full"
           >
-            {busy ? "업로드 중…" : "업로드"}
+            {busy ? (progress !== null ? `업로드 중… ${progress}%` : "업로드 중…") : "업로드"}
           </Button>
         </div>
       </form>

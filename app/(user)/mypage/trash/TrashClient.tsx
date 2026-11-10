@@ -16,6 +16,7 @@ import {
   type PurgeResponseData,
   type RestoreResponseData,
 } from "./trash-result";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 
 interface Props {
   items: TrashItem[];
@@ -59,7 +60,7 @@ export default function TrashClient({ items, purgeAfterDays }: Props) {
         error?: { message?: string };
       };
       if (!res.ok || !json.ok) {
-        throw new Error(json.error?.message ?? "복원 실패");
+        throw new Error(userMessageFromJson(json, "복원하지 못했어요. 잠시 후 다시 시도해 주세요."));
       }
       // 실제 복원 장수와 제외 사유(결제 완료 포토북·100장 한도)를 함께 알린다.
       toast(describeRestoreResult(json.data, selected.size));
@@ -98,7 +99,7 @@ export default function TrashClient({ items, purgeAfterDays }: Props) {
         error?: { message?: string };
       };
       if (!res.ok || !json.ok) {
-        throw new Error(json.error?.message ?? "영구 삭제 실패");
+        throw new Error(userMessageFromJson(json, "영구 삭제하지 못했어요. 잠시 후 다시 시도해 주세요."));
       }
       toast(describePurgeResult(json.data, selected.size));
       setSelected(new Set());

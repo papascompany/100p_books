@@ -25,6 +25,7 @@ import type {
   PhotoLibraryItem,
   PhotoLibraryProject,
 } from "./page";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 
 type SortMode = "uploaded_desc" | "uploaded_asc" | "taken_desc" | "filename";
 
@@ -168,7 +169,7 @@ export default function PhotoLibraryClient({ photos, projects }: Props) {
         error?: { message?: string };
       };
       if (!res.ok || !json.ok) {
-        throw new Error(json.error?.message ?? "휴지통 이동 실패");
+        throw new Error(userMessageFromJson(json, "휴지통으로 옮기지 못했어요. 잠시 후 다시 시도해 주세요."));
       }
       // 선택 장수가 아니라 서버가 실제로 옮긴 장수·제외 사유(결제 완료 포토북)를 알린다.
       toast(describeTrashResult(json.data, selected.size));

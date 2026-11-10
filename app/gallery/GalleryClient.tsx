@@ -7,6 +7,7 @@ import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 
 interface ReviewItem {
   id: string;
@@ -389,7 +390,7 @@ async function fetchPage(
       return {
         items: [],
         nextCursor: null,
-        error: json.error?.message ?? "후기를 불러오지 못했습니다.",
+        error: userMessageFromJson(json, "후기를 불러오지 못했습니다."),
       };
     }
 

@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 
 import type { PhotoLibraryProject } from "./page";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 
 interface Props {
   open: boolean;
@@ -61,7 +62,7 @@ export default function CopyToProjectDialog({
         error?: { message?: string };
       };
       if (!res.ok || !json.ok) {
-        throw new Error(json.error?.message ?? "복사 실패");
+        throw new Error(userMessageFromJson(json, "복사하지 못했어요. 잠시 후 다시 시도해 주세요."));
       }
       onDone(json.data?.inserted.length ?? 0, json.data?.skipped ?? 0);
     } catch (e) {

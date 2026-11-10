@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -82,7 +83,7 @@ export default function ShareDialog({ open, onOpenChange, projectId }: ShareDial
           data?: { tokens: ShareToken[] };
           error?: { message?: string };
         };
-        if (!res.ok || !json.ok) throw new Error(json.error?.message ?? "목록 불러오기 실패");
+        if (!res.ok || !json.ok) throw new Error(userMessageFromJson(json, "목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요."));
         return json.data?.tokens ?? [];
       })()
         .then((nextTokens) => {
@@ -142,7 +143,7 @@ export default function ShareDialog({ open, onOpenChange, projectId }: ShareDial
         error?: { message?: string };
       };
       if (!res.ok || !json.ok || !json.data) {
-        throw new Error(json.error?.message ?? "링크 생성 실패");
+        throw new Error(userMessageFromJson(json, "링크를 만들지 못했어요. 잠시 후 다시 시도해 주세요."));
       }
       setTokens((prev) => [json.data!, ...prev]);
       toast({ description: "공유 링크가 생성됐어요.", variant: "success" });
@@ -178,7 +179,7 @@ export default function ShareDialog({ open, onOpenChange, projectId }: ShareDial
         method: "DELETE",
       });
       const json = (await res.json()) as { ok: boolean; error?: { message?: string } };
-      if (!res.ok || !json.ok) throw new Error(json.error?.message ?? "삭제 실패");
+      if (!res.ok || !json.ok) throw new Error(userMessageFromJson(json, "삭제하지 못했어요. 잠시 후 다시 시도해 주세요."));
       setTokens((prev) => prev.filter((t) => t.id !== tokenId));
       toast({ description: "링크가 삭제됐어요.", variant: "success" });
     } catch (e) {

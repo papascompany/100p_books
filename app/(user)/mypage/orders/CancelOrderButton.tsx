@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 
 export interface CancelOrderButtonProps {
   orderId: string;
@@ -53,7 +54,7 @@ export default function CancelOrderButton({
       const res = await fetch(`/api/orders/${orderId}/cancel`, { method: "POST" });
       const json = (await res.json().catch(() => null)) as CancelResponse | null;
       if (!res.ok || !json?.ok) {
-        throw new Error(json?.error?.message ?? "주문을 취소하지 못했어요.");
+        throw new Error(userMessageFromJson(json, "주문을 취소하지 못했어요."));
       }
       toast({
         variant: "success",

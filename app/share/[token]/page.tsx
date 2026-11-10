@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { userErrorFromJson } from "@/lib/errors/user-message";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -67,7 +68,7 @@ async function fetchShareData(
       return {
         data: null,
         errorCode: json.error?.code ?? "UNKNOWN",
-        errorMessage: json.error?.message ?? "알 수 없는 오류가 발생했어요.",
+        errorMessage: userErrorFromJson(json, "알 수 없는 오류가 발생했어요.", res.status).message,
       };
     }
     return { data: json.data, errorCode: null, errorMessage: null };

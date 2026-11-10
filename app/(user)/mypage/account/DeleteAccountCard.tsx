@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
 import { getBrowserSupabase } from "@/lib/db/browser";
 import { cn } from "@/lib/utils";
+import { userErrorFromJson } from "@/lib/errors/user-message";
 
 const REASONS = [
   { value: "no-need", label: "더 이상 사용하지 않아요" },
@@ -92,7 +93,7 @@ export default function DeleteAccountCard({
       const json = (await res.json().catch(() => ({}))) as ApiResponse<unknown>;
       if (!res.ok || !json.ok) {
         const code = json.error?.code ?? "UNKNOWN";
-        const msg = json.error?.message ?? "탈퇴 처리에 실패했습니다.";
+        const msg = userErrorFromJson(json, "탈퇴 처리에 실패했어요. 잠시 후 다시 시도해 주세요.", res.status).message;
         toast({
           variant: "destructive",
           title:

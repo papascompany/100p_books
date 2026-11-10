@@ -511,14 +511,16 @@ export function fabricToPageDoc(
   canvas: fabric.Canvas,
   meta: PageDocMeta,
   dpi: number,
+  options?: FabricToPageDocOptions,
 ): PageDoc {
   const objects: LayoutObject[] = [];
   const all = canvas.getObjects() as TaggedFabricObject[];
+  const offsetPx = options?.offsetPx ?? 0;
 
   for (const o of all) {
     // 캔버스 chrome 객체(안전선 등)는 oType 미부여 → 스킵
     if (!o.oType) continue;
-    const out = serializeOne(o, dpi);
+    const out = withPageTransform(o, offsetPx, () => serializeOne(o, dpi));
     if (out) objects.push(out);
   }
 
@@ -535,6 +537,60 @@ export function fabricToPageDoc(
   };
   if (meta.backgroundImage) out.backgroundImage = meta.backgroundImage;
   return out;
+}
+
+export interface FabricToPageDocOptions {
+  /**
+   * 캔버스 px 좌표에서 뺄 평행이동량(px) — FabricStage 의 bleed 보정(캔버스 = trim + bleed).
+   * 선택 그룹 변환을 푼 **뒤** 적용해야 하므로 호출자가 left/top 을 미리 빼지 말고 여기로 넘긴다.
+   */
+  offsetPx?: number;
+}
+
+const TRANSFORM_KEYS = [
+  "left",
+  "top",
+  "scaleX",
+  "scaleY",
+  "angle",
+  "skewX",
+  "skewY",
+  "flipX",
+  "flipY",
+] as const;
+
+/**
+ * `read` 동안만 객체를 페이지(캔버스) 좌표계 변환으로 바꿔 두고, 끝나면 원래 값으로 되돌린다.
+ *
+ * 다중 선택(ActiveSelection) 안 객체의 left/top/scale/angle 은 **선택 그룹 기준 상대값**이다.
+ * 자동저장은 선택을 풀지 않고 직렬화하므로, 그대로 읽으면 그룹 상대 좌표가 저장된다(D4).
+ * 선택을 풀면(discardActiveObject) selection 이벤트·히스토리·자동저장이 다시 돌고 사용자 선택이
+ * 사라지므로, fabric 이 선택 해제 때 쓰는 것과 같은 `applyTransformToObject` 로 절대 변환만
+ * 잠시 적용한다. set 은 이벤트를 쏘지 않고 그룹 레이아웃도 건드리지 않는다.
+ */
+function withPageTransform<T>(
+  o: TaggedFabricObject,
+  offsetPx: number,
+  read: () => T,
+): T {
+  const grouped = Boolean(o.group);
+  if (!grouped && offsetPx === 0) return read();
+
+  const saved = TRANSFORM_KEYS.map((k) => [k, o[k]] as const);
+  try {
+    if (grouped) {
+      fabric.util.applyTransformToObject(o, o.calcTransformMatrix());
+    }
+    if (offsetPx !== 0) {
+      o.set({
+        left: (o.left ?? 0) - offsetPx,
+        top: (o.top ?? 0) - offsetPx,
+      });
+    }
+    return read();
+  } finally {
+    o.set(Object.fromEntries(saved));
+  }
 }
 
 function serializeOne(

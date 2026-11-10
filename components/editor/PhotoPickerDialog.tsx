@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 
 interface PhotoListItem {
   id: string;
@@ -96,7 +97,7 @@ export default function PhotoPickerDialog({
           error?: { message?: string };
         };
         if (!res.ok || !json.ok) {
-          throw new Error(json.error?.message ?? "사진 목록을 가져오지 못했어요.");
+          throw new Error(userMessageFromJson(json, "사진 목록을 가져오지 못했어요."));
         }
         if (!cancelled) setPhotos(json.data?.photos ?? []);
       } catch (e) {
@@ -152,7 +153,7 @@ export default function PhotoPickerDialog({
           error?: { message?: string };
         };
         if (!res.ok || !json.ok) {
-          throw new Error(json.error?.message ?? "사진 가져오기 실패");
+          throw new Error(userMessageFromJson(json, "사진을 가져오지 못했어요. 잠시 후 다시 시도해 주세요."));
         }
         const inserted = json.data?.inserted?.[0];
         if (!inserted) {

@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import FailPendingOrderNotice from "./FailPendingOrderNotice";
 import { Button } from "@/components/ui/button";
+import { userErrorFromTossFail } from "@/lib/errors/user-message";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,6 +30,8 @@ export default async function OrderFailPage(props: PageProps) {
   const searchParams = await props.searchParams;
   const params = await props.params;
   const userCancelled = USER_CANCEL_CODES.has(searchParams.code ?? "");
+  // 토스 code 는 화면에 노출하지 않고 매핑 문구를 쓴다(미매핑이면 안전한 한국어 message 만 허용).
+  const userError = userErrorFromTossFail(searchParams.code, searchParams.message);
   return (
     <div className="container py-10">
       <div className="mx-auto max-w-xl rounded-2xl border bg-card p-8 text-center">
@@ -47,11 +50,16 @@ export default async function OrderFailPage(props: PageProps) {
               결제에 실패했습니다
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              {searchParams.message ?? "결제가 정상적으로 처리되지 않았습니다."}
+              {userError.message}
             </p>
-            {searchParams.code ? (
-              <p className="mt-1 text-xs text-muted-foreground/80">
-                오류 코드: {searchParams.code}
+            {userError.action?.kind === "support" && userError.action.href ? (
+              <p className="mt-2 text-sm">
+                <a
+                  href={userError.action.href}
+                  className="inline-flex min-h-11 items-center font-medium underline underline-offset-4"
+                >
+                  {userError.action.label}
+                </a>
               </p>
             ) : null}
           </>

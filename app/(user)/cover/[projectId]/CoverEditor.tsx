@@ -34,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/use-toast";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 import type { BookSize } from "@/lib/db/types";
 import {
   createSerialQueue,
@@ -589,11 +590,22 @@ export default function CoverEditor({
     };
   }, [dirty, autosave, readOnly, save, savedAt, stageLoadedAt]);
 
+  // 수동 저장 — 대기 중인 자동저장 타이머를 먼저 끈다. 끄지 않으면 수동 저장이 끝난 직후
+  // 타이머가 같은 내용을 한 번 더 PATCH 했다(무해하지만 중복 요청, 런북 백로그 "표지 PATCH 2회").
+  // 저장 중 새 편집이 있으면 dirty 가 유지돼 savedAt 갱신으로 effect 가 타이머를 다시 건다.
+  const saveNow = useCallback(() => {
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+    return save();
+  }, [save]);
+
   // 클라이언트 네비게이션 전 dirty flush — 저장하지 못하면 확인을 받는다 (편집 무음 유실 방지).
   const flushAndNavigate = useCallback(
     async (href: string) => {
       if (dirty && !lockGateRef.current.locked) {
-        const outcome = await save();
+        const outcome = await saveNow();
         const decision = decideNavigationAfterSave(outcome);
         // stay: 최신본 재로드·읽기 전용 전환 안내가 방금 떴다 — 확인한 뒤 다시 누르면 이동한다.
         if (decision === "stay") return;
@@ -617,7 +629,7 @@ export default function CoverEditor({
       router.push(href);
       router.refresh();
     },
-    [dirty, router, save],
+    [dirty, router, saveNow],
   );
 
   const onToolPick = useCallback((tool: ToolbarTool) => {
@@ -714,7 +726,7 @@ export default function CoverEditor({
         error?: { message: string };
       };
       if (!res.ok || !json.ok) {
-        throw new Error(json.error?.message ?? "제목 저장 실패");
+        throw new Error(userMessageFromJson(json, "제목을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.", res.status));
       }
       lastSavedTitleRef.current = clean;
       setTitle(clean);
@@ -843,7 +855,7 @@ export default function CoverEditor({
 
     // dirty 면 먼저 저장 (서버 미리보기는 저장된 cover_json 기반)
     if (dirty && !lockGateRef.current.locked) {
-      const outcome = await save();
+      const outcome = await saveNow();
       // 저장 실패 시 마지막 저장본으로 진행 — 모달 내부 배너로 알림.
       // conflict 는 최신 저장본을 불러왔으므로 화면과 미리보기가 일치한다.
       // locked 는 저장본이 곧 인쇄본이고 읽기 전용 안내가 떴다 — "다시 저장해주세요" 배너는 틀린 안내다.
@@ -864,7 +876,7 @@ export default function CoverEditor({
         error?: { message: string };
       };
       if (!res.ok || !json.ok || !json.data) {
-        throw new Error(json.error?.message ?? "미리보기 생성 실패");
+        throw new Error(userMessageFromJson(json, "미리보기를 만들지 못했어요. 잠시 후 다시 시도해 주세요.", res.status));
       }
       setPreviewPng(json.data.pngDataUrl);
     } catch (e) {
@@ -872,7 +884,7 @@ export default function CoverEditor({
     } finally {
       setPreviewLoading(false);
     }
-  }, [dirty, projectId, save]);
+  }, [dirty, projectId, saveNow]);
 
   // 모바일 면 단위 확대 — 선택 면이 화면 폭을 채우도록 캔버스 컨테이너 폭을 넓히고
   // 가로 스크롤로 해당 면 중앙에 정렬한다. (FabricStage 는 부모 폭에 fit)
@@ -1028,7 +1040,7 @@ export default function CoverEditor({
             </label>
           )}
           <Button
-            onClick={() => void save()}
+            onClick={() => void saveNow()}
             disabled={saving || readOnly}
             size="sm"
             variant="gradient"

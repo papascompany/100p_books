@@ -4,9 +4,11 @@ import { CheckCircle2, Coins, Loader2, Minus, Plus, Search, Tag, XCircle } from 
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import OrderPreviewCard, { type OrderPreviewCardProps } from "./OrderPreviewCard";
+import OrderAmountLines from "@/components/orders/OrderAmountLines";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 import { usePostcode } from "@/lib/address/use-postcode";
 import {
   calcOrderAmount,
@@ -379,10 +381,7 @@ export default function OrderForm(props: OrderFormProps) {
         | { ok: false; error?: { message: string } };
 
       if (!res.ok || !json.ok) {
-        const msg =
-          "error" in json && json.error?.message
-            ? json.error.message
-            : "코드 검증에 실패했습니다.";
+        const msg = userMessageFromJson(json, "코드를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.", res.status);
         setDiscount((s) => ({
           ...s,
           validating: false,
@@ -500,7 +499,7 @@ export default function OrderForm(props: OrderFormProps) {
         error?: { message: string };
       };
       if (!res.ok || !json.ok || !json.data) {
-        throw new Error(json.error?.message ?? "주문 생성 실패");
+        throw new Error(userMessageFromJson(json, "주문을 만들지 못했어요. 잠시 후 다시 시도해 주세요.", res.status));
       }
 
       // 2) 토스 결제창 호출
@@ -963,42 +962,18 @@ export default function OrderForm(props: OrderFormProps) {
               />
             ) : null}
             <Row label="수량" value={`× ${qty}`} />
-            {/* 상품 금액 = (단가 + 페이지 추가) × 수량 = 수량 할인 전 금액 (pricing.ts calcOrderAmount).
-                할인이 없으면 바로 아래 소계와 같은 값이라 중복 줄을 만들지 않는다. */}
-            {breakdown.discount > 0 ? (
-              <Row label="상품 금액" value={fmtKrw(breakdown.total + breakdown.discount)} />
-            ) : null}
-            {breakdown.discount > 0 ? (
-              <Row
-                label={`수량 할인 (${Math.round(breakdown.discountRatio * 100)}%)`}
-                value={`-${fmtKrw(breakdown.discount)}`}
-                accent="discount"
-              />
-            ) : null}
-            <hr className="my-2 border-border" />
-            <Row label="소계" value={fmtKrw(breakdown.total)} />
-            <Row label="배송비" value="무료" />
-            {discount.discountAmount > 0 ? (
-              <Row
-                label={`할인 코드 (${discount.appliedCode ?? ""})`}
-                value={`-${fmtKrw(discount.discountAmount)}`}
-                accent="coupon"
-              />
-            ) : null}
-            {effectivePoints > 0 ? (
-              <Row
-                label="포인트 차감"
-                value={`-${fmtKrw(effectivePoints)}`}
-                accent="coupon"
-              />
-            ) : null}
-            <hr className="my-2 border-border" />
-            <div className="flex items-baseline justify-between rounded-lg bg-coral-50 px-3 py-2 dark:bg-coral-950/20">
-              <dt className="text-sm font-semibold text-ink">최종 결제 금액</dt>
-              <dd className="font-display text-2xl font-bold tracking-tight text-coral-700 dark:text-coral-300">
-                {fmtKrw(finalAmount)}
-              </dd>
-            </div>
+            {/* 상품 금액 이하 줄 구성은 결제 완료·주문 상세와 같은 정본(lib/orders/amount-lines.ts, UX P15). */}
+            <OrderAmountLines
+              variant="summary"
+              input={{
+                subtotal: breakdown.total,
+                qtyDiscount: { ratio: breakdown.discountRatio, amount: breakdown.discount },
+                discountAmount: discount.discountAmount,
+                discountCode: discount.appliedCode,
+                pointsUsed: effectivePoints,
+                finalAmount,
+              }}
+            />
             {finalAmount < MIN_PAYMENT_AMOUNT ? (
               <p className="mt-1 text-xs text-destructive" role="alert">
                 최소 결제 금액은 {MIN_PAYMENT_AMOUNT}원입니다. 할인 적용을

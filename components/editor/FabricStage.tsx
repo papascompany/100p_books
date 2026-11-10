@@ -625,26 +625,13 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
             objects: [],
           };
         }
-        // bleed 보정 역방향
-        const bleedPx = mmToPx(bleedMm, dpi);
-        // 전체 객체 left/top 에서 bleed 만큼 빼서 trim 좌표계로 변환 — 임시
-        const all = canvas.getObjects() as TaggedFabricObject[];
-        const restore: { o: TaggedFabricObject; left: number; top: number }[] =
-          [];
-        for (const o of all) {
-          if (!o.oType) continue;
-          restore.push({ o, left: o.left ?? 0, top: o.top ?? 0 });
-          o.set({
-            left: (o.left ?? 0) - bleedPx,
-            top: (o.top ?? 0) - bleedPx,
-          });
-        }
-        const doc = fabricToPageDoc(canvas, meta, dpi);
-        // 복원
-        for (const r of restore) {
-          r.o.set({ left: r.left, top: r.top });
-        }
-        return doc;
+        // bleed 보정 역방향(캔버스 = trim + bleed → trim 좌표계).
+        // left/top 을 여기서 미리 빼면 안 된다 — 다중 선택 중 객체 좌표는 선택 그룹 기준
+        // 상대값이라, 보정은 그룹 변환을 푼 뒤 fabricToPageDoc 안에서 해야 한다(D4).
+        // 선택은 풀지 않는다(이벤트·히스토리·자동저장 재진입 방지, 사용자 선택 유지).
+        return fabricToPageDoc(canvas, meta, dpi, {
+          offsetPx: mmToPx(bleedMm, dpi),
+        });
       },
       [bleedMm, dpi],
     );

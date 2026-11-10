@@ -14,6 +14,7 @@ import {
 import type { CollageTemplateId } from "@/lib/layout/collage";
 import type { SortMode } from "@/lib/layout/types";
 import { cn } from "@/lib/utils";
+import { userMessageFromJson } from "@/lib/errors/user-message";
 
 interface SortOption {
   id: SortMode;
@@ -82,7 +83,7 @@ export async function requestLayoutGenerate(
     error?: { message: string };
   };
   if (!res.ok || !json.ok || !json.data) {
-    throw new Error(json.error?.message ?? "자동 편집 실패");
+    throw new Error(userMessageFromJson(json, "자동 편집에 실패했어요. 잠시 후 다시 시도해 주세요."));
   }
   return json.data;
 }
