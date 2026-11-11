@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createAdminSupabase } from "@/lib/db/admin";
+import { lookupBasePrice } from "@/lib/orders/pricing";
 
 /**
  * 서비스 런치 체크 — 운영 스위치(env)와 필수 데이터의 현재 상태를 한 곳에서 판정.
@@ -39,13 +40,15 @@ export async function getLaunchStatus(): Promise<LaunchItem[]> {
       .select("id", { count: "exact", head: true })
       .eq("type", "font")
       .eq("active", true),
-    admin
-      .from("book_sizes")
-      .select("id", { count: "exact", head: true })
-      .eq("active", true),
+    admin.from("book_sizes").select("id, name").eq("active", true),
   ]);
   const fontCount = fontsRes.count ?? 0;
-  const sizeCount = sizesRes.count ?? 0;
+  const activeSizes = (sizesRes.data ?? []) as Array<{ id: string; name: string }>;
+  const sizeCount = activeSizes.length;
+  // 단가표(lib/orders/pricing.ts)에 없는 활성 사이즈 — 그 사이즈는 주문 생성이 409 로 막힌다.
+  const unpricedSizes = activeSizes
+    .filter((s) => lookupBasePrice(s.name) === null)
+    .map((s) => s.name);
 
   return [
     {
@@ -82,6 +85,17 @@ export async function getLaunchStatus(): Promise<LaunchItem[]> {
       status: sizeCount > 0 ? "ok" : "off",
       impact: "프로젝트 생성 불가",
       runbook: "§2",
+      blocking: true,
+    },
+    {
+      key: "pricing",
+      label:
+        unpricedSizes.length === 0
+          ? "책 사이즈 단가 매칭"
+          : `단가 미등록 사이즈: ${unpricedSizes.join(", ")}`,
+      status: unpricedSizes.length === 0 ? "ok" : "off",
+      impact: "해당 사이즈는 주문 생성이 막힘 — 사이즈 이름을 단가표(lib/orders/pricing.ts)와 맞추거나 단가 추가",
+      runbook: "오픈 계획",
       blocking: true,
     },
     {

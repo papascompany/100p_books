@@ -56,6 +56,7 @@ const MAP: Record<string, UserError> = {
   // 포인트·할인
   POINTS_INSUFFICIENT: { message: "보유 포인트가 부족해요. 사용할 포인트를 줄여 다시 시도해 주세요." },
   DISCOUNT_INVALID: { message: "사용할 수 없는 할인 코드예요. 코드를 다시 확인해 주세요." },
+  PRICE_NOT_CONFIGURED: { message: "이 책 사이즈는 지금 주문할 수 없어요. 고객센터로 문의해 주세요.", action: SUPPORT },
 
   // 주문·취소
   NOT_PENDING: { message: "이미 처리된 주문이에요. 주문 내역에서 상태를 확인해 주세요.", action: ORDERS },

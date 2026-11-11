@@ -15,6 +15,7 @@ import { isPageDoc } from "@/lib/layout/types";
 import {
   calcOrderAmount,
   MIN_PAYMENT_AMOUNT,
+  lookupBasePrice,
   quoteOrder,
 } from "@/lib/orders/pricing";
 import { sumHeldOrderPoints } from "@/lib/orders/refund";
@@ -161,7 +162,17 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3) 가격 계산
+    // 3) 가격 계산 — 단가표에 없는 사이즈는 기본가로 조용히 결제하지 않는다(관리자 설정 오류 차단).
+    if (lookupBasePrice(bookSize.name) === null) {
+      console.error(
+        `[orders/create] 단가표에 없는 책 사이즈 — 주문 차단: ${JSON.stringify(bookSize.name)} (${bookSize.id})`,
+      );
+      return fail(
+        "PRICE_NOT_CONFIGURED",
+        "이 책 사이즈는 지금 주문할 수 없어요. 고객센터로 문의해 주세요.",
+        409,
+      );
+    }
     const breakdown = calcOrderAmount({
       bookSize: bookSize.name,
       pageCount: pages,
