@@ -70,11 +70,24 @@ export class PageCanvasPool {
   }
 
   release(canvas: Canvas): void {
+    if (this.closed) return;
     const key = `${canvas.width}x${canvas.height}`;
     const list = this.free.get(key) ?? [];
     if (list.length >= this.maxPerSize) return;
     list.push(canvas);
     this.free.set(key, list);
+  }
+
+  private closed = false;
+
+  /**
+   * 보관 중인 캔버스를 모두 놓는다 — 렌더가 끝나면 PDF 저장(pdf.save) 전에 호출한다.
+   * 놓지 않으면 페이지 캔버스(장당 약 23MB native) 최대 4장이 저장 단계 메모리 최고점에 얹혔다
+   * (2026-11-11 linux-x64 재측정: collage-6 +86~133MB). 이후 release 는 무시한다.
+   */
+  clear(): void {
+    this.closed = true;
+    this.free.clear();
   }
 }
 
