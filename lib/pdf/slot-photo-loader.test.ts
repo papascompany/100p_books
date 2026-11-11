@@ -294,3 +294,17 @@ describe("PageCanvasPool — 페이지 캔버스 재사용", () => {
     }
   });
 });
+
+describe("PageCanvasPool.clear", () => {
+  it("clear 후에는 보관하지 않고 새 캔버스를 만든다", async () => {
+    const { PageCanvasPool } = await import("./render-page");
+    const pool = new PageCanvasPool(2);
+    const a = pool.acquire(10, 10);
+    pool.release(a);
+    expect(pool.acquire(10, 10)).toBe(a);
+    pool.release(a);
+    pool.clear();
+    pool.release(a); // 무시돼야 함
+    expect(pool.acquire(10, 10)).not.toBe(a);
+  });
+});

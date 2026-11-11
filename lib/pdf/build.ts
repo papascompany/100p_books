@@ -60,13 +60,14 @@ export interface BuildCoverArgs extends BuildArgsBase {
  */
 export async function buildInteriorPdf(args: BuildInteriorArgs): Promise<Buffer> {
   const total = args.pages.length;
+  const canvasPool = new PageCanvasPool();
   const renderCtx: RenderContext = {
     resolveImageUrl: args.resolveImageUrl,
     loadSlotPhoto:
       args.loadSlotPhoto ??
       createSlotPhotoLoader({ resolve: args.resolveImageUrl, docs: args.pages }).load,
     // 페이지 캔버스 재사용 — native 픽셀 메모리가 GC 시점에 묶이지 않게 (render-page.ts PageCanvasPool).
-    canvasPool: new PageCanvasPool(),
+    canvasPool,
     resolveBackgroundUrl: args.resolveBackgroundUrl,
     resolveClipart: args.resolveClipart,
   };
@@ -124,6 +125,9 @@ export async function buildInteriorPdf(args: BuildInteriorArgs): Promise<Buffer>
     args.onProgress?.({ done: doneCount, total, phase: "render" });
     void drainReady();
   });
+
+  // 렌더 끝 — 저장 단계 메모리 최고점에 캔버스 풀이 얹히지 않게 먼저 놓는다.
+  canvasPool.clear();
 
   // 잔여 페이지 임베드 완료 대기 + 에러 표면화
   await drainReady();
