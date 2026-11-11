@@ -27,6 +27,8 @@ export async function generateMetadata(props: PageProps): Promise<Metadata> {
   return {
     title: "포토북 사본 도착",
     description: "누군가 직접 만든 포토북의 사본을 보냈어요.",
+    // 링크 보유자 전용 페이지(사진 포함) — 검색 노출 금지(2026-11-11 오픈 점검 M2).
+    robots: { index: false, follow: false },
     openGraph: {
       title: "포토북 사본이 도착했어요",
       description:

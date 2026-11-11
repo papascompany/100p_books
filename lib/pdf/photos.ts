@@ -63,6 +63,14 @@ export class PhotoCache {
     }
   }
 
+  /** 빌드 중 더 필요 없는 원본을 내려놓는다 (slot-photo-loader 의 releaseOriginal). */
+  delete(key: string): void {
+    const e = this.map.get(key);
+    if (!e) return;
+    this.map.delete(key);
+    this.bytes -= e.bytes;
+  }
+
   clear(): void {
     this.map.clear();
     this.bytes = 0;

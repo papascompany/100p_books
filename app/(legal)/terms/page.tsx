@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 
+import { CUSTOMER_CENTER_TEL } from "@/lib/orders/customer-center";
+
+import { BUSINESS_INFO as LEGAL_BUSINESS_INFO } from "@/lib/legal/business-info";
 import { LegalArticle } from "../_components/LegalArticle";
+
+// NOTE: 법적 문서 — 2026-11-20 오픈 전 법률 검토(변호사/전자상거래 자문)를 권장한다.
+// 개정 이력: 2026-05-05 초판 → 2026-11-20 개정(사업자 정보·결제/환불 절차·가입 방식 정정).
 
 export const metadata: Metadata = {
   title: "서비스 이용약관",
@@ -15,10 +21,11 @@ export const revalidate = false;
 
 export default function TermsPage() {
   return (
-    <LegalArticle title="서비스 이용약관" updatedAt="2026-05-05">
+    <LegalArticle title="서비스 이용약관" updatedAt="2026-11-20" effectiveAt="2026-11-20">
       <h2 id="article-1">제1조 (목적)</h2>
       <p>
-        본 약관은 100p Books(이하 &ldquo;회사&rdquo;)가 제공하는 포토북 제작 및
+        본 약관은 {LEGAL_BUSINESS_INFO.name}(서비스명 {LEGAL_BUSINESS_INFO.serviceName},
+        이하 &ldquo;회사&rdquo;)가 제공하는 포토북 제작 및
         인쇄 주문 서비스(이하 &ldquo;서비스&rdquo;)의 이용과 관련하여 회사와
         이용자의 권리·의무 및 책임사항, 기타 필요한 사항을 규정함을 목적으로
         합니다.
@@ -67,8 +74,8 @@ export default function TermsPage() {
       <ol>
         <li>
           서비스 이용을 위한 회원가입은 이용자가 본 약관 및 개인정보
-          처리방침에 동의하고, 이메일 매직링크 또는 소셜 로그인(카카오 등)을
-          통해 인증을 완료하는 방식으로 이루어집니다.
+          처리방침에 동의하고, 이메일·비밀번호를 입력하여 가입하거나 카카오
+          로그인을 통해 인증을 완료하는 방식으로 이루어집니다.
         </li>
         <li>
           이용자는 마이페이지의 &lsquo;회원 탈퇴&rsquo; 메뉴를 통해 언제든지
@@ -105,9 +112,17 @@ export default function TermsPage() {
           이루어집니다.
         </li>
         <li>
+          결제를 완료하지 않은(결제 대기) 주문은 이용자가 마이페이지의 주문
+          상세에서 직접 취소할 수 있습니다.
+        </li>
+        <li>
           이용자는 결제 완료 후{" "}
-          <strong>제작이 시작되기 전까지</strong> 마이페이지의 주문 상세에서
-          전액 환불을 요청할 수 있습니다.
+          <strong>제작이 시작되기 전까지</strong> 고객센터({CUSTOMER_CENTER_TEL})로
+          연락하여 전액 환불을 요청할 수 있으며, 회사는 확인 후 전액 환불을
+          처리합니다. 결제 완료 이후의 환불·교환 요청은 마이페이지에서 직접
+          처리되지 않고 고객센터를 통해 접수됩니다. 일부 금액만 환불하는 부분
+          환불은 시스템에서 자동 처리되지 않으며, 고객센터와 협의하여 개별
+          처리합니다.
         </li>
         <li>
           포토북은 이용자가 직접 디자인한 <strong>주문 제작 인쇄물</strong>
@@ -121,8 +136,8 @@ export default function TermsPage() {
         </li>
         <li>
           단, 인쇄 불량 또는 배송 사고 등 회사 또는 위탁사의 귀책사유가 있는
-          경우 이용자의 요청에 따라 동일 사양으로 재제작 또는 전액 환불을
-          제공합니다. 자세한 사항은 <a href="/refund">교환·환불 정책</a>을
+          경우 이용자의 요청(고객센터 접수)에 따라 동일 사양으로 재제작 또는
+          전액 환불을 제공합니다. 자세한 사항은 <a href="/refund">교환·환불 정책</a>을
           참조하시기 바랍니다.
         </li>
       </ol>
@@ -199,8 +214,14 @@ export default function TermsPage() {
 
       <h2 id="annex">부칙</h2>
       <ol>
-        <li>본 약관은 2026년 5월 5일부터 시행합니다.</li>
-        <li>회사 정보 및 문의 채널은 푸터의 고객센터를 참조하시기 바랍니다.</li>
+        <li>본 약관은 2026년 11월 20일부터 시행합니다.</li>
+        <li>
+          사업자 정보: 상호 {LEGAL_BUSINESS_INFO.name} · 대표자{" "}
+          {LEGAL_BUSINESS_INFO.ceo} · 사업자등록번호{" "}
+          {LEGAL_BUSINESS_INFO.registrationNo} · 통신판매업 신고번호{" "}
+          {LEGAL_BUSINESS_INFO.mailOrderNo} · 주소 {LEGAL_BUSINESS_INFO.address}
+        </li>
+        <li>고객센터: {CUSTOMER_CENTER_TEL} (자세한 운영시간은 교환·환불 정책 참조)</li>
       </ol>
     </LegalArticle>
   );

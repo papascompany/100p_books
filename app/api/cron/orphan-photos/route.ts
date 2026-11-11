@@ -1,6 +1,7 @@
 import "server-only";
 
 import { fail, failFromError, ok } from "@/app/api/_lib/response";
+import { reapOrphanResources } from "@/lib/admin/resource-orphans";
 import { createAdminSupabase } from "@/lib/db/admin";
 import { ORIGINALS_BUCKET, THUMBS_BUCKET } from "@/lib/image/constants";
 import { verifyCronRequest } from "@/lib/security/cron-auth";
@@ -187,9 +188,18 @@ export async function GET(req: Request) {
     const scanned = plan.originals.scanned + plan.thumbs.scanned;
     const orphans = plan.originals.orphans + plan.thumbs.orphans;
 
+    // resources 버킷(관리자 업로드 finalize 누락 객체) — 실패해도 사진 회수 결과는 그대로 반환한다.
+    const resources = await reapOrphanResources(admin, {
+      cutoffMs,
+      maxListCalls,
+      maxDeletes,
+      dryRun,
+    });
+
     if (dryRun) {
       return ok({
         dryRun: true,
+        resources,
         scanned,
         orphans,
         wouldDelete: plan.originals.toDelete.length + plan.thumbs.toDelete.length,
@@ -235,6 +245,7 @@ export async function GET(req: Request) {
 
     return ok({
       dryRun: false,
+      resources,
       scanned,
       orphans,
       deleted: deletedOriginals + deletedThumbs,

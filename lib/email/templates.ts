@@ -9,6 +9,8 @@
  * 누락된 필드는 안전하게 fallback 한다 — 운영 누락 시에도 발송이 멈추지 않도록.
  */
 
+import { CUSTOMER_CENTER_TEL } from "@/lib/orders/customer-center";
+
 export type EmailTemplate =
   | "order.paid"
   | "order.in_production"
@@ -95,9 +97,9 @@ function trackingUrl(carrier: string | undefined, no: string | undefined): strin
 
 const BRAND = {
   name: "100p Books",
-  signature: "고객 문의: support@100pbooks.example.com",
+  signature: `고객센터: ${CUSTOMER_CENTER_TEL}`,
   footerNote:
-    "본 메일은 발신 전용입니다. 회신 시 답변이 어려우니 위 이메일로 문의 부탁드려요.",
+    "본 메일은 발신 전용입니다. 문의는 고객센터 전화로 부탁드려요.",
 };
 
 /** 공통 HTML 셸 — 인라인 스타일만 사용 (이메일 클라이언트 호환성). */
@@ -381,7 +383,7 @@ function tplUserWelcome(c: UserContext): EmailContent {
     ``,
     `시작하기: ${appUrl("/")}`,
     ``,
-    `궁금한 점은 언제든 답장하지 마시고 ${BRAND.signature.replace("고객 문의: ", "")} 로 알려주세요.`,
+    `궁금한 점은 고객센터(${CUSTOMER_CENTER_TEL})로 전화해 주세요.`,
   ].join("\n");
   const html = htmlShell({
     preheader: "100p Books 에 오신 걸 환영해요.",

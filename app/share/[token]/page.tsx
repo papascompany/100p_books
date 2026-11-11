@@ -1,5 +1,6 @@
 import { BookOpen, Calendar, Clock, ImageOff, Images } from "lucide-react";
 import Image from "next/image";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,12 @@ import { userErrorFromJson } from "@/lib/errors/user-message";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+// 링크 보유자 전용 공유 페이지(사진 포함) — 검색 노출 금지(2026-11-11 오픈 점검 M2).
+// robots.txt 로 막으면 크롤러가 noindex 를 읽지 못해 URL 만 색인될 수 있어 메타로 막는다.
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 interface PageProps {
   params: Promise<{ token: string }>;

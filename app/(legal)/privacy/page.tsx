@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
 
+import { CUSTOMER_CENTER_TEL } from "@/lib/orders/customer-center";
+
+import { BUSINESS_INFO as LEGAL_BUSINESS_INFO } from "@/lib/legal/business-info";
 import { LegalArticle } from "../_components/LegalArticle";
+
+// NOTE: 법적 문서 — 2026-11-20 오픈 전 법률 검토(개인정보 처리방침·국외 이전 고지 포함)를 권장한다.
+// 개정 이력: 2026-05-05 초판 → 2026-11-20 개정(회사 정의, 수탁자·국외 이전·파기·선물 수신자 정보 추가).
+// 수탁자·리전 표기는 코드/STATUS.md 기준이며, 계약상 사실과 다르면 수정해야 한다.
 
 export const metadata: Metadata = {
   title: "개인정보 처리방침",
@@ -15,9 +22,10 @@ export const revalidate = false;
 
 export default function PrivacyPage() {
   return (
-    <LegalArticle title="개인정보 처리방침" updatedAt="2026-05-05">
+    <LegalArticle title="개인정보 처리방침" updatedAt="2026-11-20" effectiveAt="2026-11-20">
       <p>
-        100p Books(이하 &ldquo;회사&rdquo;)는 「개인정보 보호법」 및 「정보통신망
+        {LEGAL_BUSINESS_INFO.name}(서비스명 {LEGAL_BUSINESS_INFO.serviceName},
+        이하 &ldquo;회사&rdquo;)는 「개인정보 보호법」 및 「정보통신망
         이용촉진 및 정보보호 등에 관한 법률」 등 관련 법령을 준수하며, 이용자의
         개인정보를 안전하게 처리하기 위하여 다음과 같이 개인정보 처리방침을
         수립·공개합니다.
@@ -42,7 +50,21 @@ export default function PrivacyPage() {
           업로드 시 클라이언트와 서버에서 모두 제거합니다.
         </li>
         <li>
-          <strong>고객 문의:</strong> 문의 내용, 회신용 이메일 주소
+          <strong>고객 문의:</strong> 전화 상담 시 확인하는 성함·연락처·주문
+          정보, 문의 내용
+        </li>
+        <li>
+          <strong>선물하기:</strong> 선물을 받는 분의 이메일 주소, 선물
+          메시지(선택)
+        </li>
+        <li>
+          <strong>카카오 로그인(선택):</strong> 카카오 로그인을 선택한 경우
+          카카오로부터 닉네임, 프로필 사진, 이메일(이용자가 동의한 항목에
+          한함)
+        </li>
+        <li>
+          <strong>서비스 이용 과정에서 자동 수집:</strong> 접속 IP, 일시, 브라우저
+          정보(부정 이용 방지 및 요청 빈도 제한 목적)
         </li>
       </ul>
 
@@ -52,6 +74,9 @@ export default function PrivacyPage() {
         <li>서비스 제공 — 포토북 디자인·인쇄·배송, PDF 결과물 제공</li>
         <li>결제·정산 — 주문 결제, 환불 처리</li>
         <li>고객응대 — 문의 응답, 분쟁 처리, 공지사항 전달</li>
+        <li>
+          선물 기능 — 선물을 받는 분께 수령 안내 이메일 발송, 수령 여부 확인
+        </li>
         <li>법령 준수 — 전자상거래법 등 관계 법령상의 의무 이행</li>
       </ol>
 
@@ -98,6 +123,13 @@ export default function PrivacyPage() {
         보존됩니다.
       </p>
 
+      <p>
+        <strong>선물 수신자 이메일:</strong> 선물을 보낼 때 입력한 받는 분의
+        이메일은 안내 메일 발송과 수령 확인 목적으로만 이용합니다. 선물 수령
+        링크는 생성 후 30일이 지나면 만료되며, 선물 기록은 위 표의 계약·결제
+        기록 보존 기간이 끝나면 함께 파기합니다.
+      </p>
+
       <h2 id="section-4">4. 개인정보의 처리 위탁</h2>
       <p>회사는 원활한 서비스 제공을 위해 다음과 같이 개인정보 처리를 위탁합니다.</p>
       <table>
@@ -105,27 +137,105 @@ export default function PrivacyPage() {
           <tr>
             <th>수탁자</th>
             <th>위탁업무</th>
+            <th>처리하는 개인정보</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td>Supabase, Inc.</td>
-            <td>회원·주문 데이터베이스 호스팅, 인증, 사진·PDF 스토리지</td>
+            <td>회원·주문 데이터베이스 호스팅, 인증, 사진·PDF 파일 저장</td>
+            <td>이메일, 프로필, 주문·배송 정보, 업로드 사진</td>
           </tr>
           <tr>
             <td>Vercel, Inc.</td>
             <td>웹 애플리케이션 호스팅, CDN, 서버리스 함수 실행</td>
+            <td>접속 IP, 요청 기록 등 서비스 이용 정보</td>
           </tr>
           <tr>
-            <td>토스페이먼츠 (NHN KCP·아임포트 등 PG)</td>
-            <td>결제 처리, 결제 기록 보관</td>
+            <td>토스페이먼츠</td>
+            <td>결제 처리 및 결제 기록 보관</td>
+            <td>주문번호, 결제 금액·수단, 결제 승인 정보</td>
           </tr>
           <tr>
-            <td>인쇄·배송 위탁사</td>
+            <td>Resend, Inc.</td>
+            <td>주문·가입·선물 안내 등 이메일 발송</td>
+            <td>수신자 이메일, 이름, 메일 본문의 주문 정보</td>
+          </tr>
+          <tr>
+            <td>Storige(스토리지)</td>
+            <td>인쇄용 파일 처리·검증</td>
+            <td>업로드 사진, 편집 결과물(PDF)</td>
+          </tr>
+          <tr>
+            <td>Upstash, Inc.</td>
+            <td>요청 빈도 제한(부정 이용 방지)</td>
+            <td>접속 IP 등 요청 식별 정보</td>
+          </tr>
+          <tr>
+            <td>카카오</td>
+            <td>카카오 로그인(이용자가 선택한 경우)</td>
+            <td>카카오 계정 식별 정보, 닉네임, 프로필 사진, 이메일</td>
+          </tr>
+          <tr>
+            <td>인쇄·배송 협력업체(계약 시 고지)</td>
             <td>주문 제작, 송장 발행, 배송</td>
+            <td>수령인, 연락처, 주소, 배송 메모, 인쇄용 파일</td>
           </tr>
         </tbody>
       </table>
+
+      <p>
+        위탁 계약 체결 시 개인정보가 안전하게 처리되도록 관리·감독합니다. 인쇄·배송
+        협력업체의 상호는 확정되는 대로 본 방침에 고지합니다.
+      </p>
+
+      <h3>개인정보의 국외 이전</h3>
+      <p>
+        회사는 서비스 제공을 위해 다음과 같이 개인정보를 국외 사업자의 시스템에
+        저장·처리합니다. 이용자는 국외 이전을 거부할 수 있으나, 서비스 제공에
+        필수적이므로 거부하시는 경우 회원가입·주문 등 서비스 이용이 제한됩니다.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>이전받는 자</th>
+            <th>이전 국가(위치)</th>
+            <th>이전 항목</th>
+            <th>이전 목적 및 보유 기간</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Supabase, Inc.</td>
+            <td>데이터 저장 위치: 대한민국 서울 리전. 그 외 운영·기술 지원 과정의 처리 국가는 미국 등 서비스 제공 리전</td>
+            <td>이메일, 프로필, 주문·배송 정보, 업로드 사진</td>
+            <td>데이터베이스·인증·파일 저장 / 회원 탈퇴 시 또는 위 보존 기간 종료 시까지</td>
+          </tr>
+          <tr>
+            <td>Vercel, Inc.</td>
+            <td>서버리스 함수 실행: 대한민국 서울 리전. CDN 등 그 외 처리: 미국 등 서비스 제공 리전</td>
+            <td>접속 IP, 요청 기록</td>
+            <td>웹 서비스 호스팅 / 위탁 계약 종료 시 또는 서비스 로그 보관 기간까지</td>
+          </tr>
+          <tr>
+            <td>Resend, Inc.</td>
+            <td>미국 등 서비스 제공 리전</td>
+            <td>수신자 이메일, 이름, 메일 본문의 주문 정보</td>
+            <td>이메일 발송 / 발송 기록 보관 기간까지</td>
+          </tr>
+          <tr>
+            <td>Upstash, Inc.</td>
+            <td>미국 등 서비스 제공 리전</td>
+            <td>접속 IP 등 요청 식별 정보</td>
+            <td>요청 빈도 제한 / 단기 저장 후 자동 만료</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        국외 이전과 관련한 문의 및 이전 거부는 아래 개인정보 보호책임자(고객센터{" "}
+        {CUSTOMER_CENTER_TEL})에게 요청하실 수 있습니다. 각 사업자의 이전 방법
+        (네트워크 전송)과 일시는 서비스 이용 시점에 이루어집니다.
+      </p>
 
       <h2 id="section-5">5. 개인정보의 제3자 제공</h2>
       <p>
@@ -150,8 +260,8 @@ export default function PrivacyPage() {
       </ul>
       <p>
         권리 행사는 마이페이지(<a href="/mypage/account">계정 관리</a>) 또는
-        개인정보 보호책임자에게 서면·전자우편 등으로 요청하실 수 있으며, 회사는
-        지체 없이 조치합니다.
+        개인정보 보호책임자에게 서면 또는 전화({CUSTOMER_CENTER_TEL})로 요청하실
+        수 있으며, 회사는 지체 없이 조치합니다.
       </p>
 
       <h3>회원 탈퇴 절차</h3>
@@ -182,17 +292,36 @@ export default function PrivacyPage() {
         <li>업로드 단계에서 EXIF의 GPS 좌표 자동 제거</li>
       </ul>
 
-      <h2 id="section-8">8. 쿠키 및 행태정보</h2>
+      <h2 id="section-8">8. 개인정보의 파기 절차 및 방법</h2>
+      <ul>
+        <li>
+          <strong>파기 절차:</strong> 보유 기간이 끝나거나 처리 목적이 달성된
+          개인정보는 파기 사유가 발생한 날로부터 지체 없이(법령상 보존 의무가
+          있는 정보는 해당 기간 경과 후) 파기합니다.
+        </li>
+        <li>
+          <strong>파기 방법:</strong> 전자적 파일 형태의 정보는 복구할 수 없는
+          방법으로 삭제하며(탈퇴 시 프로필 익명화 포함), 종이 문서는 분쇄하거나
+          소각합니다.
+        </li>
+        <li>
+          법령에 따라 보존해야 하는 정보는 다른 개인정보와 분리하여 보관합니다.
+        </li>
+      </ul>
+
+      <h2 id="section-9">9. 쿠키 및 행태정보</h2>
       <p>
         회사는 로그인 세션 유지를 위해 필수 쿠키만을 사용하며, 광고·추적 목적의
         제3자 쿠키는 사용하지 않습니다. 이용자는 브라우저 설정을 통해 쿠키를
         거부할 수 있으나, 이 경우 일부 서비스 이용이 제한될 수 있습니다.
       </p>
 
-      <h2 id="section-9">9. 개인정보 보호책임자</h2>
+      <h2 id="section-10">10. 개인정보 보호책임자</h2>
       <ul>
-        <li>이름: 개인정보 보호책임자</li>
-        <li>이메일: privacy@100pbooks.example (실제 운영 시 갱신 예정)</li>
+        <li>
+          성명: {LEGAL_BUSINESS_INFO.ceo} (대표, {LEGAL_BUSINESS_INFO.name})
+        </li>
+        <li>연락처: 고객센터 {CUSTOMER_CENTER_TEL}</li>
       </ul>
       <p>
         개인정보 침해와 관련한 신고·상담이 필요하신 경우 아래 기관에
@@ -205,10 +334,10 @@ export default function PrivacyPage() {
         <li>경찰청 사이버수사국 ― 국번없이 182 / ecrm.cyber.go.kr</li>
       </ul>
 
-      <h2 id="section-10">10. 처리방침의 변경</h2>
+      <h2 id="section-11">11. 처리방침의 변경</h2>
       <p>
         본 처리방침은 시행일자 이전에 변경 사항이 있는 경우 홈페이지를 통해
-        사전 공지합니다.
+        사전 공지합니다. 본 방침은 2026년 11월 20일부터 시행합니다.
       </p>
     </LegalArticle>
   );

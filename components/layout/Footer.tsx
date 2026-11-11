@@ -3,18 +3,7 @@ import Link from "next/link";
 import { getSiteContent } from "@/lib/content/get";
 // 고객센터 대표 번호 — 법정 고지 성격이라 CMS(site_content)가 아니라 코드에 고정한다(주문 안내와 공유).
 import { CUSTOMER_CENTER_TEL, CUSTOMER_CENTER_TEL_HREF } from "@/lib/orders/customer-center";
-
-/** 사업자 정보 — 전자상거래법 제10조 표시 의무 (2026-11-07 오너 제공). CMS 편집으로 누락되지 않게 코드에 고정한다. */
-const BUSINESS_INFO = {
-  name: "더스토리지",
-  ceo: "조요한",
-  registrationNo: "274-31-01564",
-  mailOrderNo: "제 2025-고양덕양구-2782호",
-  address: "경기도 고양시 덕양구 통일로140 삼송테크노밸리 B동 4층 422호",
-} as const;
-
-/** 공정위 사업자정보 공개 페이지 — 사업자등록번호로 통신판매업 신고 내용을 조회한다. */
-const BUSINESS_INFO_CHECK_URL = `https://www.ftc.go.kr/bizCommPop.do?wrkr_no=${BUSINESS_INFO.registrationNo.replace(/-/g, "")}`;
+import { BUSINESS_INFO, BUSINESS_INFO_CHECK_URL } from "@/lib/legal/business-info";
 
 export default async function Footer() {
   const year = new Date().getFullYear();

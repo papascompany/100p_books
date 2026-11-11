@@ -1,13 +1,32 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  basePriceForSize,
   calcOrderAmount,
   clampPointsForMinPayment,
   detectOrderPricingDrift,
+  FALLBACK_BASE_PRICE,
   MIN_PAYMENT_AMOUNT,
+  normalizeBookSizeName,
   POINTS_UNIT,
   quoteOrder,
 } from "./pricing";
+
+describe("basePriceForSize — 운영 사이즈 이름 매칭(2026-11-11)", () => {
+  it("운영 이름 A5 · 14.5×14.5 · 21×21 이 모두 표에서 매칭된다", () => {
+    expect(basePriceForSize("A5")).toBe(18000);
+    expect(basePriceForSize("14.5×14.5")).toBe(20000);
+    expect(basePriceForSize("21×21")).toBe(25000);
+  });
+  it("cm·공백·x 표기 차이를 흡수한다", () => {
+    expect(normalizeBookSizeName(" 14.5 x 14.5cm ")).toBe("14.5×14.5");
+    expect(basePriceForSize("21X21cm")).toBe(25000);
+    expect(basePriceForSize("20×20cm")).toBe(25000);
+  });
+  it("표에 없는 이름은 기본가", () => {
+    expect(basePriceForSize("30×30")).toBe(FALLBACK_BASE_PRICE);
+  });
+});
 
 describe("calcOrderAmount — 단가", () => {
   it("A5 50p 1권 — 기본 단가 18000, surcharge 0", () => {

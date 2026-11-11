@@ -69,9 +69,11 @@ export const SITE_CONTENT_DEFAULTS: SiteContentMap = {
 
   "home.sizes": [
     {
-      name: "미니",
-      size: "96×128mm",
-      desc: "손에 쏙 들어오는 작은 책",
+      // 2026-11-11 오픈 점검: 판매하지 않는 사이즈(미니 96×128 · 스퀘어 148×148)를 보여 주고 있었다 →
+      // 운영 book_sizes(A5 · 14.5×14.5 · 21×21)와 같게. CMS(/admin/content)에 저장된 값이 있으면 그쪽이 우선.
+      name: "A5",
+      size: "148×210mm",
+      desc: "일반 노트 사이즈, 넉넉한 여백",
       ratio: "3/5",
       image:
         "https://images.unsplash.com/photo-1495640388908-05fa85288e61?w=1200&q=80",
@@ -79,7 +81,7 @@ export const SITE_CONTENT_DEFAULTS: SiteContentMap = {
     },
     {
       name: "스퀘어",
-      size: "148×148mm",
+      size: "145×145mm",
       desc: "SNS 감성 정사각형 포맷",
       ratio: "1/1",
       image:
@@ -87,13 +89,13 @@ export const SITE_CONTENT_DEFAULTS: SiteContentMap = {
       alt: "정사각형 포맷의 감성 사진집",
     },
     {
-      name: "A5",
-      size: "148×210mm",
-      desc: "일반 노트 사이즈, 넉넉한 여백",
-      ratio: "3/5",
+      name: "라지 스퀘어",
+      size: "210×210mm",
+      desc: "사진을 크게, 시원한 정사각형",
+      ratio: "1/1",
       image:
         "https://images.unsplash.com/photo-1531346878377-a5be20888e57?w=1200&q=80",
-      alt: "A5 사이즈의 펼쳐진 화보집",
+      alt: "큰 정사각형 사진집",
     },
   ],
 

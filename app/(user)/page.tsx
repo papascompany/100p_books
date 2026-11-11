@@ -1,4 +1,5 @@
 import { ArrowRight, BookOpen, CheckCircle2, Package, Star } from "lucide-react";
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -15,6 +16,11 @@ import { getSiteContentMany } from "@/lib/content/get";
 //   CMS 저장 시 revalidateTag/revalidatePath 로 즉시 갱신.
 //   Header 가 cookies() 를 안 쓰게 바뀌어 이 페이지가 진짜 정적/ISR 로 빌드됨.
 export const revalidate = 300;
+
+/** canonical 은 홈에만 둔다(루트 레이아웃에 두면 모든 페이지가 상속 — 2026-11-11 오픈 점검 M1). */
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 // ─── 컴포넌트 ──────────────────────────────────────────────────────────────
 

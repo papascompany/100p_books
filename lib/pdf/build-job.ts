@@ -12,6 +12,7 @@ import { buildCoverPdf, buildInteriorPdf, type BuildProgress } from "./build";
 import { collectFontFamilies, registerProjectFonts } from "./fonts";
 import { createJob, updateJob, type PdfJob } from "./jobs";
 import { createPhotoResolver } from "./photos";
+import { createSlotPhotoLoader } from "./slot-photo-loader";
 import { createResourceResolver } from "./resources";
 
 /**
@@ -177,8 +178,17 @@ export async function runProjectPdfBuild(
   await registerProjectFonts({ families });
 
   // 6) photo resolver + resource resolver (clipart / background)
-  const { resolve: resolvePhoto } = createPhotoResolver({
+  const { resolve: resolvePhoto, cache: photoCache } = createPhotoResolver({
     projectId: args.projectId,
+  });
+  // 같은 사진의 반복 다운로드·디코드 방지 — 렌더 순서(내지 → 표지)대로 사용 계획을 세운다.
+  const slotLoader = createSlotPhotoLoader({
+    resolve: resolvePhoto,
+    docs: [
+      ...(args.target === "interior" || args.target === "all" ? pageDocs : []),
+      ...((args.target === "cover" || args.target === "all") && coverDoc ? [coverDoc] : []),
+    ],
+    releaseOriginal: (photoId) => photoCache.delete(photoId),
   });
   const resourceResolver = createResourceResolver();
 
@@ -226,6 +236,7 @@ export async function runProjectPdfBuild(
         pages: pageDocs,
         bookSize,
         resolveImageUrl: resolvePhoto,
+        loadSlotPhoto: slotLoader.load,
         resolveBackgroundUrl: resourceResolver.resolveBackground,
         resolveClipart: resourceResolver.resolveClipart,
         meta: args.meta ?? {
@@ -276,6 +287,7 @@ export async function runProjectPdfBuild(
         bookSize,
         pageCount: interiorPageCount,
         resolveImageUrl: resolvePhoto,
+        loadSlotPhoto: slotLoader.load,
         resolveBackgroundUrl: resourceResolver.resolveBackground,
         resolveClipart: resourceResolver.resolveClipart,
         meta: args.meta ?? {

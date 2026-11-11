@@ -59,6 +59,13 @@ export const PAGE_JPEG_QUALITY = 90;
 /** 사진 LRU 캐시 한도 (byte). */
 export const PHOTO_CACHE_MAX_BYTES = 100 * 1024 * 1024;
 
+/**
+ * 슬롯 크기로 줄인 사진(RGBA 캔버스) 캐시 한도 (byte) — lib/pdf/slot-photo-loader.ts.
+ *   collage-6 20×20 슬롯(657×886) 한 장 ≈ 2.3MB → 약 70장. 같은 사진의 반복 다운로드·디코드를 없앤다.
+ *   원본 캐시는 축소 결과가 남은 사진의 원본을 놓으므로 둘의 합이 실제로 동시에 차는 일은 드물다.
+ */
+export const SLOT_RASTER_CACHE_MAX_BYTES = 160 * 1024 * 1024;
+
 /** crop mark 길이 (mm). */
 export const CROP_MARK_LEN_MM = 4;
 
