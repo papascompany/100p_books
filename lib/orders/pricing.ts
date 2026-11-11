@@ -2,7 +2,7 @@
  * 주문 가격 계산.
  *
  * 단가 정책 (KRW):
- *   - 책 사이즈별 기본 단가 (A5, 14.5×14.5, 20×20).
+ *   - 책 사이즈별 기본 단가 (A5 18,000 · 14.5×14.5 20,000 · 21×21 25,000).
  *   - 50p 이상부터 페이지당 200원 추가.
  *   - 수량 할인: 2개+ 5%, 5개+ 10%.
  *
@@ -15,15 +15,41 @@
 import type { DiscountCode } from "@/lib/db/types";
 import { computeDiscountAmount } from "@/lib/discounts/amount";
 
-/** 책 사이즈별 단가 (KRW) — book_sizes.name 기반 매칭. */
+/**
+ * 책 사이즈별 단가 (KRW) — 키는 `normalizeBookSizeName` 으로 정규화한 book_sizes.name.
+ *
+ * 2026-11-11 오픈 점검: 운영 이름은 `A5` · `14.5×14.5` · `21×21` 인데 표의 키가 `14.5×14.5cm`·`20×20cm` 라
+ * A5 외에는 매칭이 실패해 기본가(20,000원)로 결제되고 있었다. 이름 표기 차이(cm·공백·x)에 흔들리지 않게
+ * 정규화 후 매칭한다. 21×21 = 25,000원(오너 결정 2026-11-11). `20×20` 은 시드·옛 이름 호환용.
+ */
 export const BASE_PRICE_BY_SIZE: Record<string, number> = {
   A5: 18000,
-  "14.5×14.5cm": 20000,
-  "20×20cm": 25000,
+  "14.5×14.5": 20000,
+  "21×21": 25000,
+  "20×20": 25000,
 };
 
 /** book_sizes.name 매칭이 실패할 때 사용할 기본 단가. */
 export const FALLBACK_BASE_PRICE = 20000;
+
+/** 사이즈 이름 정규화 — 앞뒤·내부 공백 제거, 끝의 `cm` 제거, x/X/* → ×. */
+export function normalizeBookSizeName(name: string): string {
+  return name
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/cm$/i, "")
+    .replace(/[xX*]/g, "×");
+}
+
+/** 사이즈 이름 → 1권 기본 단가. 표에 없는 이름은 기본가(서버 로그로 드러나게 경고). */
+export function basePriceForSize(name: string): number {
+  const price = BASE_PRICE_BY_SIZE[normalizeBookSizeName(name)];
+  if (price === undefined) {
+    console.warn(`[pricing] 단가표에 없는 책 사이즈 — 기본가 적용: ${JSON.stringify(name)}`);
+    return FALLBACK_BASE_PRICE;
+  }
+  return price;
+}
 
 /** 페이지 추가 단가 임계 페이지 수 (이상부터 surcharge 발생). */
 export const SURCHARGE_PAGE_THRESHOLD = 50;
@@ -73,8 +99,7 @@ export interface CalcOrderAmountResult {
 export function calcOrderAmount(
   args: CalcOrderAmountArgs,
 ): CalcOrderAmountResult {
-  const unit =
-    BASE_PRICE_BY_SIZE[args.bookSize] ?? FALLBACK_BASE_PRICE;
+  const unit = basePriceForSize(args.bookSize);
 
   const extraPages = Math.max(0, args.pageCount - SURCHARGE_PAGE_THRESHOLD);
   const surcharge = extraPages * SURCHARGE_PER_PAGE;

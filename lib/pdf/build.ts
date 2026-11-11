@@ -9,7 +9,8 @@ import type { PageDoc } from "@/lib/layout/types";
 
 import { mmToPt, RENDER_CONCURRENCY } from "./constants";
 import { drawCropMarks } from "./crop-mark";
-import { renderPageToJpeg, type RenderContext } from "./render-page";
+import { PageCanvasPool, renderPageToJpeg, type RenderContext } from "./render-page";
+import { createSlotPhotoLoader } from "./slot-photo-loader";
 
 export interface BuildProgress {
   /** 완료된 페이지 수. */
@@ -24,6 +25,11 @@ export interface BuildArgsBase {
   resolveImageUrl: RenderContext["resolveImageUrl"];
   resolveBackgroundUrl?: RenderContext["resolveBackgroundUrl"];
   resolveClipart?: RenderContext["resolveClipart"];
+  /**
+   * 사진 슬롯 로더 — 빌드 잡이 내지·표지에 같은 인스턴스를 넘긴다(build-job.ts).
+   * 내지는 없으면 pages 기준 로더를 만들어 쓰고, 표지는 없으면 기존 경로.
+   */
+  loadSlotPhoto?: RenderContext["loadSlotPhoto"];
   onProgress?: (p: BuildProgress) => void;
   /** PDF 메타데이터. */
   meta?: { title?: string; author?: string };
@@ -56,6 +62,11 @@ export async function buildInteriorPdf(args: BuildInteriorArgs): Promise<Buffer>
   const total = args.pages.length;
   const renderCtx: RenderContext = {
     resolveImageUrl: args.resolveImageUrl,
+    loadSlotPhoto:
+      args.loadSlotPhoto ??
+      createSlotPhotoLoader({ resolve: args.resolveImageUrl, docs: args.pages }).load,
+    // 페이지 캔버스 재사용 — native 픽셀 메모리가 GC 시점에 묶이지 않게 (render-page.ts PageCanvasPool).
+    canvasPool: new PageCanvasPool(),
     resolveBackgroundUrl: args.resolveBackgroundUrl,
     resolveClipart: args.resolveClipart,
   };
@@ -142,6 +153,7 @@ export async function buildCoverPdf(args: BuildCoverArgs): Promise<Buffer> {
   args.onProgress?.({ done: 0, total: 1, phase: "render" });
   const jpeg = await renderPageToJpeg(args.coverDoc, {
     resolveImageUrl: args.resolveImageUrl,
+    loadSlotPhoto: args.loadSlotPhoto,
     resolveBackgroundUrl: args.resolveBackgroundUrl,
     resolveClipart: args.resolveClipart,
   });

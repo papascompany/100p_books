@@ -90,9 +90,8 @@ export const metadata: Metadata = {
   // 아이콘은 App Router 파일 규약(app/icon.png · app/apple-icon.png)이 자동으로 링크한다.
   // 여기서 직접 지정하지 않는다 — 예전에는 `/favicon.ico` 를 가리켰는데 그 파일이 없어
   // 운영에서 404 였다(2026-08-08 실측).
-  alternates: {
-    canonical: "/",
-  },
+  // canonical 은 루트 레이아웃에 두지 않는다 — 모든 하위 페이지가 상속해 /terms·/privacy 등이
+  // 전부 홈을 canonical 로 가리켰다(2026-11-11 오픈 점검 M1). 홈만 app/(user)/page.tsx 에서 지정.
   openGraph: {
     type: "website",
     siteName: "100p Books",

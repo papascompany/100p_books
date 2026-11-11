@@ -19,8 +19,9 @@ import type {
   TextObject,
 } from "@/lib/layout/types";
 
-import { mmToPx, ptToPx, PAGE_JPEG_QUALITY, PRINT_DPI } from "./constants";
+import { mmToPx, ptToPx, PAGE_JPEG_QUALITY, PRINT_DPI, RENDER_CONCURRENCY } from "./constants";
 import { decodePhotoForSlot, type SlotImage } from "./photo-downscale";
+import type { LoadSlotPhoto } from "./slot-photo-loader";
 import { wrapMixedText } from "./text-wrap";
 
 /**
@@ -40,6 +41,43 @@ import { wrapMixedText } from "./text-wrap";
  *   - contain: 슬롯 안에 비율 유지하여 들어가도록.
  */
 
+/**
+ * 빌드 1회용 페이지 캔버스 재사용 풀.
+ *
+ * 왜 필요한가 (2026-11-11 슬롯 축소 캐시 도입 측정):
+ *   페이지 캔버스(20×20 300dpi ≈ 2409² RGBA ≈ 23MB)의 픽셀은 V8 이 모르는 native 메모리라, 다 쓴 캔버스는
+ *   다른 JS 할당이 GC 를 부를 때까지 남는다. 예전에는 페이지마다 원본(수~20MB Buffer)을 받느라 GC 가 자주 돌았지만,
+ *   축소 결과 캐시로 다운로드가 줄자 GC 가 늦어져 버려진 페이지 캔버스가 쌓였다(collage-6 48MP 실측 최대 RSS
+ *   820 → 919~1,294MB, 강제 GC 시 825MB). 같은 크기 캔버스를 `reset()` 후 다시 쓰면 GC 시점과 무관해진다.
+ *
+ *   `reset()` 은 비트맵을 투명으로 비우고 모든 상태(변환·clip·스타일·스무딩)를 초기값으로 되돌린다 —
+ *   새로 만든 캔버스와 같은 출발점이라 렌더 픽셀이 같다.
+ *   크기별로 최대 `maxPerSize` 개만 보관한다(동시 렌더 수 이상은 의미 없음).
+ */
+export class PageCanvasPool {
+  private readonly free = new Map<string, Canvas[]>();
+
+  constructor(private readonly maxPerSize: number = RENDER_CONCURRENCY) {}
+
+  acquire(width: number, height: number): Canvas {
+    const list = this.free.get(`${width}x${height}`);
+    const c = list?.pop();
+    if (c) {
+      c.getContext("2d").reset();
+      return c;
+    }
+    return createCanvas(width, height);
+  }
+
+  release(canvas: Canvas): void {
+    const key = `${canvas.width}x${canvas.height}`;
+    const list = this.free.get(key) ?? [];
+    if (list.length >= this.maxPerSize) return;
+    list.push(canvas);
+    this.free.set(key, list);
+  }
+}
+
 export interface RenderContext {
   /** 출력 DPI. 기본 300. */
   dpi?: number;
@@ -47,6 +85,13 @@ export interface RenderContext {
   highQuality?: boolean;
   /** photoId → 원본 buffer (jpeg/png/webp). */
   resolveImageUrl: (photoIdOrUrl: string) => Promise<Buffer>;
+  /**
+   * 사진 슬롯 디코드(선택) — 빌드 단위 축소 결과 캐시(lib/pdf/slot-photo-loader.ts).
+   * 없으면 매번 resolveImageUrl + decodePhotoForSlot. 어느 쪽이든 픽셀은 같다.
+   */
+  loadSlotPhoto?: LoadSlotPhoto;
+  /** 페이지 캔버스 재사용(선택) — 빌드 단위. 없으면 페이지마다 새 캔버스. */
+  canvasPool?: PageCanvasPool;
   /** 배경 이미지 URL/photoId 처리 (선택). */
   resolveBackgroundUrl?: (input: {
     photoId?: string;
@@ -64,7 +109,9 @@ export async function renderPageToPng(
   ctx: RenderContext,
 ): Promise<Buffer> {
   const canvas = await renderPageToCanvas(doc, ctx);
-  return canvas.toBuffer("image/png");
+  const out = canvas.toBuffer("image/png");
+  ctx.canvasPool?.release(canvas);
+  return out;
 }
 
 /**
@@ -80,7 +127,9 @@ export async function renderPageToJpeg(
   quality: number = PAGE_JPEG_QUALITY,
 ): Promise<Buffer> {
   const canvas = await renderPageToCanvas(doc, ctx);
-  return canvas.toBuffer("image/jpeg", quality);
+  const out = canvas.toBuffer("image/jpeg", quality);
+  ctx.canvasPool?.release(canvas);
+  return out;
 }
 
 async function renderPageToCanvas(
@@ -95,7 +144,7 @@ async function renderPageToCanvas(
   const wPx = Math.round(mmToPx(totalWmm, dpi));
   const hPx = Math.round(mmToPx(totalHmm, dpi));
 
-  const canvas = createCanvas(wPx, hPx);
+  const canvas = ctx.canvasPool ? ctx.canvasPool.acquire(wPx, hPx) : createCanvas(wPx, hPx);
   const cx = canvas.getContext("2d");
 
   // 부동소수 정밀: integer translate 권장 — 우리 좌표는 모두 mm 단위라 충돌 적음.
@@ -192,8 +241,12 @@ async function drawPhoto(
   // 슬롯에 그려지는 크기까지 먼저 줄여 디코드한다(lib/pdf/photo-downscale.ts — collage-6 메모리 한도 대응).
   let img: SlotImage;
   try {
-    const buf = await ctx.resolveImageUrl(obj.photoId);
-    img = (await decodePhotoForSlot(buf, { wPx, hPx }, obj.cropMode)).image;
+    if (ctx.loadSlotPhoto) {
+      img = await ctx.loadSlotPhoto(obj.photoId, { wPx, hPx }, obj.cropMode);
+    } else {
+      const buf = await ctx.resolveImageUrl(obj.photoId);
+      img = (await decodePhotoForSlot(buf, { wPx, hPx }, obj.cropMode)).image;
+    }
   } catch (e) {
     // 이미지 로드 실패 → placeholder
     drawPhotoPlaceholder(cx, xPx, yPx, wPx, hPx, radiusPx, obj.rotation);

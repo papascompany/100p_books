@@ -68,42 +68,82 @@ export function downscaleTarget(
   return { width: Math.max(1, Math.round(slot.wPx)), height: Math.max(1, Math.round(slot.hPx)) };
 }
 
+/** 축소 판단에 쓰는 원본 헤더 정보 (사진별로 한 번 읽어 재사용할 수 있다). */
+export interface SlotPhotoMeta {
+  width: number;
+  height: number;
+  orientation: number;
+}
+
+/** 헤더만 읽어 크기·EXIF 방향을 얻는다. sharp 로더 차단·손상이면 throw. */
+export async function readSlotPhotoMeta(buf: Buffer): Promise<SlotPhotoMeta> {
+  const sharp = await loadHardenedSharp();
+  const meta = await sharp(buf, UNTRUSTED_INPUT_OPTIONS).metadata();
+  return {
+    width: meta.width ?? 0,
+    height: meta.height ?? 0,
+    orientation: meta.orientation ?? 1,
+  };
+}
+
+/**
+ * 축소 경로를 탈 때의 목표 크기 — 아니면 null(원본 loadImage 경로).
+ *   크기 정보 없음 · EXIF orientation≠1 · 배율 ≥ 1(업스케일) 이면 null.
+ */
+export function slotDownscalePlan(
+  meta: SlotPhotoMeta,
+  slot: { wPx: number; hPx: number },
+  cropMode: "cover" | "contain" | undefined,
+): { width: number; height: number } | null {
+  if (!(meta.width > 0 && meta.height > 0 && meta.orientation === 1)) return null;
+  const s = slotScale(meta, slot, cropMode);
+  if (s >= 1) return null;
+  return downscaleTarget(meta, slot, cropMode);
+}
+
+/** 목표 크기로 줄인 RGBA 를 캔버스에 올린다(재인코딩 없음). */
+export async function resizePhotoToCanvas(
+  buf: Buffer,
+  target: { width: number; height: number },
+  cropMode: "cover" | "contain" | undefined,
+): Promise<Canvas> {
+  const sharp = await loadHardenedSharp();
+  const { data, info } = await sharp(buf, UNTRUSTED_INPUT_OPTIONS)
+    .resize(target.width, target.height, {
+      fit: cropMode === "contain" ? "inside" : "cover",
+      position: "centre",
+      kernel: "lanczos3",
+    })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const canvas = createCanvas(info.width, info.height);
+  const cx = canvas.getContext("2d");
+  const imageData = cx.createImageData(info.width, info.height);
+  imageData.data.set(data);
+  cx.putImageData(imageData, 0, 0);
+  return canvas;
+}
+
+export function warnDownscaleFailure(e: unknown): void {
+  console.warn(
+    `[pdf/render] 사진 슬롯 축소 실패 — 원본 디코드로 진행: ${e instanceof Error ? e.message : String(e)}`,
+  );
+}
+
 export async function decodePhotoForSlot(
   buf: Buffer,
   slot: { wPx: number; hPx: number },
   cropMode: "cover" | "contain" | undefined,
 ): Promise<SlotDecodeResult> {
   try {
-    const sharp = await loadHardenedSharp();
-    const meta = await sharp(buf, UNTRUSTED_INPUT_OPTIONS).metadata();
-    const width = meta.width ?? 0;
-    const height = meta.height ?? 0;
-    const orientation = meta.orientation ?? 1;
-    if (width > 0 && height > 0 && orientation === 1) {
-      const s = slotScale({ width, height }, slot, cropMode);
-      if (s < 1) {
-        const target = downscaleTarget({ width, height }, slot, cropMode);
-        const { data, info } = await sharp(buf, UNTRUSTED_INPUT_OPTIONS)
-          .resize(target.width, target.height, {
-            fit: cropMode === "contain" ? "inside" : "cover",
-            position: "centre",
-            kernel: "lanczos3",
-          })
-          .ensureAlpha()
-          .raw()
-          .toBuffer({ resolveWithObject: true });
-        const canvas = createCanvas(info.width, info.height);
-        const cx = canvas.getContext("2d");
-        const imageData = cx.createImageData(info.width, info.height);
-        imageData.data.set(data);
-        cx.putImageData(imageData, 0, 0);
-        return { image: canvas, downscaled: true };
-      }
+    const meta = await readSlotPhotoMeta(buf);
+    const target = slotDownscalePlan(meta, slot, cropMode);
+    if (target) {
+      return { image: await resizePhotoToCanvas(buf, target, cropMode), downscaled: true };
     }
   } catch (e) {
-    console.warn(
-      `[pdf/render] 사진 슬롯 축소 실패 — 원본 디코드로 진행: ${e instanceof Error ? e.message : String(e)}`,
-    );
+    warnDownscaleFailure(e);
   }
   return { image: await loadImage(buf), downscaled: false };
 }

@@ -16,10 +16,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 1,
     },
     {
-      url: `${base}/login`,
+      url: `${base}/gallery`,
       lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.5,
+      changeFrequency: "weekly",
+      priority: 0.6,
     },
     {
       url: `${base}/terms`,
