@@ -17,8 +17,8 @@ vi.mock("@/lib/db/admin", () => {
     const q = {
       select: () => q,
       eq: () => q,
-      then: (resolve: (v: { count: number; error: null }) => unknown) =>
-        Promise.resolve({ count: 1, error: null }).then(resolve),
+      then: (resolve: (v: { count: number; data: Array<{ id: string; name: string }>; error: null }) => unknown) =>
+        Promise.resolve({ count: 1, data: [{ id: "s1", name: "A5" }], error: null }).then(resolve),
     };
     return q;
   }

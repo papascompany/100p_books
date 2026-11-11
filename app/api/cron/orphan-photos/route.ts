@@ -188,12 +188,18 @@ export async function GET(req: Request) {
     const scanned = plan.originals.scanned + plan.thumbs.scanned;
     const orphans = plan.originals.orphans + plan.thumbs.orphans;
 
-    // resources 버킷(관리자 업로드 finalize 누락 객체) — 실패해도 사진 회수 결과는 그대로 반환한다.
+    // resources 버킷(관리자 업로드 finalize 누락 객체) — 실패해도 사진 회수는 그대로 진행·반환한다
+    // (예외를 여기서 흡수 — 바깥 try 로 빠지면 사진 회수까지 500 으로 끝났다, 2026-11-11 보안 리뷰).
+    // 삭제·list 상한은 버킷 그룹(사진 / 리소스)별로 따로 적용된다.
     const resources = await reapOrphanResources(admin, {
       cutoffMs,
       maxListCalls,
       maxDeletes,
       dryRun,
+    }).catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn("[cron/orphan-photos] resources 회수 실패 — 사진 회수는 계속", message);
+      return { ok: false as const, error: message };
     });
 
     if (dryRun) {

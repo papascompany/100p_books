@@ -6,6 +6,7 @@ import {
   clampPointsForMinPayment,
   detectOrderPricingDrift,
   FALLBACK_BASE_PRICE,
+  lookupBasePrice,
   MIN_PAYMENT_AMOUNT,
   normalizeBookSizeName,
   POINTS_UNIT,
@@ -23,8 +24,14 @@ describe("basePriceForSize — 운영 사이즈 이름 매칭(2026-11-11)", () =
     expect(basePriceForSize("21X21cm")).toBe(25000);
     expect(basePriceForSize("20×20cm")).toBe(25000);
   });
-  it("표에 없는 이름은 기본가", () => {
+  it("표에 없는 이름은 lookup null · 표시용 단가는 기본가", () => {
+    expect(lookupBasePrice("30×30")).toBeNull();
+    expect(lookupBasePrice("21×21mm")).toBeNull();
     expect(basePriceForSize("30×30")).toBe(FALLBACK_BASE_PRICE);
+  });
+  it("프로토타입 키는 매칭되지 않는다", () => {
+    expect(lookupBasePrice("constructor")).toBeNull();
+    expect(lookupBasePrice("toString")).toBeNull();
   });
 });
 

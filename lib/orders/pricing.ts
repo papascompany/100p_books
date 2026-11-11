@@ -41,14 +41,25 @@ export function normalizeBookSizeName(name: string): string {
     .replace(/[xX*]/g, "×");
 }
 
-/** 사이즈 이름 → 1권 기본 단가. 표에 없는 이름은 기본가(서버 로그로 드러나게 경고). */
+/**
+ * 사이즈 이름 → 단가표 단가. 표에 없으면 null.
+ * 일반 객체 조회라 `constructor` 같은 프로토타입 키가 함수 값을 돌려주지 않도록 own 속성만 본다.
+ */
+export function lookupBasePrice(name: string): number | null {
+  const key = normalizeBookSizeName(name);
+  return Object.prototype.hasOwnProperty.call(BASE_PRICE_BY_SIZE, key)
+    ? (BASE_PRICE_BY_SIZE[key] ?? null)
+    : null;
+}
+
+/**
+ * 사이즈 이름 → 1권 기본 단가(표시·재검증용 순수 함수). 표에 없으면 기본가.
+ * 결제로 이어지는 주문 생성은 이 폴백에 기대지 않는다 — orders/create 가 `lookupBasePrice` 로
+ * 미등록 사이즈를 409 `PRICE_NOT_CONFIGURED` 로 막고, 관리자 런치 체크가 같은 판정을 경고한다
+ * (관리자가 사이즈 이름을 바꿔 조용히 기본가로 결제되는 것 방지 — 2026-11-11 보안 리뷰 MEDIUM).
+ */
 export function basePriceForSize(name: string): number {
-  const price = BASE_PRICE_BY_SIZE[normalizeBookSizeName(name)];
-  if (price === undefined) {
-    console.warn(`[pricing] 단가표에 없는 책 사이즈 — 기본가 적용: ${JSON.stringify(name)}`);
-    return FALLBACK_BASE_PRICE;
-  }
-  return price;
+  return lookupBasePrice(name) ?? FALLBACK_BASE_PRICE;
 }
 
 /** 페이지 추가 단가 임계 페이지 수 (이상부터 surcharge 발생). */
