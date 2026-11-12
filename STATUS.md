@@ -25,7 +25,27 @@
 
 ---
 
-## 🆕 최근 작업 (2026-09-17 ~ 11-10)
+## 🆕 최근 작업 (2026-09-17 ~ 11-12)
+
+### 0-37. 오픈 사전 점검(감사) 반영 + 남은 오픈 작업 (2026-11-11~12) — PR #51 rebase 병합 `6d4b458`(PR CI 3잡·Vercel 통과 — GitHub runner apt 미러 DNS 장애로 e2e/a11y 4회 실패 후 5차 재실행 통과, main CI `43163637328`·Vercel 운영 배포 통과, 운영 `/`·`/upload`·`/gallery`·`/privacy`·`/refund`·`/terms` 200 · `/admin` 307, 원격 브랜치 삭제) · 마이그레이션 없음
+
+서브에이전트 병렬(감사·법적 고지·SEO·PDF·고아 정리) + 메인 통합 + 보안 리뷰. 오너 결정(11-11): **21×21 기본가 25,000원 · 고객 연락처는 전화(02-2273-5131)만 · 개인정보 보호책임자 대표 조요한**.
+- **감사 결론(HEAD `68d7d31` 기준 NO_GO → 이번 PR 로 코드 차단 해소)**: B1 가짜 연락처 3곳, **B2 가격 매칭 실패** — 가격표 키(`"20×20cm"`)와 DB 이름(`20×20`)이 달라 20×20·21×21 이 기본값 20,000원으로 결제됐을 것. 토스 코드는 테스트/라이브 분기·하드코딩 없음(env 2개 교체 + 재배포). 오너 체크리스트(토스 라이브 13단계·도메인 12단계)와 코드 밖 확인 항목은 런북 오픈 계획 절로 옮겼다.
+- **가격**(`lib/orders/pricing.ts`): `normalizeBookSizeName`(공백·`cm`·`x/X/*` 정규화) + `lookupBasePrice`(미등록 null). 주문 생성은 단가 미등록 사이즈를 `409 PRICE_NOT_CONFIGURED` 로 **차단**(조용한 기본가 결제 방지, 보안 리뷰 MEDIUM 반영), 런치 체크에 차단 항목 `pricing`(단가 없는 활성 사이즈 나열).
+- **법적 고지**: `/privacy`·`/refund`·`/terms` — 가짜 이메일 제거·전화만, 보호책임자 조요한(대표), 환불은 "결제 대기 = 마이페이지 취소 / 결제 후 = 고객센터 전화"로 실제 절차화, 위탁 표 실제화(Supabase·Vercel·토스·Resend·Storige·Upstash·카카오·인쇄·배송 협력업체), 국외 이전·파기·선물 수신자 이메일 항목, 제4조 이메일+비밀번호/카카오, 시행일 2026-11-20, 탈퇴 불가 조건 문구 정정. 사업자 정보는 `lib/legal/business-info.ts` 단일 출처(Footer 공용). 메일 서명도 고객센터 전화.
+- **SEO**: 루트 canonical 상속 제거(홈만 `/`), `/gift/[token]`·`/share/[token]` noindex·nofollow, sitemap `/login` → `/gallery`. 랜딩 사이즈 기본값 A5·145·210(CMS 저장값이 있으면 그것이 우선 — 11-12 운영 홈에 148×210·145×145·210×210 노출 확인, 덮어쓴 값 없음).
+- **PDF 시간**: `lib/pdf/slot-photo-loader.ts` — (photoId, fit, 크기) 래스터 캐시(160MB 상한, 다음 사용 기준 축출) + 마지막 사용 후 원본 조기 해제, 내지·표지 공유. 첫 측정에서 x64 최대 RSS 가 +86~133MB 늘어 `PageCanvasPool.clear()` 를 `pdf.save` 전에 호출하도록 보정.
+  | linux-x64(amd64 에뮬, 1769MB 캡) collage-6 100p | 최대 RSS | 렌더 시간 |
+  |---|---|---|
+  | 12MP · 이번 | 1,523~1,545MB | 40~43s |
+  | 48MP · 이번 | 1,539~1,544MB | 66~74s |
+  | 12MP / 48MP · 이전 경로 | 1,492 / 1,519MB | 65.8 / 132.1s |
+  → 시간 약 절반(§0-36 의 1vCPU 48MP 296.6s → 123.1s), 메모리는 한도 87% 이내·OOM 0. 픽셀 결과 불변(test:pdf 5 OK).
+- **리소스 업로드 고아 정리**: `lib/admin/resource-orphans.ts` — `resources` 행이 참조한 적 없고 grace 지난 객체만, 참조 조회 오류 시 아무것도 안 지움, list·삭제 상한. 기존 `/api/cron/orphan-photos` 에서 호출하되 예외를 격리(사진 회수는 계속). `docs/sql/resources-bucket-limits.sql` 은 **미적용**.
+- **보안 리뷰**: MEDIUM 1(단가 미등록 시 조용한 기본가) → 주문 차단 + 런치 체크로 수정. LOW: cron 예외 격리 · 클라이언트 공유 모듈의 `console.warn` 제거 · 탈퇴 문구. 그 외 발견 없음.
+- **운영 실측(11-12)**: `/privacy` 에 02-2273-5131·조요한 노출, `example` 주소 0건 · `/terms` canonical 없음(홈만 canonical) · `/share/<uuid>` `noindex, nofollow` · sitemap 에 `/gallery`.
+- **검증**: typecheck 0 · lint 0/0 · vitest 103파일 1,674 pass / 1 skip · test:pdf 5 OK · build 성공 · PR CI 3잡·Vercel 통과.
+- **CI 함정**: 11-11 GitHub runner 의 "Install Playwright browsers"(`--with-deps` 의 apt) 단계가 `Temporary failure resolving 'azure.archive.ubuntu.com'` 으로 반복 실패(githubstatus 는 정상 표시). 코드 무관 — 다음 날 `gh run rerun --failed` 로 통과. 재발이 잦으면 apt 재시도·캐시 도입 검토.
 
 ### 0-36. 오픈 전 개발 D1~D6 (2026-11-10) — PR #50 rebase 병합 `16b2ac7`(PR·main CI 3잡·Vercel 통과, 로컬 `e2e:auth` 5 passed, 운영 `/`·`/upload`·`/projects` 200 · `/admin` 307, 원격 브랜치 삭제) · D5 는 측정만
 
