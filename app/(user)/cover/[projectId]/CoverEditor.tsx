@@ -822,7 +822,7 @@ export default function CoverEditor({
     markDirty();
   }, [commitCurrentDoc, markDirty]);
 
-  // 책등 텍스트 자동 추가 (rotation 90)
+  // 책등 텍스트 자동 추가 — 세로쓰기, 제목은 안내 문구(고객이 입력해야 인쇄)
   const addSpineText = useCallback(async () => {
     if (spineTooNarrow) {
       toast({

@@ -92,6 +92,23 @@ function tokenize(text: string): string[] {
 }
 
 /** grapheme 단위로 잘라가며 max 폭 안에 들어가도록 줄을 만든다. */
+/**
+ * 세로쓰기 줄바꿈 — 단어 경계 없이 글자(grapheme) 단위로 폭에 맞춰 채운다.
+ * fabric Textbox 의 `splitByGrapheme` 와 같은 규칙이라 편집기와 인쇄가 같은 글자 배치가 된다.
+ */
+export function wrapByGrapheme(text: string, opts: WrapOptions): string[] {
+  if (!text) return [""];
+  const lines: string[] = [];
+  for (const para of text.split(/\r?\n/)) {
+    if (para.length === 0) {
+      lines.push("");
+      continue;
+    }
+    lines.push(...graphemeSplit(para, opts.measure, opts.maxWidthPx));
+  }
+  return lines;
+}
+
 function graphemeSplit(
   text: string,
   measure: (s: string) => number,

@@ -42,6 +42,7 @@ import {
   PLACEHOLDER_TEXT_FILL,
   normalizePlaceholderText,
 } from "@/lib/layout/text-placeholder";
+import { normalizeCoverSpineText } from "@/lib/layout/cover";
 
 /** 1 inch = 25.4 mm. */
 /**
@@ -111,6 +112,8 @@ export const FABRIC_EXTRA_PROPS = [
   "placeholderText",
   "placeholderActive",
   "realFill",
+  // 세로쓰기(책등 제목) — undo 후에도 세로쓰기로 저장돼야 한다.
+  "verticalText",
 ] as const;
 
 /** 우리 커스텀 프로퍼티가 부착된 Fabric 객체 타입 (느슨). */
@@ -142,6 +145,8 @@ export interface TaggedFabricObject extends fabric.FabricObject {
   placeholderActive?: boolean;
   /** 텍스트 — 안내 문구를 흐리게 그리는 동안 보관하는 실제 글자색. */
   realFill?: string;
+  /** 텍스트 — 세로쓰기(한 글자 폭 박스 + 글자 단위 줄바꿈). */
+  verticalText?: boolean;
 }
 
 export interface PageDocToFabricCtx {
@@ -200,10 +205,12 @@ export async function applyBackgroundImageToCanvas(
  * Photo 는 비동기 로딩이라 Promise.all 로 처리.
  */
 export async function pageDocToFabric(
-  doc: PageDoc,
+  rawDoc: PageDoc,
   ctx: PageDocToFabricCtx,
 ): Promise<TaggedFabricObject[]> {
   const { dpi, photoUrls, onMissingPhoto } = ctx;
+  // 예전 형식(90° 회전) 책등 텍스트는 세로쓰기로 바꿔 연다 — PDF 렌더와 같은 변환.
+  const doc = normalizeCoverSpineText(rawDoc);
 
   const tasks = doc.objects.map(async (obj) => {
     if (obj.type === "photo") {
@@ -358,6 +365,7 @@ function buildText(raw: TextObject, dpi: number): TaggedFabricObject {
   });
 
   const tagged = tb as TaggedFabricObject;
+  if (obj.vertical) tagged.verticalText = true;
   // 빈 텍스트면 안내 문구를 흐리게 표시한다(저장되는 text 는 비어 있다).
   // 편집 시작·종료 때의 처리는 text-placeholder-behavior.ts(FabricStage 가 연결).
   if (obj.placeholder) {
@@ -695,6 +703,7 @@ function serializeOne(
             : undefined,
     };
     if (tb.placeholderText) txt.placeholder = tb.placeholderText;
+    if (tb.verticalText) txt.vertical = true;
     if (rotation) txt.rotation = rotation;
     return txt;
   }

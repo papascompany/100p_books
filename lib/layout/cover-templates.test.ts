@@ -75,7 +75,7 @@ describe("buildCoverObjects: 5종 모두", () => {
   });
 
   it.each(ids)(
-    "%s 책등 두께 9mm(>=8mm) → rotation:90 책등 텍스트 1개 포함",
+    "%s 책등 두께 9mm(>=8mm) → 세로쓰기 책등 텍스트 1개 포함(회전 없음, 비어 있음)",
     (id) => {
       const objs = buildCoverObjects({
         templateId: id,
@@ -84,12 +84,14 @@ describe("buildCoverObjects: 5종 모두", () => {
         photoId: "p-1",
       });
       const spineTexts = objs.filter(
-        (o) => o.type === "text" && o.rotation === 90,
+        (o) => o.type === "text" && o.vertical === true,
       );
       expect(spineTexts.length).toBe(1);
       const t = spineTexts[0];
       if (t && t.type === "text") {
         expect(t.placeholder).toBe("스파인 테스트");
+        expect(t.text).toBe(""); // 고객이 입력해야 인쇄된다
+        expect(t.rotation).toBeUndefined();
       }
     },
   );
@@ -108,7 +110,7 @@ describe("buildCoverObjects: 5종 모두", () => {
         photoId: "p-1",
       });
       const spineTexts = objs.filter(
-        (o) => o.type === "text" && o.rotation === 90,
+        (o) => o.type === "text" && o.vertical === true,
       );
       expect(spineTexts.length).toBe(0);
     },
