@@ -22,7 +22,8 @@ import type {
 import { mmToPx, ptToPx, PAGE_JPEG_QUALITY, PRINT_DPI, RENDER_CONCURRENCY } from "./constants";
 import { decodePhotoForSlot, type SlotImage } from "./photo-downscale";
 import type { LoadSlotPhoto } from "./slot-photo-loader";
-import { wrapMixedText } from "./text-wrap";
+import { wrapByGrapheme, wrapMixedText } from "./text-wrap";
+import { normalizeCoverSpineText } from "@/lib/layout/cover";
 import { normalizePlaceholderText } from "@/lib/layout/text-placeholder";
 
 /**
@@ -147,9 +148,11 @@ export async function renderPageToJpeg(
 }
 
 async function renderPageToCanvas(
-  doc: PageDoc,
+  rawDoc: PageDoc,
   ctx: RenderContext,
 ): Promise<Canvas> {
+  // 예전 형식(90° 회전) 책등 텍스트는 세로쓰기로 그린다 — 편집기 로드와 같은 변환.
+  const doc = normalizeCoverSpineText(rawDoc);
   const dpi = ctx.dpi ?? PRINT_DPI;
   const bleedMm = doc.bleedMm; // 항상 2 (PageDoc 규약)
 
@@ -494,17 +497,20 @@ function drawText(cx: SKRSContext2D, raw: TextObject, dpi: number): void {
   cx.fillStyle = obj.fill || "#2b2b2b";
   cx.textBaseline = "alphabetic";
 
-  // 줄바꿈
-  const lines = wrapMixedText(obj.text || "", {
-    measure: (s) => cx.measureText(s).width,
+  // 줄바꿈 — 세로쓰기는 글자 단위(편집기 splitByGrapheme 와 동일), 그 외는 단어 단위.
+  const wrapOpts = {
+    measure: (s: string) => cx.measureText(s).width,
     maxWidthPx: wPx,
-  });
+  };
+  const lines = obj.vertical
+    ? wrapByGrapheme(obj.text || "", wrapOpts)
+    : wrapMixedText(obj.text || "", wrapOpts);
   const lineHeightPx = fontSizePx * (obj.lineHeight ?? 1.4);
   const totalHPx = lineHeightPx * lines.length;
 
   // align (가로)
   let tx = -wPx / 2;
-  if (obj.align === "center") {
+  if (obj.align === "center" || obj.vertical) {
     cx.textAlign = "center";
     tx = 0;
   } else if (obj.align === "right") {

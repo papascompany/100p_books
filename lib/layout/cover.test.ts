@@ -7,6 +7,8 @@ import {
   calcCoverDimensions,
   isCoverFormatOutdated,
   SPINE_TEXT_MIN_MM,
+  normalizeCoverSpineText,
+  verticalTextWidthMm,
 } from "./cover";
 import { PAGEDOC_VERSION } from "./types";
 
@@ -113,10 +115,11 @@ describe("buildDefaultCoverDoc", () => {
         o.placeholder.length > 0,
     );
     expect(spineTexts.length).toBeGreaterThanOrEqual(1);
-    // 책등 텍스트는 rotation: 90 (시계방향) 이어야 함
+    // 책등 텍스트는 세로쓰기(회전 없음)
     const first = spineTexts[0];
     if (first && first.type === "text") {
-      expect(first.rotation).toBe(90);
+      expect(first.vertical).toBe(true);
+      expect(first.rotation).toBeUndefined();
     }
     // 9mm > 8mm threshold sanity
     expect(SPINE_TEXT_MIN_MM).toBeLessThanOrEqual(9);
@@ -176,7 +179,7 @@ describe("buildSpineText", () => {
     expect(out).toBeNull();
   });
 
-  it("spineMm >= SPINE_TEXT_MIN_MM 이면 rotation 90 텍스트", () => {
+  it("spineMm >= SPINE_TEXT_MIN_MM 이면 세로쓰기 텍스트", () => {
     const out = buildSpineText({
       text: "내 책 제목",
       spineMm: 9,
@@ -187,16 +190,19 @@ describe("buildSpineText", () => {
     expect(out).not.toBeNull();
     if (!out) return;
     expect(out.type).toBe("text");
-    expect(out.rotation).toBe(90);
+    expect(out.vertical).toBe(true);
+    expect(out.rotation).toBeUndefined();
+    expect(out.text).toBe("");
     expect(out.placeholder).toBe("내 책 제목");
     // 박스 중심 = (책등 중앙, 책 높이 중앙) 이어야 함
     const cxMm = out.leftMm + out.widthMm / 2;
     const cyMm = out.topMm + out.heightMm / 2;
     expect(cxMm).toBeCloseTo(150 + 9 / 2, 5);
     expect(cyMm).toBeCloseTo(210 / 2, 5);
-    // 박스 크기 — 회전 전 가로(=책 높이의 70%)/세로(=책등 폭의 80%)
-    expect(out.widthMm).toBeCloseTo(210 * 0.7, 5);
-    expect(out.heightMm).toBeCloseTo(9 * 0.8, 5);
+    // 박스 크기 — 폭 = 한 글자 남짓(9pt ≈ 3.18mm × 1.05), 높이 = 책 높이의 80%
+    expect(out.widthMm).toBeCloseTo(verticalTextWidthMm(9), 5);
+    expect(out.widthMm).toBeLessThan(9); // 책등 안에 들어간다
+    expect(out.heightMm).toBeCloseTo(210 * 0.8, 5);
   });
 
   it("text 가 비어있어도 placeholder 는 fallback '제목'", () => {
@@ -228,5 +234,65 @@ describe("isCoverFormatOutdated", () => {
   });
   it("구버전 2배 폭 표지는 true", () => {
     expect(isCoverFormatOutdated({ bookSize: A5, pageCount: 24, coverWidthMm: 604 })).toBe(true);
+  });
+});
+
+describe("normalizeCoverSpineText — 예전 90° 회전 책등 → 세로쓰기", () => {
+  const base = {
+    version: PAGEDOC_VERSION,
+    bookSizeId: "b",
+    pageNo: 0,
+    layoutMode: "cover" as const,
+    widthMm: 309, // 뒤 150 + 책등 9 + 앞 150
+    heightMm: 210,
+    bleedMm: 2 as const,
+    backgroundColor: "#ffffff",
+  };
+  const legacySpine = {
+    type: "text" as const,
+    objectId: "spine",
+    // 회전 전 박스: 폭 = 210×0.7, 높이 = 9×0.8, 중심 (154.5, 105)
+    leftMm: 154.5 - 73.5,
+    topMm: 105 - 3.6,
+    widthMm: 147,
+    heightMm: 7.2,
+    text: "우리 여행",
+    fontFamily: "Pretendard",
+    fontSizePt: 9,
+    fill: "#2b2b2b",
+    align: "center" as const,
+    lineHeight: 1.2,
+    rotation: 90,
+  };
+  const frontTitle = {
+    ...legacySpine,
+    objectId: "front",
+    leftMm: 200,
+    topMm: 20,
+    widthMm: 100,
+    heightMm: 20,
+    rotation: 90, // 앞표지에서 돌린 글 — 책등이 아니므로 그대로
+  };
+
+  it("책등 중앙의 회전 텍스트만 세로쓰기로 바꾸고 글·중심은 유지", () => {
+    const out = normalizeCoverSpineText({ ...base, objects: [legacySpine, frontTitle] });
+    const spine = out.objects[0]!;
+    const front = out.objects[1]!;
+    if (spine.type !== "text" || front.type !== "text") throw new Error();
+    expect(spine.vertical).toBe(true);
+    expect(spine.rotation).toBeUndefined();
+    expect(spine.text).toBe("우리 여행");
+    expect(spine.leftMm + spine.widthMm / 2).toBeCloseTo(154.5, 5);
+    expect(spine.topMm + spine.heightMm / 2).toBeCloseTo(105, 5);
+    expect(spine.widthMm).toBeCloseTo(verticalTextWidthMm(9), 5);
+    expect(front.rotation).toBe(90);
+    expect(front.vertical).toBeUndefined();
+  });
+
+  it("내지 문서·이미 세로쓰기·해당 없음이면 같은 객체를 돌려준다", () => {
+    const interior = { ...base, layoutMode: "polaroid" as const, objects: [legacySpine] };
+    expect(normalizeCoverSpineText(interior)).toBe(interior);
+    const already = { ...base, objects: [{ ...legacySpine, rotation: undefined, vertical: true }] };
+    expect(normalizeCoverSpineText(already)).toBe(already);
   });
 });

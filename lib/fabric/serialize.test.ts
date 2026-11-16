@@ -563,3 +563,21 @@ describe("fabricToPageDoc — 텍스트 안내 문구는 저장하지 않는다 
     expect(out.placeholder).toBeUndefined();
   });
 });
+
+describe("fabricToPageDoc — 세로쓰기(책등 제목)", () => {
+  it("verticalText 태그가 있으면 vertical: true 로 저장", () => {
+    const t = Object.assign(
+      tag("text", { leftMm: 150, topMm: 21, widthMm: 3.65, heightMm: 168 }),
+      { text: "우리 여행", fill: "#2b2b2b", verticalText: true },
+    ) as TaggedFabricObject;
+    const doc = fabricToPageDoc(
+      makeMockCanvas([t]) as unknown as Parameters<typeof fabricToPageDoc>[0],
+      META,
+      DPI,
+    );
+    const out = doc.objects[0]!;
+    if (out.type !== "text") throw new Error("text 가 아님");
+    expect(out.vertical).toBe(true);
+    expect(out.text).toBe("우리 여행");
+  });
+});

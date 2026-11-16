@@ -59,6 +59,11 @@ export interface TextObject {
   italic?: boolean;
   bold?: boolean;
   /**
+   * 세로쓰기 — 글자를 세워 위에서 아래로 한 글자씩 쌓는다(책등 제목 기본).
+   * 박스 폭은 한 글자 남짓이고, 편집기·PDF·미리보기 모두 글자(grapheme) 단위로 줄을 바꾼다.
+   */
+  vertical?: boolean;
+  /**
    * degrees (중심 기준, 양수=시계방향). 기본 0.
    * 책등 텍스트(세로) 등에 사용. 회전 전 박스(leftMm/topMm/widthMm/heightMm) 의
    * 중심을 기준으로 시각적으로 회전한다. 미지정 시 0 으로 간주.

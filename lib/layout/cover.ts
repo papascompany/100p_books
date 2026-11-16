@@ -152,16 +152,11 @@ export function asCoverTemplateId(v: string): CoverTemplateId | null {
 }
 
 /**
- * 책등 텍스트 자동 빌더 (rotation=90 시계방향).
+ * 책등 텍스트 자동 빌더 — **세로쓰기**(글자를 세워 위→아래로 쌓음, 2026-11-17 오너 결정).
  *
- * 좌표 규약:
- *   - leftMm/topMm/widthMm/heightMm 는 **회전 전 박스** 의 trim 좌표.
- *   - rotation 은 박스 중심 기준 시계방향 90deg 적용.
- *   - 회전 전 박스: widthMm = bookHeightMm × 0.7 (가로로 길게),
- *                   heightMm = spineMm × 0.8.
- *   - 박스 중심을 책등 영역 중앙(bookLeftMm + spineMm/2,
- *     bookTopMm + bookHeightMm/2)에 두면 시계방향 90 회전 후
- *     실제 텍스트가 책등 안에 세로로 들어간다.
+ *   - 회전 없음. 박스 폭 = 한 글자 남짓(verticalTextWidthMm), 높이 = 책 높이 × 0.8.
+ *   - 박스 중심 = 책등 영역 중앙(bookLeftMm + spineMm/2, bookTopMm + bookHeightMm/2).
+ *   - 텍스트는 비워 두고 제목을 안내 문구(placeholder)로만 보여 준다 — 고객이 입력해야 인쇄된다.
  *
  * spineMm 이 SPINE_TEXT_MIN_MM(8mm) 미만이면 null 반환.
  */
@@ -180,9 +175,9 @@ export interface BuildSpineTextArgs {
 export function buildSpineText(args: BuildSpineTextArgs): TextObject | null {
   if (args.spineMm < SPINE_TEXT_MIN_MM) return null;
 
-  // 회전 전 박스: 가로로 긴 박스 (회전 후 세로로 책등 안에 맞춰짐).
-  const widthMm = args.bookHeightMm * 0.7;
-  const heightMm = args.spineMm * 0.8;
+  const fontSizePt = args.fontSizePt ?? SPINE_TEXT_FONT_PT;
+  const widthMm = verticalTextWidthMm(fontSizePt);
+  const heightMm = args.bookHeightMm * 0.8;
   // 중심 = 책등 영역의 중앙 (mm).
   const cxMm = args.bookLeftMm + args.spineMm / 2;
   const cyMm = args.bookTopMm + args.bookHeightMm / 2;
@@ -199,11 +194,59 @@ export function buildSpineText(args: BuildSpineTextArgs): TextObject | null {
     text: "",
     placeholder: args.text || "제목",
     fontFamily: "Pretendard",
-    fontSizePt: args.fontSizePt ?? 9,
+    fontSizePt,
     fill: args.fill ?? "#2b2b2b",
     align: "center",
-    lineHeight: 1.2,
+    lineHeight: SPINE_TEXT_LINE_HEIGHT,
     bold: true,
-    rotation: 90,
+    vertical: true,
   };
+}
+
+/** 책등 제목 기본 글자 크기(pt). */
+export const SPINE_TEXT_FONT_PT = 9;
+/** 세로쓰기 글자 간격(줄 높이 배수). */
+export const SPINE_TEXT_LINE_HEIGHT = 1.1;
+
+/**
+ * 세로쓰기 박스 폭(mm) — 한글 한 글자(1em)는 들어가고 숫자·영문 대문자 두 글자는 안 들어가는 폭(1.05em).
+ * 1pt = 25.4/72 mm.
+ */
+export function verticalTextWidthMm(fontSizePt: number): number {
+  return Math.round(fontSizePt * (25.4 / 72) * 1.05 * 100) / 100;
+}
+
+/**
+ * 예전 형식(가로 텍스트를 90° 회전)의 책등 텍스트를 세로쓰기로 바꾼다 — 표지 문서 전용.
+ * 펼친 표지에서 책등 중심은 항상 문서 폭의 절반이다. 회전 ±90° 이고 중심이 거기에 있는
+ * 텍스트만 바꾼다(앞·뒤표지 텍스트는 건드리지 않음). 이미 세로쓰기거나 해당 없으면 같은 문서를 돌려준다.
+ */
+export function normalizeCoverSpineText(doc: PageDoc): PageDoc {
+  if (doc.layoutMode !== "cover") return doc;
+  const spineCx = doc.widthMm / 2;
+  let changed = false;
+  const objects = doc.objects.map((obj) => {
+    if (obj.type !== "text" || obj.vertical) return obj;
+    const rot = (((obj.rotation ?? 0) % 360) + 360) % 360;
+    if (rot !== 90 && rot !== 270) return obj;
+    const cx = obj.leftMm + obj.widthMm / 2;
+    const cy = obj.topMm + obj.heightMm / 2;
+    // 회전 전 박스 높이 = 책등 폭 × 0.8 — 중심이 책등 안에 있는지의 허용치로 쓴다.
+    if (Math.abs(cx - spineCx) > Math.max(obj.heightMm, 4)) return obj;
+    changed = true;
+    const widthMm = verticalTextWidthMm(obj.fontSizePt);
+    const heightMm = Math.max(obj.widthMm, doc.heightMm * 0.8);
+    const next: TextObject = {
+      ...obj,
+      leftMm: cx - widthMm / 2,
+      topMm: cy - heightMm / 2,
+      widthMm,
+      heightMm,
+      lineHeight: SPINE_TEXT_LINE_HEIGHT,
+      vertical: true,
+    };
+    delete next.rotation;
+    return next;
+  });
+  return changed ? { ...doc, objects } : doc;
 }

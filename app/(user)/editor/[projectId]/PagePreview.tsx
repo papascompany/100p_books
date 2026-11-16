@@ -10,6 +10,7 @@ import type {
   RectObject,
   TextObject,
 } from "@/lib/layout/types";
+import { normalizeCoverSpineText } from "@/lib/layout/cover";
 import { normalizePlaceholderText } from "@/lib/layout/text-placeholder";
 
 export interface PagePreviewProps {
@@ -31,11 +32,13 @@ export interface PagePreviewProps {
  *   fontSize: pt * scale (1mm ≈ 2.8346pt 지만 UI 에선 pt * scale 로 근사, 디자인 용도).
  */
 export default function PagePreview({
-  doc,
+  doc: rawDoc,
   photoUrls,
   cardWidthPx,
   showSafeLine = false,
 }: PagePreviewProps) {
+  // 예전 형식(90° 회전) 책등 텍스트는 세로쓰기로 보여 준다.
+  const doc = normalizeCoverSpineText(rawDoc);
   const scale = cardWidthPx / doc.widthMm;
   const cardHeightPx = doc.heightMm * scale;
 
@@ -141,7 +144,7 @@ function renderText(raw: TextObject, scale: number) {
     fontFamily: `${obj.fontFamily}, "Pretendard", system-ui, sans-serif`,
     fontSize: obj.fontSizePt * scale,
     lineHeight: obj.lineHeight,
-    textAlign: obj.align,
+    textAlign: obj.vertical ? "center" : obj.align,
     fontStyle: obj.italic ? "italic" : undefined,
     fontWeight: obj.bold ? 600 : undefined,
     display: "flex",
@@ -154,7 +157,8 @@ function renderText(raw: TextObject, scale: number) {
           : "flex-start",
     overflow: "hidden",
     whiteSpace: "pre-wrap",
-    wordBreak: "keep-all",
+    // 세로쓰기는 글자 단위로 줄을 바꾼다(편집기·PDF 와 같은 규칙).
+    wordBreak: obj.vertical ? "break-all" : "keep-all",
     padding: 0,
   };
   return (
