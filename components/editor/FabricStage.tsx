@@ -41,6 +41,7 @@ import {
   type TaggedFabricObject,
 } from "@/lib/fabric/serialize";
 import { attachSnapGuides } from "@/lib/fabric/snap";
+import { attachTextPlaceholderBehavior } from "@/lib/fabric/text-placeholder-behavior";
 import {
   createSnapshot,
   createSnapshotWithout,
@@ -375,6 +376,8 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         onRedo: () => redoRef.current(),
       });
       const snapHandle = attachSnapGuides(canvas);
+      // 텍스트 안내 문구: 편집 시작 시 전체 선택, 비우면 다시 표시(저장 변환은 serialize).
+      const detachPlaceholder = attachTextPlaceholderBehavior(canvas);
 
       // 리사이즈: 부모 폭에 맞춰 viewport scale fit (debounce 150ms)
       let resizeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -437,6 +440,7 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         if (recorderRef.current === recorder) recorderRef.current = null;
         ro.disconnect();
         snapHandle.detach();
+        detachPlaceholder();
         detachGestures();
         disconnectHistory();
         canvas.off();

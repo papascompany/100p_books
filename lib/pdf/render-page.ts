@@ -23,6 +23,7 @@ import { mmToPx, ptToPx, PAGE_JPEG_QUALITY, PRINT_DPI, RENDER_CONCURRENCY } from
 import { decodePhotoForSlot, type SlotImage } from "./photo-downscale";
 import type { LoadSlotPhoto } from "./slot-photo-loader";
 import { wrapMixedText } from "./text-wrap";
+import { normalizePlaceholderText } from "@/lib/layout/text-placeholder";
 
 /**
  * PageDoc → 300dpi PNG 버퍼.
@@ -465,7 +466,10 @@ function drawRect(cx: SKRSContext2D, obj: RectObject, dpi: number): void {
   cx.restore();
 }
 
-function drawText(cx: SKRSContext2D, obj: TextObject, dpi: number): void {
+function drawText(cx: SKRSContext2D, raw: TextObject, dpi: number): void {
+  // 안내 문구(placeholder)는 인쇄하지 않는다 — 예전 편집기가 실제 텍스트로 저장한 문서 포함.
+  const obj = normalizePlaceholderText(raw);
+  if (!obj.text || obj.text.trim().length === 0) return;
   const xPx = mmToPx(obj.leftMm, dpi);
   const yPx = mmToPx(obj.topMm, dpi);
   const wPx = mmToPx(obj.widthMm, dpi);
