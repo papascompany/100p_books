@@ -37,6 +37,11 @@ import type {
   RectObject,
   TextObject,
 } from "@/lib/layout/types";
+import {
+  DEFAULT_TEXT_FILL,
+  PLACEHOLDER_TEXT_FILL,
+  normalizePlaceholderText,
+} from "@/lib/layout/text-placeholder";
 
 /** 1 inch = 25.4 mm. */
 /**
@@ -102,6 +107,10 @@ export const FABRIC_EXTRA_PROPS = [
   "slotHeightMm",
   "slotScaleX",
   "slotScaleY",
+  // 텍스트 안내 문구 상태 — undo 복원 후에도 "안내 문구는 저장하지 않는다"가 유지돼야 한다.
+  "placeholderText",
+  "placeholderActive",
+  "realFill",
 ] as const;
 
 /** 우리 커스텀 프로퍼티가 부착된 Fabric 객체 타입 (느슨). */
@@ -127,6 +136,12 @@ export interface TaggedFabricObject extends fabric.FabricObject {
   /** 슬롯 적용 시 우리가 넣은 스케일. 사용자가 핸들로 준 배율은 scaleX/slotScaleX. */
   slotScaleX?: number;
   slotScaleY?: number;
+  /** 텍스트 — 비었을 때 보여 줄 안내 문구(저장 형식의 `placeholder`). */
+  placeholderText?: string;
+  /** 텍스트 — 지금 화면의 글자가 안내 문구다(저장 시 빈 텍스트로 되돌린다). */
+  placeholderActive?: boolean;
+  /** 텍스트 — 안내 문구를 흐리게 그리는 동안 보관하는 실제 글자색. */
+  realFill?: string;
 }
 
 export interface PageDocToFabricCtx {
@@ -317,7 +332,9 @@ function makePhotoFallback(
   return tagged;
 }
 
-function buildText(obj: TextObject, dpi: number): TaggedFabricObject {
+function buildText(raw: TextObject, dpi: number): TaggedFabricObject {
+  // 예전 편집기가 안내 문구를 실제 텍스트로 저장한 문서도 빈 칸으로 다시 연다.
+  const obj = normalizePlaceholderText(raw);
   const { left, top, width, height } = centerLeftTop(obj, dpi);
   const fontSizePx = ptToPx(obj.fontSizePt, dpi);
 
@@ -340,13 +357,18 @@ function buildText(obj: TextObject, dpi: number): TaggedFabricObject {
     angle: obj.rotation ?? 0,
   });
 
-  // 빈 텍스트면 placeholder 흐리게 표시 (실제 text 는 비어 있음)
-  if ((!obj.text || obj.text.length === 0) && obj.placeholder) {
-    tb.set({ text: obj.placeholder, fill: "rgba(0,0,0,0.35)" });
-    // 사용자 편집 시작 시 placeholder 정리는 FabricStage 가 처리.
+  const tagged = tb as TaggedFabricObject;
+  // 빈 텍스트면 안내 문구를 흐리게 표시한다(저장되는 text 는 비어 있다).
+  // 편집 시작·종료 때의 처리는 text-placeholder-behavior.ts(FabricStage 가 연결).
+  if (obj.placeholder) {
+    tagged.placeholderText = obj.placeholder;
+    tagged.realFill = obj.fill;
+    if (!obj.text || obj.text.length === 0) {
+      tb.set({ text: obj.placeholder, fill: PLACEHOLDER_TEXT_FILL });
+      tagged.placeholderActive = true;
+    }
   }
 
-  const tagged = tb as TaggedFabricObject;
   tagged.objectId = obj.objectId;
   tagged.oType = "text";
   tagged.originalWidthMm = obj.widthMm;
@@ -649,6 +671,7 @@ function serializeOne(
   if (o.oType === "text") {
     const tb = o as fabric.Textbox & TaggedFabricObject;
     const fontSizePt = pxToPt(tb.fontSize ?? 12, dpi);
+    const { text, fill } = savedTextAndFill(tb);
     const txt: TextObject = {
       type: "text",
       objectId,
@@ -656,10 +679,10 @@ function serializeOne(
       topMm,
       widthMm,
       heightMm,
-      text: tb.text ?? "",
+      text,
       fontFamily: (tb.fontFamily as string) ?? "Pretendard",
       fontSizePt,
-      fill: typeof tb.fill === "string" ? tb.fill : "#2b2b2b",
+      fill,
       align:
         (tb.textAlign as "left" | "center" | "right" | undefined) ?? "left",
       lineHeight: tb.lineHeight ?? 1.4,
@@ -671,6 +694,7 @@ function serializeOne(
             ? true
             : undefined,
     };
+    if (tb.placeholderText) txt.placeholder = tb.placeholderText;
     if (rotation) txt.rotation = rotation;
     return txt;
   }
@@ -724,4 +748,28 @@ function cryptoLikeId(): string {
     return crypto.randomUUID().replace(/-/g, "").slice(0, 12);
   }
   return Math.random().toString(36).slice(2, 14);
+}
+
+/**
+ * 저장할 텍스트·글자색. 화면에 안내 문구가 떠 있으면 빈 텍스트와 실제 글자색으로 되돌린다
+ * — 안내 문구가 인쇄물에 찍히던 결함(2026-11-16 운영 실측) 방지.
+ */
+export function savedTextAndFill(tb: {
+  text?: string;
+  fill?: unknown;
+  placeholderText?: string;
+  placeholderActive?: boolean;
+  realFill?: string;
+}): { text: string; fill: string } {
+  const current = tb.text ?? "";
+  const shownFill = typeof tb.fill === "string" ? tb.fill : DEFAULT_TEXT_FILL;
+  const realFill =
+    shownFill !== PLACEHOLDER_TEXT_FILL
+      ? shownFill
+      : (tb.realFill ?? DEFAULT_TEXT_FILL);
+  const showingPlaceholder =
+    tb.placeholderActive === true &&
+    tb.placeholderText !== undefined &&
+    current === tb.placeholderText;
+  return { text: showingPlaceholder ? "" : current, fill: realFill };
 }

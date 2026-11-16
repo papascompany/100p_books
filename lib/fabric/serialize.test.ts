@@ -479,3 +479,87 @@ describe("buildPhotoShadow — 에디터 그림자를 PDF 와 같은 mm 로", ()
     expect(s.color).toBe("rgba(0,0,0,0.15)");
   });
 });
+
+describe("fabricToPageDoc — 텍스트 안내 문구는 저장하지 않는다 (2026-11-16 운영 결함)", () => {
+  const BASE = { leftMm: 10, topMm: 120, widthMm: 100, heightMm: 10 };
+
+  function textObj(props: Partial<TaggedFabricObject> & { text: string }) {
+    return Object.assign(tag("text", BASE), props) as TaggedFabricObject;
+  }
+
+  function saveOne(o: TaggedFabricObject) {
+    const doc = fabricToPageDoc(
+      makeMockCanvas([o]) as unknown as Parameters<typeof fabricToPageDoc>[0],
+      META,
+      DPI,
+    );
+    const out = doc.objects[0]!;
+    if (out.type !== "text") throw new Error("text 가 아님");
+    return out;
+  }
+
+  it("안내 문구가 떠 있으면 빈 텍스트 + 원래 색 + placeholder 로 저장", () => {
+    const out = saveOne(
+      textObj({
+        text: "여기에 글을 입력하세요",
+        fill: "rgba(0,0,0,0.35)",
+        placeholderText: "여기에 글을 입력하세요",
+        placeholderActive: true,
+        realFill: "#2b2b2b",
+      }),
+    );
+    expect(out.text).toBe("");
+    expect(out.fill).toBe("#2b2b2b");
+    expect(out.placeholder).toBe("여기에 글을 입력하세요");
+  });
+
+  it("사용자가 입력한 글은 그대로 저장하고 placeholder 도 유지", () => {
+    const out = saveOne(
+      textObj({
+        text: "제주도 첫날",
+        fill: "#2b2b2b",
+        placeholderText: "여기에 글을 입력하세요",
+        placeholderActive: false,
+        realFill: "#2b2b2b",
+      }),
+    );
+    expect(out.text).toBe("제주도 첫날");
+    expect(out.fill).toBe("#2b2b2b");
+    expect(out.placeholder).toBe("여기에 글을 입력하세요");
+  });
+
+  it("흐린 색이 남은 채 입력된 글은 글을 살리고 실제 색으로 저장", () => {
+    const out = saveOne(
+      textObj({
+        text: "여행 둘째 날",
+        fill: "rgba(0,0,0,0.35)",
+        placeholderText: "여기에 글을 입력하세요",
+        placeholderActive: true,
+        realFill: "#123456",
+      }),
+    );
+    expect(out.text).toBe("여행 둘째 날");
+    expect(out.fill).toBe("#123456");
+  });
+
+  it("안내 문구 상태에서 색을 바꿨으면 바꾼 색을 저장", () => {
+    const out = saveOne(
+      textObj({
+        text: "뒷표지 캡션",
+        fill: "#ff0000",
+        placeholderText: "뒷표지 캡션",
+        placeholderActive: true,
+        realFill: "#2b2b2b",
+      }),
+    );
+    expect(out.text).toBe("");
+    expect(out.fill).toBe("#ff0000");
+  });
+
+  it("placeholder 없는 일반 텍스트는 기존과 같다", () => {
+    const out = saveOne(textObj({ text: "텍스트", fill: "#333333" }));
+    expect(out.text).toBe("텍스트");
+    expect(out.fill).toBe("#333333");
+    expect(out.placeholder).toBeUndefined();
+  });
+});

@@ -10,6 +10,7 @@ import type {
   RectObject,
   TextObject,
 } from "@/lib/layout/types";
+import { normalizePlaceholderText } from "@/lib/layout/text-placeholder";
 
 export interface PagePreviewProps {
   doc: PageDoc;
@@ -129,7 +130,9 @@ function renderPhoto(
   );
 }
 
-function renderText(obj: TextObject, scale: number) {
+function renderText(raw: TextObject, scale: number) {
+  // 예전 편집기가 안내 문구를 실제 텍스트로 저장한 문서도 "비어 있음"으로 보여 준다.
+  const obj = normalizePlaceholderText(raw);
   const isEmpty = obj.text.trim().length === 0;
   const display = isEmpty ? obj.placeholder ?? "" : obj.text;
   const style: CSSProperties = {
