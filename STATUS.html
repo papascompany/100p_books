@@ -2,419 +2,470 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>100p Books — 개발 현황 대시보드</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>100p Books 오픈 준비 현황</title>
 <style>
-  :root {
-    --bg: #0b0c0e;
-    --panel: #111317;
-    --panel-2: #161a20;
-    --border: #23262d;
-    --text: #e8eaed;
-    --text-dim: #9ba3ad;
-    --text-mute: #6b7280;
-    --accent: #f5b14d;
-    --green: #38d398;
-    --yellow: #f5c542;
-    --red: #ef4f4f;
-    --blue: #5aa8ff;
-    --purple: #b08cff;
-  }
-  @media (prefers-color-scheme: light) {
-    :root {
-      --bg: #fafafa;
-      --panel: #ffffff;
-      --panel-2: #f5f5f5;
-      --border: #e5e5e5;
-      --text: #111111;
-      --text-dim: #4a5460;
-      --text-mute: #8a93a0;
-      --accent: #d68a1c;
-    }
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { background: var(--bg); color: var(--text); }
-  body {
-    font-family: -apple-system, "Pretendard Variable", "Pretendard",
-                 BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo",
-                 "Noto Sans KR", sans-serif;
-    line-height: 1.55; font-size: 14px;
-    padding: 32px 24px; max-width: 1280px; margin: 0 auto;
-    -webkit-font-smoothing: antialiased;
-  }
-  a { color: var(--blue); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  code, .mono { font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
-                font-size: 12.5px; }
+/* 단일 HTML · 외부 의존 0 — 공유 페이지(Artifact)와 같은 내용. 글꼴은 시스템 폴백 사용 */
+html { color-scheme: light dark; }
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+/* Layout: 한 장짜리 운영 보고서 — 요약·진척 → 위험 → 완료된 작업(월별) → 개발 예정(3단) → 대표님 액션 → 확인 항목 → 일정 → 체크리스트(접힘) */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #1b1f27;
+  --muted: #5b6372;
+  --line: #dde1e8;
+  --accent: #2b4acb;
+  --accent-soft: #e8ecfb;
+  --ok: #1c7a46; --ok-bg: #e3f3ea;
+  --wait: #9a5b00; --wait-bg: #fbf0dc;
+  --crit: #b4232a; --crit-bg: #fbe4e5;
+  --on-accent: #ffffff;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12151b; --surface: #1a1e26; --fg: #e6e9ef; --muted: #9aa3b2; --line: #2c323d;
+  --accent: #8fa6ff; --accent-soft: #232b45;
+  --ok: #6fd39a; --ok-bg: #173323; --wait: #f0b961; --wait-bg: #3a2c12; --crit: #ff8a8f; --crit-bg: #3d1a1d;
+  --on-accent: #0f1320;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #12151b; --surface: #1a1e26; --fg: #e6e9ef; --muted: #9aa3b2; --line: #2c323d;
+  --accent: #8fa6ff; --accent-soft: #232b45;
+  --ok: #6fd39a; --ok-bg: #173323; --wait: #f0b961; --wait-bg: #3a2c12; --crit: #ff8a8f; --crit-bg: #3d1a1d;
+  --on-accent: #0f1320;
+  color-scheme: dark; }
 
-  header { margin-bottom: 32px; }
-  .h-top { display: flex; flex-wrap: wrap; gap: 16px;
-           align-items: baseline; justify-content: space-between; }
-  h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.01em; }
-  .h-sub { color: var(--text-dim); font-size: 13px; margin-top: 6px; }
-  .h-meta { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px;
-            color: var(--text-dim); font-size: 12.5px; }
-  .h-meta .item { display: flex; gap: 6px; }
-  .h-meta .item b { color: var(--text); font-weight: 600; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.65; }
+.wrap { max-width: 960px; margin: 0 auto; padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 40px; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.3; margin: 0; }
+h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 20px; font-weight: 700; }
+h3 { font-size: 16px; font-weight: 600; }
+p { margin: 0; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: var(--accent); text-transform: uppercase; }
+.muted { color: var(--muted); }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+section { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 
-  /* KPI 카드 */
-  .kpi { display: grid;
-         grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-         gap: 12px; margin-top: 20px; }
-  .kpi-card {
-    background: var(--panel); border: 1px solid var(--border);
-    border-radius: 12px; padding: 14px 16px;
-  }
-  .kpi-label { color: var(--text-dim); font-size: 12px;
-               letter-spacing: 0.02em; text-transform: uppercase; }
-  .kpi-value { font-size: 24px; font-weight: 700; margin-top: 4px;
-               letter-spacing: -0.01em; }
-  .kpi-sub { color: var(--text-mute); font-size: 11.5px; margin-top: 2px; }
-  .kpi-card.ok .kpi-value { color: var(--green); }
-  .kpi-card.warn .kpi-value { color: var(--yellow); }
+header { display: flex; flex-direction: column; gap: 10px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); }
 
-  /* 섹션 */
-  section { margin-top: 32px; }
-  h2 {
-    font-size: 16px; font-weight: 700; letter-spacing: -0.005em;
-    padding-bottom: 10px; margin-bottom: 14px;
-    border-bottom: 1px solid var(--border);
-    display: flex; align-items: baseline; gap: 10px;
-  }
-  h2 .h2-tag {
-    font-size: 11px; font-weight: 600; padding: 2px 8px;
-    border-radius: 999px; background: var(--panel-2);
-    color: var(--text-dim); letter-spacing: 0.02em;
-  }
-  h2 .h2-tag.p0 { background: rgba(239,79,79,0.15); color: var(--red); }
-  h2 .h2-tag.p1 { background: rgba(245,197,66,0.15); color: var(--yellow); }
-  h2 .h2-tag.p2 { background: rgba(56,211,152,0.15); color: var(--green); }
-  h2 .h2-tag.p3 { background: rgba(90,168,255,0.15); color: var(--blue); }
+.toc { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; }
+.toc a { color: var(--accent); text-decoration: none; background: var(--accent-soft); padding: 4px 11px; border-radius: 999px; font-weight: 500; }
+.toc a:hover { text-decoration: underline; }
+.toc a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  /* 테이블 */
-  table { width: 100%; border-collapse: collapse;
-          background: var(--panel); border: 1px solid var(--border);
-          border-radius: 12px; overflow: hidden; font-size: 13px; }
-  th, td { padding: 10px 14px; text-align: left;
-           border-bottom: 1px solid var(--border); vertical-align: top; }
-  tr:last-child td { border-bottom: none; }
-  th { background: var(--panel-2); color: var(--text-dim);
-       font-weight: 600; font-size: 12px;
-       letter-spacing: 0.02em; text-transform: uppercase; }
-  td .pill {
-    display: inline-block; padding: 2px 8px; border-radius: 999px;
-    font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
-    line-height: 1.4;
-  }
-  .pill.done   { background: rgba(56,211,152,0.18);  color: var(--green); }
-  .pill.todo   { background: rgba(245,197,66,0.18);  color: var(--yellow); }
-  .pill.block  { background: rgba(239,79,79,0.18);   color: var(--red); }
-  .pill.info   { background: rgba(90,168,255,0.18);  color: var(--blue); }
-  .pill.muted  { background: var(--panel-2);         color: var(--text-mute); }
-  .pill.purple { background: rgba(176,140,255,0.18); color: var(--purple); }
+.summary { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
+.verdict { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 22px; display: flex; flex-direction: column; gap: 10px; }
+.verdict strong { font-size: 18px; }
+.count { background: var(--accent); color: var(--on-accent); border-radius: 10px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px; }
+.count .big { font-family: var(--font-mono); font-size: 52px; line-height: 1; }
+.stats { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13px; }
+.stats b { display: block; font-family: var(--font-mono); font-size: 20px; }
 
-  td.num { font-variant-numeric: tabular-nums; color: var(--text-mute);
-           white-space: nowrap; }
+/* 진척 막대 */
+.progress { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.bar-row { display: grid; grid-template-columns: 170px 1fr 92px; gap: 14px; align-items: center; font-size: 14px; }
+.bar { height: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; display: flex; }
+.bar i { display: block; height: 100%; }
+.bar .f-ok { background: var(--ok); }
+.bar .f-wait { background: var(--wait); }
+.bar .f-crit { background: var(--crit); }
+.bar-row .val { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; background: var(--sw); }
 
-  ul.bare { list-style: none; }
-  ul.bare li { padding: 6px 0; border-bottom: 1px solid var(--border); }
-  ul.bare li:last-child { border-bottom: none; }
+.risk { border: 1px solid var(--crit); background: var(--crit-bg); border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; }
+.risk h3 { color: var(--crit); }
+.risk ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
 
-  /* 흐름 다이어그램 */
-  .flow {
-    display: grid; gap: 12px; margin-top: 14px;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  }
-  .flow-card {
-    background: var(--panel); border: 1px solid var(--border);
-    border-radius: 12px; padding: 14px 16px; position: relative;
-  }
-  .flow-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
-  .flow-card p { font-size: 12.5px; color: var(--text-dim); }
-  .flow-card .when { font-size: 11px; color: var(--accent);
-                     font-weight: 600; letter-spacing: 0.02em;
-                     text-transform: uppercase; margin-bottom: 4px; }
+.table-box { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 620px; }
+th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; background: var(--bg); }
+tr:last-child td { border-bottom: 0; }
+td.id { font-family: var(--font-mono); font-weight: 500; white-space: nowrap; }
+td.date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+tr.hot td { background: var(--crit-bg); }
 
-  /* 2-컬 레이아웃 */
-  .two-col {
-    display: grid; gap: 16px;
-    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-  }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-bg); }
+.pill.wait { color: var(--wait); background: var(--wait-bg); }
+.pill.crit { color: var(--crit); background: var(--crit-bg); border: 1px solid var(--crit); }
+.pill.none { color: var(--muted); background: var(--bg); border: 1px solid var(--line); }
 
-  /* 푸터 */
-  footer { margin-top: 48px; padding-top: 16px;
-           border-top: 1px solid var(--border);
-           color: var(--text-mute); font-size: 11.5px;
-           display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
-  footer a { color: var(--text-mute); }
+/* 숫자 요약 */
+.facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.fact { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; font-size: 13px; color: var(--muted); }
+.fact b { display: block; font-family: var(--font-mono); font-size: 24px; line-height: 1.2; color: var(--fg); font-variant-numeric: tabular-nums; }
 
-  /* 인쇄용 */
-  @media print {
-    :root { --bg: #fff; --panel: #fff; --panel-2: #f5f5f5;
-            --border: #ccc; --text: #000; --text-dim: #333; --text-mute: #666; }
-    body { padding: 20px; max-width: none; font-size: 11px; }
-    a { color: #000; }
-    .kpi-card, table, .flow-card { break-inside: avoid; }
-    section { break-inside: avoid; }
-  }
+/* 월별 완료 이력 */
+.history { list-style: none; margin: 0; padding: 0 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.history > li { display: grid; grid-template-columns: 120px 1fr; gap: 16px; padding: 16px 0; border-top: 1px solid var(--line); }
+.history > li:first-child { border-top: 0; }
+.history .when { font-family: var(--font-mono); font-size: 14px; color: var(--accent); }
+.history .when small { display: block; font-family: var(--font-body); font-size: 12px; color: var(--muted); }
+.history .what { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.history ul { margin: 0; padding-left: 18px; font-size: 14px; display: flex; flex-direction: column; gap: 3px; }
+
+/* 개발 예정 3단 */
+.roadmap { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.lane { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.lane.now { border: 2px solid var(--accent); }
+.lane .tag { font-size: 12px; font-weight: 600; color: var(--accent); letter-spacing: 0.04em; }
+.lane ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; font-size: 14px; }
+.lane li { padding: 9px 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+.lane li:first-child { border-top: 0; padding-top: 0; }
+.lane li span { font-size: 13px; color: var(--muted); }
+
+.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.timeline li { display: grid; grid-template-columns: 120px 1fr; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); }
+.timeline li:first-child { border-top: 0; }
+.timeline .d { font-family: var(--font-mono); font-size: 14px; color: var(--muted); }
+.timeline li.past { color: var(--muted); }
+.timeline li.today .d { color: var(--crit); font-weight: 500; }
+.timeline li.gate .d, .timeline li.launch .d { color: var(--accent); font-weight: 500; }
+.timeline li.launch { font-weight: 600; }
+
+.checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.check { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+.check p { font-size: 14px; color: var(--muted); }
+.who { font-size: 12px; font-weight: 600; color: var(--accent); }
+
+.decide { background: var(--surface); border: 2px solid var(--accent); border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; }
+.decide ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+
+.nogo { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+.nogo ul { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+summary { cursor: pointer; padding: 16px 20px; font-weight: 600; list-style-position: inside; }
+summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 10px; }
+details ol { margin: 0; padding: 0 24px 20px 44px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+details .lead { padding: 0 20px 12px; font-size: 14px; color: var(--muted); }
+code { font-family: var(--font-mono); font-size: 0.88em; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+
+@media (max-width: 720px) {
+  .summary, .checks, .roadmap { grid-template-columns: 1fr; }
+  .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .timeline li, .history > li { grid-template-columns: 1fr; gap: 2px; }
+  .bar-row { grid-template-columns: 1fr auto; }
+  .bar-row .bar { grid-column: 1 / -1; grid-row: 2; }
+  h1 { font-size: 25px; }
+}
 </style>
 </head>
 <body>
 
-<header>
-  <div class="h-top">
-    <div>
-      <h1>100p Books — 개발 현황 대시보드</h1>
-      <p class="h-sub">최대 100장의 사진으로 만드는 폴라로이드 감성 포토북</p>
+<div class="wrap">
+  <header>
+    <span class="eyebrow">서비스 오픈 준비 보고</span>
+    <h1>100p Books 오픈 준비 현황</h1>
+    <div class="meta">
+      <span>기준일 <span class="num">2026-11-17 (화)</span></span>
+      <span>오픈 목표 <span class="num">2026-11-20 (금)</span></span>
+      <span>GO/NO-GO <span class="num">11-18 (수)</span></span>
+      <span>작성 CTO</span>
     </div>
-    <div class="h-meta">
-      <span class="item"><span>최종 업데이트</span><b>2026-05-14</b></span>
+    <nav class="toc" aria-label="바로 가기">
+      <a href="#done">완료된 작업</a>
+      <a href="#planned">개발 예정</a>
+      <a href="#owner">대표님 액션</a>
+      <a href="#gate">GO/NO-GO 전 확인</a>
+      <a href="#week">오픈 주간 일정</a>
+      <a href="#checklists">실행 체크리스트</a>
+    </nav>
+  </header>
+
+  <div class="summary">
+    <div class="verdict">
+      <span class="eyebrow">결론</span>
+      <strong>개발은 사실상 끝났습니다. 오픈 여부는 대표님 액션에 달려 있습니다.</strong>
+      <p class="muted">크리티컬 패스인 토스 라이브 키(O1)와 실물 테스트 인쇄(O2)가 아직 완료 기록이 없습니다. 내일(11/18) GO/NO-GO 판정 전까지 이 두 가지가 되지 않으면 11/20 오픈은 NO-GO 조건에 걸립니다.</p>
     </div>
-  </div>
-  <div class="h-meta">
-    <span class="item">배포 <a href="https://100pbooks.vercel.app">100pbooks.vercel.app</a></span>
-    <span class="item">레포 <a href="https://github.com/papascompany/100p_books">papascompany/100p_books</a></span>
-    <span class="item">운영 빌드 <code>1125d5f</code></span>
-    <span class="item">Supabase <code>vprifnztvlduhpuwgdau</code> · Seoul</span>
-    <span class="item">Vercel <code>yohans-projects-de3234df</code> · icn1</span>
-  </div>
-</header>
-
-<!-- KPI -->
-<section class="kpi">
-  <div class="kpi-card ok">
-    <div class="kpi-label">완료 마일스톤</div>
-    <div class="kpi-value">23</div>
-    <div class="kpi-sub">M0~M17 + M5패치/홈리뉴얼/내비최적화</div>
-  </div>
-  <div class="kpi-card ok">
-    <div class="kpi-label">DB 마이그레이션</div>
-    <div class="kpi-value">24/24</div>
-    <div class="kpi-sub">운영 적용 완료 (0001~0024)</div>
-  </div>
-  <div class="kpi-card ok">
-    <div class="kpi-label">Lighthouse 모바일</div>
-    <div class="kpi-value">97</div>
-    <div class="kpi-sub">LCP 1.5s · CLS 0 · TBT 10ms</div>
-  </div>
-  <div class="kpi-card ok">
-    <div class="kpi-label">Unit / E2E</div>
-    <div class="kpi-value">153 / 12</div>
-    <div class="kpi-sub">vitest · Playwright desktop+mobile</div>
-  </div>
-  <div class="kpi-card ok">
-    <div class="kpi-label">빌드 라우트</div>
-    <div class="kpi-value">31</div>
-    <div class="kpi-sub">정적 7 · 동적 24</div>
-  </div>
-  <div class="kpi-card warn">
-    <div class="kpi-label">출시 전 활성화</div>
-    <div class="kpi-value">3건</div>
-    <div class="kpi-sub">Kakao · Resend · Toss 콘솔</div>
-  </div>
-</section>
-
-<!-- 완료 마일스톤 -->
-<section>
-  <h2>완료 마일스톤 <span class="h2-tag">DONE</span></h2>
-  <div class="two-col">
-    <table>
-      <thead><tr><th>마일스톤</th><th>내용</th><th>상태</th></tr></thead>
-      <tbody>
-        <tr><td>M0</td><td>부트스트랩 (Next.js, Supabase, RLS)</td><td><span class="pill done">✓</span></td></tr>
-        <tr><td>M1</td><td>이미지 파이프라인 (EXIF·HEIC·정렬 4종)</td><td><span class="pill done">✓</span></td></tr>
-        <tr><td>M2</td><td>자동 레이아웃 (폴라로이드·콜라주 6종)</td><td><span class="pill done">✓</span></td></tr>
-        <tr><td>M3</td><td>Fabric.js 에디터 (모바일 캔바 UX)</td><td><span class="pill done">✓</span></td></tr>
-        <tr><td>M4</td><td>표지 편집기 (3D 프리뷰, 책등 계산)</td><td><span class="pill done">✓</span></td></tr>
-        <tr><td>M5</td><td>PDF 300dpi @napi-rs/canvas + bleed</td><td><span class="pill done">✓</span></td></tr>
-        <tr><td>M5-패치</td><td>borderRadius + shadow 2-pass 분리</td><td><span class="pill done">✓ 05-13</span></td></tr>
-        <tr><td>M6</td><td>주문 · TossPayments · 멱등 confirm</td><td><span class="pill done">✓</span></td></tr>
-        <tr><td>M7</td><td>관리자 콘솔 13개 라우트 + Excel 송장</td><td><span class="pill done">✓</span></td></tr>
-        <tr><td>M8</td><td>QA — PDF 런타임 / E2E / Lighthouse</td><td><span class="pill done">✓ 05-13</span></td></tr>
-      </tbody>
-    </table>
-    <table>
-      <thead><tr><th>마일스톤</th><th>내용</th><th>상태</th></tr></thead>
-      <tbody>
-        <tr><td>M9~M11</td><td>UX · 법규 · 클립아트 · 감사 로그</td><td><span class="pill done">✓</span></td></tr>
-        <tr><td>M12·M15</td><td>reorder · 복붙 · 단축키 · 페이지 미리보기 · 이메일</td><td><span class="pill done">✓</span></td></tr>
-        <tr><td>M16</td><td>성장 8종 — 공유·선물·할인·추천·후기·출석·포인트·카카오</td><td><span class="pill done">✓ 05-13</span></td></tr>
-        <tr><td>M17</td><td>모바일 PWA — manifest · SW v2 SWR · 카메라 업로드</td><td><span class="pill done">✓</span></td></tr>
-        <tr><td>홈리뉴얼</td><td>§3 특징 / §4 사이즈 카드 사진 배경 + fade-up</td><td><span class="pill done">✓ 05-14</span></td></tr>
-        <tr><td>내비최적화</td><td>staleTimes / loading 8개 / RPC 단일화 / SW SWR / 정적 prerender / requireUser 0 RTT / preconnect</td><td><span class="pill done">✓ 05-14</span></td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
-
-<!-- 운영 환경 -->
-<section>
-  <h2>운영 환경 활성 상태 <span class="h2-tag">LIVE</span></h2>
-  <table>
-    <thead><tr><th>항목</th><th>값</th><th>비고</th></tr></thead>
-    <tbody>
-      <tr><td>운영 URL</td><td><a href="https://100pbooks.vercel.app">100pbooks.vercel.app</a></td><td>icn1 리전 / GitHub auto-deploy</td></tr>
-      <tr><td>운영 빌드</td><td><code>1125d5f</code> perf(nav): requireUser() 0 RTT + preconnect</td><td>2026-05-14 push</td></tr>
-      <tr><td>DB 마이그레이션</td><td>0001 ~ 0024 운영 적용 완료</td><td>마지막 0024 — mypage 카운트 RPC</td></tr>
-      <tr><td>Admin 계정</td><td>yohan73@gmail.com</td><td>profiles.role = 'admin' / 2026-05-05 가입</td></tr>
-      <tr><td>PWA Service Worker</td><td>v2 (Stale-While-Revalidate)</td><td>공개 페이지 즉시 표시 / 보호 페이지 network-first</td></tr>
-      <tr><td>Router Cache</td><td>staleTimes { dynamic 30s, static 180s }</td><td>App Router 재방문 즉시 표시</td></tr>
-      <tr><td>Lighthouse</td><td>Performance 97 / LCP 1.5s / CLS 0 / TBT 10ms</td><td>모바일 시뮬레이트, 운영 측정</td></tr>
-      <tr><td>Vercel Functions</td><td>Fluid Compute / Node.js (Hobby 플랜)</td><td>cold start 시 1-3s 가능 / 100p PDF는 Pro 필요</td></tr>
-    </tbody>
-  </table>
-</section>
-
-<!-- 핵심 동선 효과 -->
-<section>
-  <h2>핵심 동선 — 적용된 최적화 효과</h2>
-  <table>
-    <thead><tr><th>동선</th><th>적용된 최적화</th></tr></thead>
-    <tbody>
-      <tr><td>첫 랜딩 <code>/</code></td><td>preconnect(Unsplash+Supabase) · 정적 prerender 가능한 곳 ○ · LCP 1.5s</td></tr>
-      <tr><td>로그인 후 첫 진입 <code>/mypage</code></td><td>requireUser 0 RTT · 0024 RPC 단일 호출 · loading skeleton</td></tr>
-      <tr><td>페이지 간 이동</td><td>Router Cache 30s · RSC payload 재사용 · 페이지별 loading</td></tr>
-      <tr><td>주문 상세 <code>/mypage/orders/[id]</code></td><td>reviews(id) inline join · RTT -1 · loading skeleton</td></tr>
-      <tr><td>공개 페이지 재방문</td><td>SW v2 SWR — 캐시 즉시 표시 + 백그라운드 갱신</td></tr>
-      <tr><td>법규 페이지 <code>/terms·/privacy·/refund</code></td><td>force-static + revalidate=false · CDN edge · TTFB ~0ms</td></tr>
-    </tbody>
-  </table>
-</section>
-
-<!-- P0 -->
-<section>
-  <h2>남은 작업 — 외부 활성화 <span class="h2-tag p0">P0 — 출시 차단</span></h2>
-  <table>
-    <thead><tr><th class="num">#</th><th>항목</th><th>위치</th><th>상태</th></tr></thead>
-    <tbody>
-      <tr><td class="num">1</td><td>Supabase 0023 + 0024 마이그레이션</td><td>Supabase SQL Editor</td><td><span class="pill done">✓ 완료</span></td></tr>
-      <tr><td class="num">2</td><td>Admin 계정 세팅</td><td>Supabase SQL Editor</td><td><span class="pill done">✓ 완료</span></td></tr>
-      <tr><td class="num">3</td><td><b>Kakao OAuth</b> — REST API Key + Supabase Provider Enable</td><td>developers.kakao.com + Supabase</td><td><span class="pill todo">⏳ 남음</span></td></tr>
-      <tr><td class="num">4</td><td><b>Resend</b> — API Key + Vercel <code>RESEND_API_KEY</code> / <code>EMAIL_FROM</code></td><td>resend.com + Vercel env</td><td><span class="pill todo">⏳ 남음</span></td></tr>
-      <tr><td class="num">5</td><td><b>TossPayments</b> — 라이브 키 + 웹훅 secret + Vercel env</td><td>TossPayments 콘솔 + Vercel env</td><td><span class="pill block">⏳ 사업자 심사</span></td></tr>
-    </tbody>
-  </table>
-</section>
-
-<!-- P1 -->
-<section>
-  <h2>남은 작업 — 품질 / 안정성 보강 <span class="h2-tag p1">P1 — 출시 후 30일</span></h2>
-  <table>
-    <thead><tr><th class="num">#</th><th>항목</th><th>산정</th><th>효과</th></tr></thead>
-    <tbody>
-      <tr><td class="num">6</td><td>에러 모니터링 — Sentry 도입</td><td class="num">1일</td><td>운영 에러·성능 실측 시작점</td></tr>
-      <tr><td class="num">7</td><td>Vercel Analytics + GA4</td><td class="num">0.5일</td><td>사용자 행동 데이터 수집</td></tr>
-      <tr><td class="num">8</td><td>인증 사용자 E2E 골든 플로우 (매직링크 mock → 업로드 → 주문 → PDF)</td><td class="num">3~5일</td><td>핵심 동선 회귀 차단</td></tr>
-      <tr><td class="num">9</td><td>PDF 회귀 테스트 CI 통합 (페이지 수 + SHA-256 비교)</td><td class="num">2일</td><td>PDF 출력 품질 회귀 차단</td></tr>
-      <tr><td class="num">10</td><td>WCAG 2.1 AA 자동 감사 (axe-core + Lighthouse a11y + 키보드 only)</td><td class="num">3일</td><td>접근성 보증 + 잠재 사용자 확장</td></tr>
-      <tr><td class="num">11</td><td>Lighthouse Speed Index / TTI 추가 개선 (4.8s / 7.3s 노란불)</td><td class="num">2~3일</td><td>모바일 체감 속도 ↑</td></tr>
-      <tr><td class="num">12</td><td>PDF 100페이지 부하 검증 (Vercel Pro 가입 필요)</td><td class="num">0.5일</td><td>최대 페이지 안정성</td></tr>
-    </tbody>
-  </table>
-</section>
-
-<!-- P2 -->
-<section>
-  <h2>남은 작업 — 비즈니스 가치 확장 <span class="h2-tag p2">P2 — 1~3개월</span></h2>
-  <table>
-    <thead><tr><th class="num">#</th><th>기능</th><th>산정</th><th>효과</th></tr></thead>
-    <tbody>
-      <tr><td class="num">13</td><td>⭐ 인쇄소 자동 발주 연동 (in_production 진입 시 발주 API)</td><td class="num">1~2주</td><td>운영 인력 자동화 — 주문 폭증 대응</td></tr>
-      <tr><td class="num">14</td><td>⭐ 카카오 알림톡 (이메일 보완)</td><td class="num">1주</td><td>한국 도달률 ↑</td></tr>
-      <tr><td class="num">15</td><td>결제 옵션 확대 — 네이버페이 / 카카오페이</td><td class="num">1주</td><td>결제 이탈률 감소</td></tr>
-      <tr><td class="num">16</td><td>Admin 분석 대시보드 — 매출 / 주문 그래프 / 코호트</td><td class="num">1주</td><td>운영 의사결정</td></tr>
-      <tr><td class="num">17</td><td>⭐ 사진 자동 보정 — 밝기 / 대비 / 필터 (sharp 서버)</td><td class="num">1~2주</td><td>결과물 품질 ↑ · 후기 / 재구매 ↑</td></tr>
-      <tr><td class="num">18</td><td>AI 캡션 자동 생성 (Claude API)</td><td class="num">1주</td><td>차별화 포인트</td></tr>
-      <tr><td class="num">19</td><td>책 사이즈 추가 — B5 / 정사각형 대형 (200×200)</td><td class="num">0.5일</td><td>라인업 확장 (admin CRUD)</td></tr>
-      <tr><td class="num">20</td><td>콜라주 템플릿 추가</td><td class="num">1주</td><td>디자인 다양성</td></tr>
-      <tr><td class="num">21</td><td>인쇄 옵션 확장 — 하드커버 / 종이 / 라미네이팅</td><td class="num">1~2주</td><td>ARPU ↑</td></tr>
-    </tbody>
-  </table>
-</section>
-
-<!-- P3 -->
-<section>
-  <h2>남은 작업 — 장기 인프라 / 리팩토링 <span class="h2-tag p3">P3 — 분기별</span></h2>
-  <table>
-    <thead><tr><th class="num">#</th><th>항목</th><th>비고</th></tr></thead>
-    <tbody>
-      <tr><td class="num">22</td><td>Next.js 15/16 마이그레이션</td><td>SECURITY.md 잔존 6건 CVE 해소 + Turbopack</td></tr>
-      <tr><td class="num">23</td><td>Fabric.js 7.x 마이그레이션</td><td>SVG XSS CVE 사전 차단</td></tr>
-      <tr><td class="num">24</td><td>PDF SSE 진행률 Upstash Redis 전환</td><td>멀티 인스턴스 안정화</td></tr>
-      <tr><td class="num">25</td><td>PDF CMYK / ICC 프로파일</td><td>인쇄소 요구 시</td></tr>
-      <tr><td class="num">26</td><td><code>vercel.json</code> → <code>vercel.ts</code></td><td>2026-02-27 Vercel 권장 (@vercel/config)</td></tr>
-      <tr><td class="num">27</td><td>Node.js 24 LTS 검토</td><td>현재 22.x · Vercel 기본값</td></tr>
-      <tr><td class="num">28</td><td>다국어 (i18n) — 영어 메뉴 / 약관</td><td>해외 사용자 대응 (장기)</td></tr>
-    </tbody>
-  </table>
-</section>
-
-<!-- 알려진 한계 -->
-<section>
-  <h2>알려진 한계 — 코드 변경 불필요</h2>
-  <table>
-    <thead><tr><th>항목</th><th>상태</th></tr></thead>
-    <tbody>
-      <tr><td>iOS Safari <code>navigator.vibrate</code> 미지원</td><td><span class="pill info">graceful degrade</span> SSR 가드 + 기능 감지 + try/catch</td></tr>
-      <tr><td>카카오 동의 "닉네임 필수" 사용 시 비즈앱 심사</td><td><span class="pill info">콘솔 설정</span> 코드 안전 · 콘솔 "선택 동의"로 충분</td></tr>
-      <tr><td>vitest jsdom + @napi-rs/canvas → NaN</td><td><span class="pill info">우회 완료</span> <code>pnpm verify:pdf</code> 별도 스크립트</td></tr>
-    </tbody>
-  </table>
-</section>
-
-<!-- 권장 흐름 -->
-<section>
-  <h2>권장 다음 단계 흐름</h2>
-  <div class="flow">
-    <div class="flow-card">
-      <div class="when">지금 · 이번 주</div>
-      <h3>🚀 Phase A — 출시 활성화</h3>
-      <p>Kakao + Resend + Toss 콘솔 등록 → <b>실제 서비스 출시</b></p>
-    </div>
-    <div class="flow-card">
-      <div class="when">출시 ~30일</div>
-      <h3>🛡 Phase B — 운영 안정성</h3>
-      <p>Sentry + GA4 → 인증 E2E + PDF 회귀 CI → WCAG 자동 감사</p>
-    </div>
-    <div class="flow-card">
-      <div class="when">출시 ~3개월</div>
-      <h3>🌱 Phase C — 가치 확장</h3>
-      <p>인쇄소 자동 발주 · 카카오 알림톡 · 사진 자동 보정</p>
-    </div>
-    <div class="flow-card">
-      <div class="when">분기별</div>
-      <h3>🔧 Phase D — 인프라</h3>
-      <p>Next.js 15/16 · Fabric 7 · Redis 큐 · CMYK</p>
+    <div class="count">
+      <span>오픈까지</span>
+      <span class="big">D-3</span>
+      <div class="stats">
+        <span><b>9/11</b>오픈 전 개발 완료</span>
+        <span><b>0/9</b>대표님 항목 완료 기록</span>
+      </div>
     </div>
   </div>
-</section>
 
-<!-- 최근 작업 로그 -->
-<section>
-  <h2>최근 작업 로그 (2026-05-13 ~ 14)</h2>
-  <ul class="bare">
-    <li><span class="pill purple">perf</span> &nbsp; <code>1125d5f</code> requireUser() 0 RTT + preconnect — 페이지 진입 50-400ms 단축</li>
-    <li><span class="pill muted">docs</span> &nbsp; <code>e5f3f86</code> 운영 DB 마이그레이션 0023 + 0024 적용 완료 반영</li>
-    <li><span class="pill muted">docs</span> &nbsp; <code>46cd6e6</code> 2026-05-14 작업 반영 — 홈 리뉴얼 + 내비 최적화 + PDF 패치</li>
-    <li><span class="pill purple">perf</span> &nbsp; <code>ca42720</code> 정적 페이지 prerender + SW SWR + mypage 단일 RPC</li>
-    <li><span class="pill purple">perf</span> &nbsp; <code>abc29ab</code> 페이지 이동 체감 속도 개선 — staleTimes + loading 8개 + RTT 감소</li>
-    <li><span class="pill info">style</span> &nbsp; <code>38f4c82</code> 카드 사진을 앨범·사진집·포토북·화보집 주제로 교체</li>
-    <li><span class="pill info">feat</span> &nbsp; <code>0e1a677</code> 특징·사이즈 섹션을 사진 배경 카드 + fade-up 리디자인</li>
-    <li><span class="pill block">fix</span> &nbsp; <code>9f1e6af</code> PDF borderRadius + shadow 동시 적용 시 그림자 클립 해소</li>
-    <li><span class="pill muted">docs</span> &nbsp; <code>0e427f0</code> 2026-05-13 작업 반영 — M16 마무리 + M8 QA 보강</li>
-    <li><span class="pill info">test</span> &nbsp; <code>5e67ac4</code> M8 QA — PDF 런타임 검증 + Playwright E2E + Lighthouse</li>
-    <li><span class="pill info">feat</span> &nbsp; <code>eadbb29</code> 포인트 내역 전용 페이지 + 주문 상세 후기 작성 연동</li>
-  </ul>
-</section>
-
-<footer>
-  <div>
-    100p Books · 자동 생성 대시보드 (단일 HTML, 외부 의존 0)
+  <div class="progress" role="group" aria-label="진척 요약">
+    <div class="bar-row"><span>제품 마일스톤</span><div class="bar"><i class="f-ok" style="width:100%"></i></div><span class="val">14 / 14</span></div>
+    <div class="bar-row"><span>오픈 전 개발 (D1~D11)</span><div class="bar"><i class="f-ok" style="width:81.8%"></i><i class="f-wait" style="width:18.2%"></i></div><span class="val">9 / 11</span></div>
+    <div class="bar-row"><span>대표님 액션 (O1~O9)</span><div class="bar"><i class="f-crit" style="width:44.4%"></i><i class="f-wait" style="width:22.2%"></i></div><span class="val">0 / 9</span></div>
+    <div class="bar-row"><span>NO-GO 조건 해소</span><div class="bar"><i class="f-ok" style="width:25%"></i><i class="f-crit" style="width:75%"></i></div><span class="val">1 / 4</span></div>
+    <div class="legend">
+      <span style="--sw: var(--ok)">완료</span>
+      <span style="--sw: var(--wait)">대기·선택 항목</span>
+      <span style="--sw: var(--crit)">오픈에 영향 (대표님 액션은 O1·O2·O3·O4)</span>
+    </div>
   </div>
-  <div>
-    원본 문서: <a href="STATUS.md">STATUS.md</a> · <a href="PROGRESS.md">PROGRESS.md</a> · <a href="README.md">README.md</a> · <a href="SECURITY.md">SECURITY.md</a>
-  </div>
-</footer>
 
+  <div class="risk" role="note">
+    <h3>지금 가장 큰 위험: 라이브 키(O1)와 실물 인쇄(O2)</h3>
+    <ul>
+      <li>토스 라이브 키 반영 마감(11/16)이 지났습니다. 오늘 예정된 실결제 소액 1건 → 전액 환불 리허설을 시작할 수 없습니다.</li>
+      <li>실물 테스트 인쇄물 수령 예정일이 내일(11/18)입니다. 발주 기록이 없습니다. 인쇄물 없이 오픈하면 인쇄 품질과 책등 두께를 검증하지 못한 채 실제 주문을 받게 됩니다.</li>
+      <li>21×21 책등 값이 여전히 1.000mm/쪽입니다(다른 사이즈 0.090). 그대로 두면 21×21 표지 PDF의 책등이 실제보다 훨씬 두껍게 나옵니다.</li>
+    </ul>
+  </div>
+
+  <div class="decide" role="note">
+    <h3>대표님 판단이 필요한 것</h3>
+    <ol>
+      <li><strong>토스 라이브 심사 진행 상황.</strong> 키가 11/18까지 나오지 않으면 오픈일을 미루거나 범위를 바꿔야 합니다.</li>
+      <li><strong>실물 테스트 인쇄 발주 여부.</strong> 인쇄물 없이 오픈할지 결정이 필요합니다.</li>
+      <li><strong>21×21 책등 사양.</strong> 인쇄소 사양을 받는 즉시 <code>/admin/book-sizes</code>에서 고쳐 주세요. 사양을 알려 주시면 CTO가 값을 넣고 표지 PDF로 확인합니다.</li>
+    </ol>
+  </div>
+
+  <section id="done">
+    <h2>지금까지 완료된 작업</h2>
+    <p class="muted">2026년 5월 첫 커밋부터 오늘까지의 개발 이력입니다. 아래 항목은 모두 운영(100pbooks.vercel.app)에 반영돼 있습니다.</p>
+    <div class="facts">
+      <div class="fact"><b>14/14</b>제품 마일스톤 완료</div>
+      <div class="fact"><b>33</b>DB 마이그레이션 운영 적용</div>
+      <div class="fact"><b>1,709</b>유닛 테스트 통과 (108파일)</div>
+      <div class="fact"><b>0</b>운영 의존성 보안 경고</div>
+    </div>
+    <ol class="history">
+      <li>
+        <div class="when">5월<small>제품 기반</small></div>
+        <div class="what">
+          <h3>포토북 제작·주문 전 과정 구축</h3>
+          <ul>
+            <li>사진 업로드(HEIC 변환·썸네일·정렬 4종), 자동 레이아웃(폴라로이드·콜라주), 내지·표지 편집기, 3D 미리보기</li>
+            <li>300dpi 인쇄용 PDF(재단 여백 2mm), 토스 결제, 주문 상태 관리, 관리자 콘솔(사이즈·리소스·주문·송장 엑셀)</li>
+            <li>공유·선물·할인 코드·추천·후기·출석·포인트, 카카오 로그인 코드, 모바일 앱처럼 쓰기(PWA)</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="when">6~8월<small>품질·런치 감사</small></div>
+        <div class="what">
+          <h3>인쇄 백엔드 연동과 품질 기준선</h3>
+          <ul>
+            <li>Storige 인쇄 백엔드로 PDF 저장·검증·다운로드 일원화, 100쪽 대용량 PDF 최적화</li>
+            <li>전수 감사 46건, UI/UX 감사 118건 처리. 자동 검증(CI 3종), PDF 회귀 테스트, 접근성 WCAG 2.1 AA 위반 0</li>
+            <li>편집기 저장이 되지 않던 회귀 수정, 런치 감사 차단 8건 처리, 보안 마이그레이션 0031, 관리자 "서비스 런치 체크" 카드</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="when">9월<small>보안·무결성</small></div>
+        <div class="what">
+          <h3>결제·편집 무결성과 플랫폼 전환</h3>
+          <ul>
+            <li>포인트·할인 이중 사용 차단(0033), 클라이언트 직접 쓰기·권한 상승 차단(0032), 되돌리기 후 빈 문서 저장 결함(피해 0건 확인)</li>
+            <li>Next.js 16·React 19 전환, 편집 엔진 fabric 7 전환, 코드 품질 경고 0</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="when">10월<small>운영 안정화</small></div>
+        <div class="what">
+          <h3>운영 점검과 PDF 메모리</h3>
+          <ul>
+            <li>운영 브라우저 점검으로 UI 결함 9건 수정, 결제 대기 주문 복구 도구("결제 상태 확인·수렴")</li>
+            <li>PDF 생성 메모리 약 45% 절감(사진을 자리 크기로 줄여 읽기), Storige 검증 결과 표시 결함 2건 수정</li>
+            <li>의존성 업데이트 통합(Next 16.4, zod 4 등), 운영 보안 경고 0 달성</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="when">11/6~10<small>UX·대표님 결정</small></div>
+        <div class="what">
+          <h3>UI/UX 전수 점검과 구조 개선</h3>
+          <ul>
+            <li>전수 점검 즉시 수정 50여 건, 구조 개선 P1~P7·P9(하단 결제바, 결제 전 확인 카드, 업로드 직후 자동 생성, 편집기 전용 화면, 사본 보내기)</li>
+            <li>출석 30일 만근제, 관리자 출석 채우기, 탈퇴 최종 안내, 푸터 사업자 정보·고객센터 번호</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="when">11/10~17<small>오픈 전 개발</small></div>
+        <div class="what">
+          <h3>오픈 계획 D1~D11 중 9건 완료</h3>
+          <p class="muted" style="font-size:14px">11/16 코드 프리즈 이후 D10·D11 두 건이 들어갔습니다. 각각 인쇄물 결함 수정과 대표님 결정 반영이라 예외로 처리했고, 둘 다 운영에서 직접 확인했습니다.</p>
+        </div>
+      </li>
+    </ol>
+    <div class="table-box">
+      <table>
+        <thead><tr><th>#</th><th>항목</th><th>결과</th><th>상태</th></tr></thead>
+        <tbody>
+          <tr><td class="id">D1</td><td>주문 금액 표기 통일 (주문서·결제 완료·주문 상세)</td><td>PR #50, 운영 반영</td><td><span class="pill ok">완료</span></td></tr>
+          <tr><td class="id">D2</td><td>오류 코드를 사용자 문구와 이동 버튼으로 안내</td><td>PR #50, 운영 반영</td><td><span class="pill ok">완료</span></td></tr>
+          <tr><td class="id">D3</td><td>관리자 대용량 리소스 업로드 (4.5MB 한도 해소)</td><td>운영에서 6.8MB 배경 업로드 성공</td><td><span class="pill ok">완료</span></td></tr>
+          <tr><td class="id">D4</td><td>다중 선택 중 자동저장 좌표 버그</td><td>실제 버그였음, 수정</td><td><span class="pill ok">완료</span></td></tr>
+          <tr><td class="id">D5</td><td>PDF 생성 메모리·시간 (운영 서버 환경 실측)</td><td>최대 메모리 한도의 87% 이내, 48MP 렌더 132초 → 66~74초</td><td><span class="pill ok">완료</span></td></tr>
+          <tr><td class="id">D6</td><td>내 포토북 카드 썸네일 · 표지 중복 저장</td><td>PR #50, 운영 반영</td><td><span class="pill ok">완료</span></td></tr>
+          <tr><td class="id">D9</td><td>사전 점검 반영: 사이즈 가격(21×21 25,000원), 법적 고지, 검색 노출, 업로드 잔여 파일 정리</td><td>PR #51, 11-12 운영 확인</td><td><span class="pill ok">완료</span></td></tr>
+          <tr><td class="id">D10</td><td><strong>안내 문구("여기에 글을 입력하세요" 등)가 인쇄물에 찍히던 결함</strong> — 11-16 Chrome 전수 점검에서 발견</td><td>PR #53, 운영 확인 (뒷표지 안내 문구가 빈 값으로 저장됨)</td><td><span class="pill ok">완료</span></td></tr>
+          <tr><td class="id">D11</td><td><strong>책등 제목 세로쓰기 기본 + 입력칸</strong> — 고객이 입력한 제목만 인쇄, 비우면 인쇄 안 됨 (11-17 대표님 결정)</td><td>PR #54·#55, 운영 확인 (입력 시 서버 렌더에 세로 제목, 비우면 책등 공백)</td><td><span class="pill ok">완료</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">검증 기준선(11-17): typecheck 0 · lint 0 · 유닛 테스트 108파일 1,709 통과 · PDF 회귀 5건 통과 · PR과 main CI 전부 통과.</p>
+  </section>
+
+  <section id="planned">
+    <h2>개발 예정</h2>
+    <p class="muted">오픈 전에 남은 것은 확인 작업뿐입니다. 기능 개발은 오픈 후(11/23~)로 미뤘고, 코드 프리즈 중에는 버그 수정만 합니다.</p>
+    <div class="roadmap">
+      <div class="lane now">
+        <span class="tag">오픈 전 · ~11/19</span>
+        <h3>확인 4건</h3>
+        <ul>
+          <li><strong>D7 카카오 로그인 왕복 1회</strong><span>O6(카카오 콘솔 설정) 후 진행 <span class="pill wait">O6 대기</span></span></li>
+          <li><strong>D8 iOS Safari 실기기</strong><span>핀치·더블탭, 실기기 필요 <span class="pill wait">11/18</span></span></li>
+          <li><strong>인증·편집 통합 테스트</strong><span><code>e2e:auth</code>, GO/NO-GO 당일 1회 <span class="pill wait">11/18</span></span></li>
+          <li><strong>리소스 버킷 제한 · 잔여 파일 정리 첫 실행</strong><span>대표님 승인 후 실행 <span class="pill none">승인 대기</span></span></li>
+        </ul>
+      </div>
+      <div class="lane">
+        <span class="tag">오픈 직후 · 11/23~</span>
+        <h3>고객·운영 기능</h3>
+        <ul>
+          <li><strong>환불 신청 · 배송 타임라인 (P8)</strong><span>지금은 고객센터 전화 안내까지만 있습니다</span></li>
+          <li><strong>화면 이동 중에도 업로드 계속 (P13)</strong><span>지금은 이탈 확인으로 막고 있습니다</span></li>
+          <li><strong>인쇄 자동 발주 1단계</strong><span>계획서 작성됨, 실물 인쇄(O2)로 수동 절차 확정 후</span></li>
+          <li><strong>편집기 개선 6건</strong><span>11-16 점검분: 표지 사진 자리 채우기, 템플릿 미리보기, 하단 시트 중복 등</span></li>
+          <li><strong>관리자 정비 (P11·P14)</strong><span>목록 화면 공용화, 콘텐츠 변경 기록, 할인 코드 사용 내역</span></li>
+          <li><strong>의존성 업데이트 7종</strong><span>Dependabot PR #52, 프리즈 중 보류</span></li>
+        </ul>
+      </div>
+      <div class="lane">
+        <span class="tag">이후 · 조건부</span>
+        <h3>인프라·품질</h3>
+        <ul>
+          <li><strong>PDF 글자 엔진 업데이트 (canvas 1.1)</strong><span>글자 획이 얇아집니다. 실물 인쇄로 굵기 확인 후 결정</span></li>
+          <li><strong>에러 추적 서비스</strong><span>11-06 대표님 결정으로 보류</span></li>
+          <li><strong>테스트용 DB 분리</strong><span>인증 테스트를 자동 검증에 넣기 위한 선행 조건</span></li>
+          <li><strong>선물 수신자 이메일 마스킹</strong><span>개인정보 처리방침의 파기 조항과 맞추기</span></li>
+          <li><strong>PDF 생성 시간 재측정</strong><span>48MP 사진을 여러 번 쓰는 극단 사례, 오픈 차단 아님</span></li>
+          <li><strong>Tailwind 4 전환</strong><span>스타일 도구 메이저 업데이트</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="owner">
+    <h2>대표님 액션 (11-17 운영 화면 확인 포함)</h2>
+    <p class="muted">"기록 없음"은 런북에 완료 표시가 없다는 뜻입니다. 이미 진행하셨다면 알려 주세요. "꺼짐"은 11-17 관리자 런치 체크 카드에서 확인한 상태입니다.</p>
+    <div class="table-box">
+      <table>
+        <thead><tr><th>#</th><th>항목</th><th>마감</th><th>상태</th></tr></thead>
+        <tbody>
+          <tr class="hot"><td class="id">O1</td><td><strong>토스 라이브 키 반영 + 웹훅 라이브 등록</strong></td><td class="date">키 11/16</td><td><span class="pill crit">기록 없음 · 마감 지남</span></td></tr>
+          <tr class="hot"><td class="id">O2</td><td><strong>실물 테스트 인쇄</strong> (인쇄소 발주 절차 확정 겸)</td><td class="date">수령 11/18</td><td><span class="pill crit">기록 없음</span></td></tr>
+          <tr class="hot"><td class="id">신규</td><td><strong>21×21 책등 값 수정</strong> (1.000 → 인쇄소 사양)</td><td class="date">11/18 전</td><td><span class="pill crit">미수정 (11-17 확인)</span></td></tr>
+          <tr><td class="id">O4</td><td>Upstash Redis 연결 (5분, 스팸·남용 방어)</td><td class="date">11/12</td><td><span class="pill crit">꺼짐</span></td></tr>
+          <tr><td class="id">O3</td><td>Resend 키 + 발신 도메인 DNS (SPF·DKIM·DMARC)</td><td class="date">11/14</td><td><span class="pill crit">꺼짐 · 메일 6종 큐 대기</span></td></tr>
+          <tr><td class="id">O5</td><td>운영 도메인 결정 (vercel.app 유지 또는 자체 도메인)</td><td class="date">11/12</td><td><span class="pill none">기록 없음</span></td></tr>
+          <tr><td class="id">O7</td><td>Storige 통지 붙여넣기 1회</td><td class="date">11/13</td><td><span class="pill none">기록 없음</span></td></tr>
+          <tr><td class="id">O6</td><td>카카오 콘솔 설정 (선택)</td><td class="date">11/14</td><td><span class="pill wait">꺼짐 · 버튼 숨김이라 오픈 가능</span></td></tr>
+          <tr><td class="id">O9</td><td>클립아트·배경 리소스 업로드 (선택)</td><td class="date">11/17</td><td><span class="pill wait">0건 · 편집기 탭이 비어 보임</span></td></tr>
+          <tr><td class="id">O8</td><td>랜딩 수치·후기 문구 최종 확인 (오픈부터 실제 고객에게 노출)</td><td class="date">11/19</td><td><span class="pill none">기록 없음</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">참고: 관리자 런치 체크 카드는 "차단 항목 없음 — 서비스 가능"으로 나옵니다. 이 카드는 키가 <em>있는지</em>만 보고 라이브 키인지는 구분하지 못하므로 O1 완료를 뜻하지 않습니다.</p>
+  </section>
+
+  <section id="gate">
+    <h2>11/18 GO/NO-GO 전에 확인할 것</h2>
+    <div class="checks">
+      <div class="check"><span class="who">대표님 · Supabase</span><h3>비밀번호 재설정 메일</h3><p>Custom SMTP가 설정돼 있지 않으면 고객이 재설정 메일을 받지 못할 수 있습니다. Resend(O3)와 함께 처리하시면 됩니다.</p></div>
+      <div class="check"><span class="who">대표님 · 토스</span><h3>로그인 전 가격 노출</h3><p>지금은 주문서에서만 가격이 보입니다. 카드사 심사 기준인지 토스 심사 담당자에게 확인해 주세요.</p></div>
+      <div class="check"><span class="who">법률 검토</span><h3>개인정보·약관</h3><p>국외 이전 고지, Storige를 위탁과 제3자 제공 중 무엇으로 볼지, 약관 시행일 11/20과 30일 전 공지 조항의 관계.</p></div>
+      <div class="check"><span class="who">법률 검토</span><h3>푸터·가입 연령</h3><p>푸터에 전자우편·호스팅 제공자 표기가 필요한지, 만 14세 미만 가입 확인이 필요한지.</p></div>
+      <div class="check"><span class="who">대표님 · 라이브 전환 전</span><h3>테스트 결제 주문 정리</h3><p>11-17 기준 주문 0건이라 정리할 대상은 없습니다. 전환 직전에 한 번 더 확인합니다.</p></div>
+      <div class="check"><span class="who">대표님 · 오픈 주말</span><h3>주말 고객 응대 담당</h3><p>11/20(금) 오픈 직후 주말 동안 문의를 받을 담당자를 정해 주세요.</p></div>
+      <div class="check"><span class="who">대표님 · 공유 미리보기</span><h3>대표 이미지(OG)</h3><p>링크를 공유했을 때 보이는 미리보기 이미지가 아직 없습니다. 이미지를 주시면 넣습니다.</p></div>
+      <div class="check"><span class="who">CTO · 승인 후 실행</span><h3>리소스 버킷 제한 · 잔여 파일 정리</h3><p>버킷 크기·형식 제한을 적용하고 폰트 업로드를 1회 확인합니다. 잔여 파일 정리는 삭제 없이 대상만 먼저 확인합니다.</p></div>
+    </div>
+  </section>
+
+  <section id="week">
+    <h2>오픈 주간 일정</h2>
+    <div class="table-box" style="padding: 4px 20px;">
+      <ol class="timeline">
+        <li class="past"><span class="d">11/16 월</span><span>코드 프리즈, 전체 회귀 테스트, Chrome 전수 점검 → D10 발견·수정</span></li>
+        <li class="today"><span class="d">11/17 화 · 오늘</span><span>D11 책등 제목 반영·운영 확인 완료. <strong>라이브 키가 들어오면</strong> 실결제 소액 1건 → 관리자 "전액 환불" 리허설(런북 13단계)</span></li>
+        <li class="gate"><span class="d">11/18 수</span><span>실물 인쇄물 확인, iOS 실기기, 인증·편집 통합 테스트(<code>e2e:auth</code>) → <strong>GO/NO-GO 판정</strong></span></li>
+        <li><span class="d">11/19 목</span><span>운영 리허설(제작 시작 → 송장 → 배송 완료, 환불), 랜딩 문구 최종, 런치 체크 카드 차단 0건 확인</span></li>
+        <li class="launch"><span class="d">11/20 금</span><span>오픈. 배포 동결, 하루 3회 운영 점검</span></li>
+      </ol>
+    </div>
+    <div class="nogo">
+      <h3>NO-GO 조건 (하나라도 해당하면 오픈 연기)</h3>
+      <ul>
+        <li>라이브 키 미반영 — <span class="pill crit">현재 해당</span></li>
+        <li>실결제·환불 리허설 실패 또는 미실시 — <span class="pill crit">현재 미실시</span></li>
+        <li>실물 인쇄 품질 불합격 또는 미확인 — <span class="pill crit">현재 미확인</span></li>
+        <li>관리자 런치 체크 카드에 차단 항목 존재 — <span class="pill ok">현재 0건</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="checklists">
+    <h2>실행 체크리스트</h2>
+    <details>
+      <summary>토스 라이브 전환 13단계 (O1)</summary>
+      <p class="lead">코드에는 테스트·라이브 분기가 없어 환경변수 2개만 바꾸면 됩니다. 클라이언트 키는 빌드 때 들어가므로 교체 후 재배포가 꼭 필요합니다. 결제위젯 키가 아니라 "API 개별 연동 키"를 씁니다.</p>
+      <ol>
+        <li>토스 개발자센터에서 라이브 심사가 끝난 100p Books 전용 상점을 선택합니다. 다른 서비스용 상점은 쓰지 않습니다.</li>
+        <li>그 상점의 "API 개별 연동 키"에서 라이브 클라이언트 키와 시크릿 키를 확인합니다. 두 키가 같은 상점 것인지 확인합니다.</li>
+        <li>전환 전에 관리자 주문 목록에서 테스트 키로 결제된 주문을 확인하고, 있으면 "전액 환불"로 정리합니다.</li>
+        <li>Vercel 환경변수에서 Production만 <code>TOSS_SECRET_KEY</code>와 <code>NEXT_PUBLIC_TOSS_CLIENT_KEY</code>를 라이브 값으로 바꿉니다. Preview 정책은 따로 정합니다.</li>
+        <li>Production을 재배포합니다(가능하면 빌드 캐시 없이).</li>
+        <li>관리자 런치 체크 카드의 토스 항목이 "정상"인지 봅니다. 이 카드는 키가 있는지만 보므로 라이브 여부는 다음 단계에서 확인합니다.</li>
+        <li>토스 웹훅 라이브 탭에 <code>https://&lt;운영 도메인&gt;/api/payments/webhook</code>을 등록합니다.</li>
+        <li>관리자에서 1회용 정액 할인 코드를 만들어 결제 금액을 1,000원 안팎으로 맞춥니다.</li>
+        <li>실제 카드로 소액 결제합니다. 결제창에 테스트 표시가 없는지, iOS Safari 1건을 포함해 브라우저 오류가 없는지 봅니다.</li>
+        <li>결제 완료 화면, 마이페이지 "결제 완료", 토스 상점관리자 결제내역을 확인합니다. 이 주문은 인쇄소로 발주하지 않습니다.</li>
+        <li>관리자 주문 상세에서 "전액 환불"을 실행합니다("환불 상태만 기록"이 아님).</li>
+        <li>주문이 "환불됨", 토스가 "취소 완료"인지, 할인 코드 사용 횟수가 복원됐는지 확인합니다.</li>
+        <li>할인 코드를 비활성화하고 결과를 런북 O1 행에 기록합니다.</li>
+      </ol>
+    </details>
+    <details>
+      <summary>도메인 전환 12단계 (O5에서 자체 도메인을 고를 경우)</summary>
+      <p class="lead">코드 변경은 없습니다. <code>NEXT_PUBLIC_APP_URL</code> 교체와 재배포로 끝납니다. 도메인을 바꾸면 기존 로그인은 이어지지 않아 고객이 한 번 다시 로그인합니다.</p>
+      <ol>
+        <li>Vercel에 새 도메인을 추가하고 DNS를 등록한 뒤 인증서 발급을 확인합니다.</li>
+        <li>새 도메인을 Primary로 지정하고, 기존 vercel.app 주소를 새 도메인으로 308 리다이렉트합니다(발송된 공유·선물 링크 보존).</li>
+        <li><code>NEXT_PUBLIC_APP_URL</code>을 새 도메인으로 바꿉니다(끝 슬래시 없이).</li>
+        <li>Production을 재배포합니다.</li>
+        <li>Supabase 인증 설정에서 Site URL을 바꾸고, Redirect URLs에 새 도메인 콜백을 추가합니다(전환 기간 기존 항목 유지).</li>
+        <li>Supabase에 Custom SMTP가 설정돼 있는지 확인합니다(비밀번호 재설정 메일).</li>
+        <li>카카오 개발자 콘솔의 Web 사이트 도메인에 새 도메인을 추가합니다.</li>
+        <li>토스 웹훅(라이브) URL을 새 도메인으로 바꾸고, 심사 신청서의 사이트 URL과 맞춥니다.</li>
+        <li>Resend에 새 도메인을 추가하고 SPF·DKIM·DMARC를 등록한 뒤 발신 주소를 설정하고 재배포합니다.</li>
+        <li>robots.txt, sitemap.xml, 홈의 대표 주소가 새 도메인인지 확인합니다.</li>
+        <li>시크릿 창에서 이메일 로그인, 비밀번호 재설정, 카카오 로그인, 선물 링크 복사를 차례로 확인합니다.</li>
+        <li>개발 문서와 설정 파일의 도메인 갱신을 CTO에게 요청합니다.</li>
+      </ol>
+    </details>
+  </section>
+
+  <footer>
+    정본은 저장소의 <code>docs/LAUNCH-RUNBOOK.md</code> "서비스 오픈 계획" 절과 <code>STATUS.md</code> §0-35~§0-39입니다. 이 페이지는 2026-11-17 기준 요약이며, 대표님 항목의 상태는 런북 기록과 11-17 관리자 화면 확인을 따릅니다.
+  </footer>
+</div>
 </body>
 </html>
