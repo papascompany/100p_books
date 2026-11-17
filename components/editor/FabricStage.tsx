@@ -41,7 +41,11 @@ import {
   type TaggedFabricObject,
 } from "@/lib/fabric/serialize";
 import { attachSnapGuides } from "@/lib/fabric/snap";
-import { attachTextPlaceholderBehavior } from "@/lib/fabric/text-placeholder-behavior";
+import {
+  attachTextPlaceholderBehavior,
+  readPlaceholderAwareText,
+  writePlaceholderAwareText,
+} from "@/lib/fabric/text-placeholder-behavior";
 import {
   createSnapshot,
   createSnapshotWithout,
@@ -132,6 +136,13 @@ export interface FabricStageHandle {
   bringForward: () => void;
   sendBackward: () => void;
   getSelection: () => TaggedFabricObject | null;
+  /**
+   * 세로쓰기 텍스트(책등 제목) 읽기 — 없으면 null, 안내 문구만 떠 있으면 "".
+   * 책등 박스는 한 글자 폭이라 캔버스 클릭 편집이 어려워 입력칸으로 편집한다.
+   */
+  getVerticalText: () => string | null;
+  /** 세로쓰기 텍스트 쓰기 — 비우면 안내 문구로(인쇄 안 함). 대상이 없으면 false. */
+  setVerticalText: (text: string) => boolean;
   /** 외부 클립보드 등이 사용. */
   getDpi: () => number;
   getBleedMm: () => number;
@@ -1162,6 +1173,37 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
       canvas.requestRenderAll();
     }, []);
 
+    const findVerticalText = useCallback((): TaggedFabricObject | null => {
+      const c = canvasRef.current;
+      if (!c) return null;
+      return (
+        (c.getObjects() as TaggedFabricObject[]).find(
+          (o) => o.oType === "text" && o.verticalText === true,
+        ) ?? null
+      );
+    }, []);
+
+    const getVerticalText = useCallback((): string | null => {
+      const t = findVerticalText();
+      return t ? readPlaceholderAwareText(t) : null;
+    }, [findVerticalText]);
+
+    const setVerticalText = useCallback(
+      (text: string): boolean => {
+        const c = canvasRef.current;
+        const t = findVerticalText();
+        if (!c || !t || readOnlyRef.current) return false;
+        if (readPlaceholderAwareText(t) === text) return true;
+        writePlaceholderAwareText(t, text);
+        t.setCoords();
+        c.requestRenderAll();
+        // 히스토리·자동저장 경로(object:modified → push → onModified)를 그대로 탄다.
+        c.fire("object:modified", { target: t });
+        return true;
+      },
+      [findVerticalText],
+    );
+
     const getSelection = useCallback((): TaggedFabricObject | null => {
       const canvas = canvasRef.current;
       if (!canvas) return null;
@@ -1206,6 +1248,8 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         bringForward,
         sendBackward,
         getSelection,
+        getVerticalText,
+        setVerticalText,
         getDpi: () => dpi,
         getBleedMm: () => bleedMm,
         refreshPhotoUrls,
@@ -1230,6 +1274,8 @@ const FabricStage = forwardRef<FabricStageHandle, FabricStageProps>(
         bringForward,
         sendBackward,
         getSelection,
+        getVerticalText,
+        setVerticalText,
         refreshPhotoUrls,
         dpi,
         bleedMm,

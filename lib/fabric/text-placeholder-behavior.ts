@@ -8,6 +8,7 @@
  *  - 편집 시작: 안내 문구가 떠 있으면 전체 선택 → 첫 입력이 문구를 덮어쓴다.
  *  - 입력: 문구와 달라지면 안내 상태를 끝내고 실제 글자색으로 바꾼다.
  *  - 편집 종료: 글을 모두 지웠으면 안내 문구를 다시 흐리게 보여 준다.
+ *  - 객체 추가: 세로쓰기 박스는 좌우 크기 핸들을 숨긴다.
  * 저장 시 변환은 serialize.ts savedTextAndFill 이 맡는다.
  *
  * 서버 import 금지 — 클라이언트 전용(fabric).
@@ -60,6 +61,50 @@ export function onPlaceholderEditingExited(target: unknown): boolean {
   return true;
 }
 
+/** 저장될 실제 텍스트 — 안내 문구가 떠 있으면 "". */
+export function readPlaceholderAwareText(target: unknown): string {
+  const t = target as PlaceholderTextbox | null | undefined;
+  if (!t) return "";
+  if (t.placeholderActive && t.text === t.placeholderText) return "";
+  return t.text ?? "";
+}
+
+/**
+ * 입력칸 등 캔버스 밖에서 텍스트를 바꾼다. 비우면 안내 문구로 돌아간다(저장 시 빈 텍스트).
+ * 렌더·히스토리 통지는 호출자가 한다.
+ */
+export function writePlaceholderAwareText(target: unknown, text: string): void {
+  const t = target as PlaceholderTextbox | null | undefined;
+  if (!t) return;
+  if (text.trim().length === 0 && typeof t.placeholderText === "string") {
+    if (typeof t.fill === "string" && t.fill !== PLACEHOLDER_TEXT_FILL) {
+      t.realFill = t.fill;
+    }
+    t.set({ text: t.placeholderText, fill: PLACEHOLDER_TEXT_FILL });
+    t.placeholderActive = true;
+    return;
+  }
+  const showingPlaceholder = t.placeholderActive || t.fill === PLACEHOLDER_TEXT_FILL;
+  t.set(
+    showingPlaceholder
+      ? { text, fill: t.realFill ?? DEFAULT_TEXT_FILL }
+      : { text },
+  );
+  t.placeholderActive = false;
+}
+
+/**
+ * 세로쓰기 박스는 한 글자 폭이라 좌우 크기 핸들이 박스 전체를 덮어 클릭을 가로챈다
+ * (2026-11-17 운영 실측). 폭을 바꾸면 세로쓰기가 깨지므로 좌우 핸들을 숨긴다.
+ */
+export function applyVerticalTextControls(target: unknown): void {
+  const t = target as (TaggedFabricObject & {
+    setControlsVisibility?: (v: Record<string, boolean>) => void;
+  }) | null | undefined;
+  if (!t || !t.verticalText || typeof t.setControlsVisibility !== "function") return;
+  t.setControlsVisibility({ ml: false, mr: false });
+}
+
 /** 캔버스에 연결. 반환 함수로 해제. */
 export function attachTextPlaceholderBehavior(canvas: fabric.Canvas): () => void {
   const entered = (e: { target: unknown }) => onPlaceholderEditingEntered(e.target);
@@ -69,12 +114,16 @@ export function attachTextPlaceholderBehavior(canvas: fabric.Canvas): () => void
   const exited = (e: { target: unknown }) => {
     if (onPlaceholderEditingExited(e.target)) canvas.requestRenderAll();
   };
+  // 로드·undo 복원으로 추가되는 객체마다 세로쓰기 핸들 규칙을 다시 적용한다(컨트롤 설정은 스냅샷에 없음).
+  const added = (e: { target: unknown }) => applyVerticalTextControls(e.target);
   canvas.on("text:editing:entered", entered);
   canvas.on("text:changed", changed);
   canvas.on("text:editing:exited", exited);
+  canvas.on("object:added", added);
   return () => {
     canvas.off("text:editing:entered", entered);
     canvas.off("text:changed", changed);
     canvas.off("text:editing:exited", exited);
+    canvas.off("object:added", added);
   };
 }
