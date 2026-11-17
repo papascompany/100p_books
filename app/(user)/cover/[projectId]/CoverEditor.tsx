@@ -65,6 +65,8 @@ import {
 import { isPageDoc, PAGEDOC_VERSION, type PageDoc } from "@/lib/layout/types";
 import { cn } from "@/lib/utils";
 
+import SpineTitleField from "./SpineTitleField";
+
 export interface ProjectPhotoSummary {
   id: string;
   filename: string | null;
@@ -188,6 +190,21 @@ export default function CoverEditor({
     if (lockGateRef.current.locked) return;
     editSeqRef.current += 1;
     setDirty(true);
+  }, []);
+  /** 책등 제목 입력칸 값 — 캔버스의 세로쓰기 텍스트와 맞춘다(null = 책등 텍스트 없음). */
+  const [spineTitle, setSpineTitle] = useState<string | null>(null);
+  const syncSpineTitle = useCallback(() => {
+    setSpineTitle(stageRef.current?.getVerticalText() ?? null);
+  }, []);
+  /** 캔버스 편집·undo/redo — 저장 대상 표시 + 책등 제목 입력칸 동기화. */
+  const handleStageModified = useCallback(() => {
+    markDirty();
+    syncSpineTitle();
+  }, [markDirty, syncSpineTitle]);
+  /** 책등 제목 입력 — 바로 책등에 세로로 반영(비우면 안내 문구, 인쇄 안 함). */
+  const changeSpineTitle = useCallback((text: string) => {
+    setSpineTitle(text);
+    stageRef.current?.setVerticalText(text);
   }, []);
   /** 저장·최신본 확인 직렬화 — 동시에 나간 저장이 서로를 409 로 만들지 않게. */
   const saveQueueRef = useRef(createSerialQueue());
@@ -331,9 +348,10 @@ export default function CoverEditor({
         saveBlockRef.current = null;
         setError(null);
       }
+      syncSpineTitle();
       return true;
     },
-    [],
+    [syncSpineTitle],
   );
 
   /**
@@ -842,8 +860,9 @@ export default function CoverEditor({
     if (!obj) return;
     await stageRef.current?.pasteLayoutObject(obj, {});
     markDirty();
+    syncSpineTitle();
     toast({ description: "책등 텍스트를 추가했어요.", variant: "success" });
-  }, [dims, markDirty, spineTooNarrow, title]);
+  }, [dims, markDirty, spineTooNarrow, syncSpineTitle, title]);
 
   // 3D 미리보기 열기 — 자동저장 후 서버 PNG 미리보기 요청
   const openPreview = useCallback(async () => {
@@ -1103,6 +1122,12 @@ export default function CoverEditor({
             mobile={false}
           />
           <div className="space-y-2 rounded-lg border bg-white/40 p-2">
+            <SpineTitleField
+              value={spineTitle}
+              placeholder={title}
+              disabled={readOnly}
+              onChange={changeSpineTitle}
+            />
             <Button
               variant="outline"
               size="sm"
@@ -1241,7 +1266,7 @@ export default function CoverEditor({
                   isMobile && coverSegment !== "all" ? SEGMENT_MAX_FIT_SCALE : 1
                 }
                 onSelectionChange={setSelection}
-                onModified={markDirty}
+                onModified={handleStageModified}
                 onHistoryChange={(u, r) => {
                   setCanUndo(u);
                   setCanRedo(r);
@@ -1332,6 +1357,12 @@ export default function CoverEditor({
               >
                 텍스트 추가
               </Button>
+              <SpineTitleField
+                value={spineTitle}
+                placeholder={title}
+                disabled={readOnly}
+                onChange={changeSpineTitle}
+              />
               <Button
                 variant="outline"
                 className="min-h-11 w-full"
