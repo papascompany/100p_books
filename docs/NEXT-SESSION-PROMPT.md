@@ -2,7 +2,12 @@
 
 > 새 세션 첫 메시지로 아래 **■ 붙여넣기 블록**을 그대로 붙여넣으세요.
 >
-> 갱신 **2026-11-07** · 운영 코드 기준 **PR #41**(`a633623` — 출석 30일 만근제·관리자 출석 채우기·탈퇴 최종 안내 모달·고객센터 표시, STATUS §0-30, 마이그레이션 없음) — 그 아래 PR #39(Dependabot #38 next 16.4.3 등, §0-28) · PR #36(canvas 1.0.13·vite 8, §0-27)· `af92b5a`(PR #30, §0-26)· `0804742`(Storige 검증 결과 중첩 파싱, §0-24)· `44edc75`(prod audit 0)·`5aed177`(next 16.4·zod 4·zustand 5·vitest 5·jsdom 30, §0-23).
+> 갱신 **2026-11-17** · main `0843b2d` · 운영 코드 기준 **PR #55**(`92639c5` 책등 제목 입력칸, STATUS §0-39) — 그 아래 PR #54(`219d404` 책등 세로쓰기, §0-39) · PR #53(`48da471` 안내 문구 인쇄 결함, §0-38) · PR #51(`6d4b458` 오픈 사전 점검 반영, §0-37) · PR #50(`16b2ac7` D1~D6, §0-36) · PR #48·#49(Dependabot, §0-34) · PR #47·#44·#43(UI/UX, §0-31~§0-33). 마이그레이션 변화 없음.
+>   CI 3잡 green · Vercel prod success. **열린 PR 1**(#52 Dependabot minor/patch 7종 — 오픈 주간이라 미처리, 오픈 후 검토) · 원격 브랜치 main + dependabot 1 · 로컬 미병합 브랜치 0(11-17 정리).
+> 🚀 **서비스 오픈 2026-11-20(금)** · 11-18(수) GO/NO-GO · 11-16 코드 프리즈 이후는 **버그 수정만**(STATUS §0-35, 런북 "서비스 오픈 계획"). 11-17 기준 개발 D1~D6·D9~D11 완료, D7(카카오 왕복, O6 대기)·D8(iOS 실기기) 남음. 오너 항목 O1(토스 라이브 키)·O2(실물 인쇄)·21×21 책등 값 미완 — 런북이 정본.
+>
+> ── 아래는 2026-11-07 이전 기록(참고용) ──
+> 운영 코드 기준이었던 **PR #41**(`a633623` — 출석 30일 만근제·관리자 출석 채우기·탈퇴 최종 안내 모달·고객센터 표시, STATUS §0-30, 마이그레이션 없음) — 그 아래 PR #39(Dependabot #38 next 16.4.3 등, §0-28) · PR #36(canvas 1.0.13·vite 8, §0-27)· `af92b5a`(PR #30, §0-26)· `0804742`(Storige 검증 결과 중첩 파싱, §0-24)· `44edc75`(prod audit 0)·`5aed177`(next 16.4·zod 4·zustand 5·vitest 5·jsdom 30, §0-23).
 >   CI 3잡 green · Vercel prod success.
 > **열린 PR 0** · 원격 브랜치는 main 만(11-07 `claude/owner-decisions-attendance-1106` 삭제 — 트리가 a633623 과 동일함 확인 후)(이전: #33·#35 는 #36 으로 병합, #32 tailwind-merge 3·#34 tailwindcss 4 는 Tailwind 4 전환 전까지 보류로 닫고 ignore 추가).
 > ✅ `pnpm audit --prod` **0**(11-05 재확인) — GHSA-g3hv-75wg-m249 범위가 `minimatch >=7.0.0 <11.0.1` 로 좁아져 `exceljs > archiver` 경유 3.1.5·5.1.9 는 해당 없음(STATUS §0-29).
@@ -26,6 +31,26 @@
 너는 100p_books(**Next.js 16 App Router + React 19** + TypeScript + Supabase + TossPayments +
 Storige 인쇄 백엔드 + @napi-rs/canvas·pdf-lib PDF 렌더러)의 시니어 개발/CTO다.
 모든 사고과정과 대화는 한글로.
+
+### 0-A. 최신 상태 (2026-11-17) — 아래 본문의 옛 날짜 상태보다 이 절이 우선
+
+- **오픈 주간이다.** 2026-11-20(금) 오픈, 11-18(수) GO/NO-GO. 11-16 코드 프리즈 이후는 **버그 수정만** 한다.
+  기능 추가·리팩터·의존성 변경은 사용자가 명시적으로 지시할 때만(오픈 후로 미루는 것이 기본).
+- `main` = `origin/main` = `0843b2d`(docs). 운영 코드는 PR #55 `92639c5`. 열린 PR 은 Dependabot #52 하나(오픈 후 검토, 프리즈 중 병합 금지).
+  로컬 미병합 브랜치 0. 기본 저장소 `/Users/yohan/Developer/claude/100p_books` 의 main 도 `0843b2d` 로 맞춰 둠.
+- 기준선(11-17, darwin): typecheck 0 · lint 0/0 · vitest **108 파일 1,709 passed / 1 skip** · test:pdf 5 · build 성공 · PR·main CI 3잡 통과.
+  (루트 `CLAUDE.md` 의 "89파일 1,495" 는 옛 값이다.)
+- 최근 반영(재작업 금지):
+  · §0-38 PR #53 — 텍스트 안내 문구(placeholder)가 인쇄물에 찍히던 결함. 저장 규약은 `text: ""` + `placeholder`, 편집기는 흐린 색으로만 표시,
+    PDF 는 `text` 만 그린다. 옛 문서는 `normalizePlaceholderText`(`lib/layout/text-placeholder.ts`)가 고친다.
+  · §0-39 PR #54·#55 — 책등 제목은 **세로쓰기 기본**, 고객이 입력한 제목만 인쇄하고 비우면 인쇄하지 않는다(11-17 오너 결정).
+    표지 편집기의 "책등 제목 (세로쓰기)" 입력칸(`app/(user)/cover/[projectId]/SpineTitleField.tsx`)으로 고친다. 운영에서 입력/비움 모두 서버 렌더로 확인.
+- 11-17 운영 상태(관리자 런치 체크): "차단 항목 없음"(키 **존재**만 판정 — 라이브 키 여부는 모름). Resend·Upstash·카카오 꺼짐, 클립아트·배경 0건,
+  **21×21 책등 1.000mm/쪽**(다른 사이즈 0.090 — 인쇄소 사양 대기), 운영 주문 0건.
+- 남은 오너 항목·일정·NO-GO 조건은 `docs/LAUNCH-RUNBOOK.md` "서비스 오픈 계획" 절이 정본. 공유용 현황 페이지(11-17판)는 사용자가 갖고 있다.
+- 이 세션은 **운영 Supabase·운영 결제와 맞닿아 있다**: 실결제 버튼 금지(라이브 리허설은 사용자가 직접), 관리자 주문·회원·메일 작업·감사 로그 화면은
+  고객 개인정보라 캡처·열람하지 않는다, 비밀번호·키는 입력하지 않는다(사용자가 로그인), worktree 에서 `vercel --prod` 금지.
+- 커밋 끝 `Co-Authored-By` 와 PR 본문 끝 문구는 **현재 세션 하네스가 주는 attribution 지시**를 따른다(모델이 바뀌면 이름도 바뀐다).
 
 ### 0. 작업 환경
 
@@ -423,7 +448,23 @@ PLAYWRIGHT_BASE_URL=https://100pbooks.vercel.app pnpm e2e:auth
     ③ `gh` 는 `GH_TOKEN` 무효로 실패한다 — PR·CI 조회·병합은 GitHub MCP 도구로.
     ④ audit 결과가 이전 기록과 다르면 lockfile 보다 **권고 범위 변경**을 먼저 의심하고 npm bulk advisory(`/-/npm/v1/security/advisories/bulk`)로 현재 범위를 조회할 것.
 
+--- 아래는 2026-11-11~17 로컬 세션에서 확인한 함정이다 ---
+
+39. **텍스트 안내 문구는 `text` 에 넣지 않는다**(STATUS §0-38). 저장은 `text: ""` + `placeholder` 이고, 편집기만 `PLACEHOLDER_TEXT_FILL` 흐린 색으로 문구를 보여 준다.
+    PDF·미리보기는 `text` 만 그린다. 새 템플릿·기본 텍스트를 만들 때 안내 문구를 `text` 에 넣으면 그대로 인쇄된다.
+    옛 문서의 흐린 색 + 알려진 문구는 `normalizePlaceholderText` 가 빈 값으로 고친다 — 새 안내 문구를 추가하면 `KNOWN_PLACEHOLDER_TEXTS` 에도 넣을 것.
+40. **Fabric undo 는 스냅샷에서 객체를 새로 만든다** — 객체에 단 리스너·컨트롤 설정은 undo/redo 뒤 사라진다. 유지할 상태는 `FABRIC_EXTRA_PROPS` 에 넣고,
+    동작은 캔버스 이벤트(`text:editing:*`·`object:added` 등)로 붙인다(`lib/fabric/text-placeholder-behavior.ts` 방식).
+41. **세로쓰기 텍스트 박스 폭은 `verticalTextWidthMm(pt) = pt·25.4/72·1.05` 로 세 렌더러가 같아야 한다**(§0-39). 편집기 fabric `splitByGrapheme` ·
+    PDF `wrapByGrapheme` · 미리보기 CSS `break-all` 이 한 글자씩 끊는다. 1.15em 이면 숫자 두 개가 한 줄에 붙는다("20/26", 11-17 실측).
+    폭이 약 5px 라 fabric 좌우 크기 핸들이 박스를 덮어 클릭을 가로챈다 — 그래서 `ml`/`mr` 를 숨기고 입력칸으로 편집한다. 옛 회전(±90°) 책등 텍스트는 `normalizeCoverSpineText` 가 변환한다.
+42. **GitHub runner 의 apt 미러 DNS 장애로 e2e/a11y 잡이 앱과 무관하게 실패할 수 있다**(§0-37, PR #51 에서 4회). 로그가 `apt-get`·DNS 오류면
+    코드 수정 없이 해당 잡만 재실행하고, 재실행 시도 번호를 기록할 것.
+
 ### 4. 남은 운영 액션 — 정본은 LAUNCH-RUNBOOK.md
+
+> **11-17 기준은 위 §0-A 와 런북 "서비스 오픈 계획" 절**이다(O1 토스 라이브 키·O2 실물 인쇄·21×21 책등 값이 크리티컬, D7·D8 남음).
+> 아래 문단은 11-07 시점 기록이다.
 
 **런치 차단 항목 없음**(`/admin` 런치 체크 "차단 항목 없음 — 서비스 가능", 2026-10-05 확인). 서비스 경로
 (이메일 가입 → 업로드 → 편집 → 주문 → 결제 → 인쇄검증)는 전부 동작한다.
@@ -487,8 +528,8 @@ PDF 측정 x64 확정(collage-6 17p·48MP 원본).
 - **CI 결과 확인은 한 번씩 조회한다**(폴링·대기 루프 금지). 연속 push 로 앞 커밋의 CI 가 `cancelled` 되면 그 위 커밋의 CI 통과로 함께 검증된 것이다.
 
 **첫 작업**: ① `git status -sb && git log --oneline -5 && git fetch` 로 실제 상태와 GitHub 연결을 확인하고
-(main HEAD 가 `0804742` 이후인지, `ahead` 면 미푸시 docs 커밋, 열린 PR 은 `gh pr list`), ② `ListAgents` 로 자기 세션 이름을 확인해 Storige·북모아 세션에
-교대 통지(위 "세션 교대" 규칙)를 보낸 뒤, ③ `STATUS.md`(§0-25~§0-14)와 이 문서를 읽어 현재 상태를
+(main HEAD 가 `0843b2d` 이후인지, `ahead` 면 미푸시 docs 커밋, 열린 PR 은 `gh pr list` — #52 Dependabot 외에 있으면 보고), ② `ListAgents` 로 자기 세션 이름을 확인해 Storige·북모아 세션에
+교대 통지(위 "세션 교대" 규칙)를 보낸 뒤, ③ 이 문서 §0-A, `STATUS.md`(§0-39 → §0-35 순), `docs/LAUNCH-RUNBOOK.md` "서비스 오픈 계획" 절을 읽어 현재 상태를
 한 문단으로 보고한다. **추천 목록을 만들지 말고**, 사용자가 시킨 작업을 바로 진행한다.
 운영 액션이 궁금하면 [LAUNCH-RUNBOOK.md](LAUNCH-RUNBOOK.md) 를 가리키는 것으로 끝.
 
