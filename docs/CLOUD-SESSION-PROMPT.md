@@ -48,7 +48,7 @@
 | 사용자 전역 지침 | `~/.claude/CLAUDE.md` | 없을 수 있다 — 이 블록의 규칙이 그 대신이다 |
 | `pnpm e2e:auth` | 운영 Supabase 로 실행(수동) | **실행 금지.** service_role 키가 없어 skip 되며, 있어도 운영에 계정을 만든다 |
 | PDF 회귀 | darwin-arm64 해시 비교 | 대부분 **linux-x64**(CI 와 같은 키)로 비교된다. baseline 에 없는 플랫폼이면 "신규 플랫폼 기록" 후 **그냥 통과**하니 로그를 볼 것(함정 2). darwin 해시는 클라우드에서 갱신 불가 — 렌더 변경 시 사용자에게 로컬 갱신을 요청 |
-| Node | 24.x | 컨테이너 기본은 **Node 22**. 최신 v24 를 받아 `/opt/node24` 에 설치하고 PATH 앞에 둔다(함정 38). 컨테이너 한정이라 세션마다 다시 |
+| Node | 26.x | 컨테이너 기본은 **Node 22**. 최신 v26 을 받아 `/opt/node26` 에 설치하고 PATH 앞에 둔다(함정 38). 컨테이너 한정이라 세션마다 다시 |
 | e2e·a11y | 로컬 chromium | `pnpm exec playwright install chromium` 다운로드는 11-05 실측 **차단**(`code=1`). `/opt/pw-browsers` 사전 설치본을 요구 리비전 이름으로 scratch 에 심볼릭 링크 + `PLAYWRIGHT_BROWSERS_PATH`(함정 38). 그래도 안 되면 CI 결과로 대체하고 그렇게 보고 |
 | Storige 계약 원문 | `/Users/yohan/Developer/Bookmoa Storige editor/storige/docs/CONTRACT_FREEZE.md` | **접근 불가.** 계약 근거는 `lib/storige/client.ts` 주석·`docs/STORIGE-NOTICE.md`·STATUS §0-17 로만 판단 |
 | 세션 간 교신 | ListAgents/SendMessage 로 Storige·북모아 세션과 교신 | **클라우드 세션은 다른 세션에 답장할 수 없다.** 세션 교대 통지(NEXT-SESSION-PROMPT §5 "세션 교대")를 시도하지 말 것. Storige 통지는 로컬 세션이 계속 받는다. 사용자가 통지 내용을 붙여넣으면 아래 §3 순서로 판정만 하고, 회신은 사용자에게 문구로 넘긴다 |
