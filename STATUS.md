@@ -8,10 +8,10 @@
 > 이중 사용 창, `0032`(클라이언트 직접 쓰기 봉쇄)로 `profiles.role` 권한 상승 표면이 닫혔다.
 > postcheck 요약(`docs/sql/0032-postcheck-summary.sql`) 운영 실행 **27행 전부 `pass=true`**(2026-09-28).
 >
-> 최종 업데이트: 2026-11-10
+> 최종 업데이트: 2026-11-24
 > 배포 URL: https://100pbooks.vercel.app
 > 레포지토리: https://github.com/papascompany/100p_books
-> 운영 빌드: PR #39(2026-11-03, Dependabot #38 — next 16.4.3 등 8종 · postcss-selector-parser 6.1.5, §0-28) · PR #36(2026-10-27, Dependabot #33·#35 통합 — canvas 1.0.13 PDF baseline 갱신 · vite 8, §0-27) · `af92b5a`(2026-10-24, Dependabot #28·#29 통합 PR #30 — next 16.4.2 · react 19.3.1 · canvas 1.0.11 · vite 7.3.7 · axe 4.14 a11y 수정, §0-26) · `0804742`(2026-10-13, Storige 검증 결과 중첩 파싱·STORAGE_NOT_S3 — §0-24) · `44edc75`(2026-10-12, tailwindcss-animate devDeps 이동 → prod audit 0) · `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
+> 운영 빌드: `4a16c26`(2026-11-24, Dependabot PR #58 — next 16.4.6 · supabase-js 2.119.2 · resend 6.39 등 14종, §0-40) · `753487b`·`3a4338f`(2026-11-23, **Node 26 LTS 전환** PR #56·#57, §0-40) · PR #39(2026-11-03, Dependabot #38 — next 16.4.3 등 8종 · postcss-selector-parser 6.1.5, §0-28) · PR #36(2026-10-27, Dependabot #33·#35 통합 — canvas 1.0.13 PDF baseline 갱신 · vite 8, §0-27) · `af92b5a`(2026-10-24, Dependabot #28·#29 통합 PR #30 — next 16.4.2 · react 19.3.1 · canvas 1.0.11 · vite 7.3.7 · axe 4.14 a11y 수정, §0-26) · `0804742`(2026-10-13, Storige 검증 결과 중첩 파싱·STORAGE_NOT_S3 — §0-24) · `44edc75`(2026-10-12, tailwindcss-animate devDeps 이동 → prod audit 0) · `5aed177`(2026-10-12) — **Dependabot 5건 통합: next 16.4.0 · zod 4 · zustand 5 · vitest 5 · jsdom 30(§0-23)** · 그 아래 코드 기준 `2360f3c`(2026-10-05) — PDF 사진 슬롯 축소 디코드(§0-20) · 결제 키 pending 수렴 도구(§0-19) · SW 캐시 오염 수정 v4 · UI 결함 5건 + 에디터 레이아웃 후속 4건(§0-18) · Storige DELETE 404 구분(§0-17) · fabric 7.4.0(§0-16) · supabase-js 2.117/ssr 0.12 · canvas 1.0.9 · react-hooks 경고 0(§0-15) ·
 > `proxy.ts` · 보안 overrides(**prod audit 0**) · Next 16.3.6. 그 이전 `2d403ae` = Next 16 전환(§0-12)+리뷰 후속(§0-13).
 > 그 직전 `34a5897` 까지 2026-09-17~21 보안·결제·편집 무결성 작업 전량 반영(§0-11).
 > **미병합 브랜치 없음.**
@@ -25,7 +25,21 @@
 
 ---
 
-## 🆕 최근 작업 (2026-09-17 ~ 11-17)
+## 🆕 최근 작업 (2026-09-17 ~ 11-24)
+
+### 0-40. Node 26 LTS 전환 + Dependabot #58 + 저장소 정리 (2026-11-18~24) — PR #56 `3a4338f`·#57 `753487b`·#58 `4a16c26` squash 병합(각 PR CI 3잡·Vercel 통과, main CI `45175029055`·`45366241445` 3잡 success, 운영 배포 Ready) · 마이그레이션 없음
+
+- **STATUS.html(11-18 `ccbd217`)**: 공유용 오픈 현황 페이지(11-17판)를 저장소 `STATUS.html` 에 독립 HTML 로 반영(외부 폰트 링크 제거, 외부 의존 0).
+- **Node 26 전환(PR #56)**: Node 26 이 Active LTS(2026-10-28~, EOL 2029-04-30), 24 는 Maintenance(EOL 2028-04-30). `package.json` `engines.node` `26.x` · `.nvmrc` 26 · CI 3잡 `node-version: 26` · `docs/CLOUD-SESSION-PROMPT.md` Node 행(컨테이너 기본 22 → v26 을 `/opt/node26` 에 설치). 런타임만 바꾸고 코드 변경 없음.
+  - Vercel 은 `engines.node` 가 프로젝트 설정보다 우선한다 — 운영 빌드 로그 "Node.js Version 26.x will be used" 확인(버전 변경으로 첫 빌드는 캐시 무효화). **대시보드 Node 설정은 아직 24.x** 라 빌드마다 경고가 남는다(동작 영향 없음, 오너가 26.x 로 바꾸면 사라짐).
+  - 처음 로컬 커밋만 engines 를 바꿔 CI(24)·운영(26) 불일치가 생길 뻔해 CI 변경을 묶은 PR 로 전환.
+- **@types/node ^26(PR #57)**: 24.19.2 → 26.6.6(undici-types 7.24.6 → 8.9.0). typecheck 0.
+- **Dependabot #58(14종, 마이너·패치)**: next·eslint-config-next 16.4.6 · @supabase/supabase-js 2.119.2(storage URL 경계 검증) · @upstash/ratelimit 2.2.1 · @vercel/functions 3.11.3 · lucide-react 1.77 · resend 6.39 · tailwind-merge 2.6.2 · @playwright/test 1.65.1 · autoprefixer 10.7 · jsdom 31.0.1 · postcss 8.5.33 · vite 8.3.8 · vitest 5.1.1. #57 병합 후 Dependabot 이 main 위로 자동 rebase(@types/node 26 유지).
+  - lockfile 재생성으로 minimatch 가 11.0.9 로 올라가 **Dependabot 경고 #111(GHSA-g3hv-75wg-m249, dev·medium) 자동 해소**(11-24 18:33). 열린 Dependabot 경고 0 · `pnpm audit` 0.
+- **운영 확인(11-24)**: 배포 `100pbooks-463ngvb5u`(Ready, alias 100pbooks.vercel.app) · `/` 200 · `/api/health` 200. **결제·서버 PDF 생성·메일 발송은 실제 호출 안 함** — supabase-js·resend 가 바뀌었으니 첫 실주문·메일에서 확인. 문제 시 Vercel 직전 배포(`5r41mzoo1` = Node 26 + #57, 그 전은 Node 24)로 롤백.
+- **저장소 정리**: 원격 브랜치 `chore/node-26`·`chore/types-node-26` 삭제(Dependabot 브랜치는 자동 삭제) → 원격 main 만. 워크트리 `.claude/worktrees/cloud-session-migration-status-12a101`(브랜치 `c33059a`, main 미반영 커밋·미커밋 변경 0) 삭제 — 다르게 남은 QA 스크린샷 6장만 `tmp/qa/editor-integrity/from-worktree-12a101/`(gitignored)로 이동. 이 워크트리를 `eslint .` 가 검사해 로컬 `pnpm lint` 가 44,058건 실패하던 문제 해소.
+- 검증(로컬 darwin, Node 26.13.1, main `4a16c26`, lockfile 기준 재설치 후): typecheck 0 · lint 0/0 · vitest 108파일 1,709 / 1 skip. test:pdf·e2e·a11y·build 는 main CI 3잡 통과로 확인.
+- **기록 없음**: 11-18 GO/NO-GO 결과·11-20 오픈 여부는 이 세션에서 확인하지 못해 저장소에 없다 — 오너 확인 후 런북에 기록할 것.
 
 ### 0-39. 책등 제목 세로쓰기 기본 + 입력칸 (2026-11-17) — PR #54 `219d404`·PR #55 `92639c5` rebase 병합(각 PR CI 3잡·Vercel, main CI `43988117570`·`43989692568`·운영 배포 통과) · 마이그레이션 없음
 
@@ -1250,6 +1264,7 @@ e2e 12 · a11y 25 · build 성공. `e2e:auth` 5 는 `bacadc1`·`34a5897` 두 배
 - ~~로컬 `pnpm lint/build` 불가(node v22 ↔ comment-json 크래시)~~ → **2026-08-03 실측 해소**.
   (2026-09-11 시점 기록) 당시 node v22.22.2 에서 `pnpm lint`·`pnpm build` 모두 정상 동작했다(0 경고 / 빌드 성공).
   이후 런타임은 **Node 24.x 로 고정**됐다 — `.nvmrc`·`engines`·CI 모두 24.
+  → **2026-11-23 Node 26.x 로 전환**(§0-40) — `.nvmrc`·`engines`·CI 모두 26.
   push 전 로컬 전체 검증이 가능하며, GitHub Actions CI 가 clean 환경에서 한 번 더 검증한다.
 - Supabase MCP/CLI는 운영 조직 멤버가 아니다 → 운영 DB `vprifnztvlduhpuwgdau` 직접 SQL 불가 → 대시보드 수동.
 - Supabase 계정 대응(2026-09-24 실측): 운영 프로젝트 `vprifnztvlduhpuwgdau`(100p_books)는 조직 `rpgjrckrcrxhrbrimjbv` 소속.
@@ -1372,8 +1387,9 @@ Core Web Vitals(LCP/CLS/INP-대용 TBT) 모두 통과. Speed Index/TTI 는 클�
 ## 현재 배포 상태
 
 ```
-운영 빌드:  main = 2360f3c (2026-10-05) — 미병합 브랜치·worktree 없음 (§0-14~§0-20)
-Next.js:  16.3.6 / React 19.3.0  (2026-09-21 16.x 전환 — §0-12). pnpm audit --prod 0건
+운영 빌드:  main = 4a16c26 (2026-11-24) — 미병합 브랜치·worktree 없음, 원격 브랜치 main 만 (§0-40)
+Node.js:  26.x (2026-11-23 전환 — engines 26.x · .nvmrc 26 · CI 26, §0-40. Vercel 대시보드 설정은 24.x 로 남아 경고만)
+Next.js:  16.4.6 / React 19.3.1  (2026-09-21 16.x 전환 — §0-12). pnpm audit 0건(11-24)
           proxy.ts(Node.js 런타임, 2026-09-28 전환) · Turbopack 빌드
 Supabase: vprifnztvlduhpuwgdau (Seoul / papascompany org)
 Vercel:   yohans-projects-de3234df / icn1 리전
@@ -1483,34 +1499,39 @@ Router Cache:   staleTimes { dynamic: 30s, static: 180s }
 
 ## 기술 스택 버전 현황
 
-> 버전은 `package.json` 의 선언 범위와 설치된 실제 버전이다(2026-10-05 확인, **2026-10-12 Dependabot 통합 반영 — §0-23**).
+> 버전은 `package.json` 의 선언 범위와 설치된 실제 버전이다(2026-10-05 확인, 2026-10-12 Dependabot 통합 반영 — §0-23, **2026-11-24 main `4a16c26` 기준 갱신 — §0-40**). 비고의 날짜는 각 변경 시점이다.
+
+| 런타임 | 값 | 비고 |
+|---|---|---|
+| Node.js | `engines.node` `26.x` · `.nvmrc` 26 · CI 26 | 2026-11-23 24 → 26(§0-40). `@types/node` `^26.6.6` |
+| pnpm | `packageManager` 9.0.0 | - |
 
 | 패키지 | 선언 | 잠금(실제) | 비고 |
 |---|---|---|---|
-| next | `16.4.0` | 16.4.0 | 16.x 전환 2026-09-21(§0-12), 16.4.0 2026-10-12(§0-23). **`pnpm audit --prod` 0건**(10-12 `44edc75`, §0-23) |
-| react / react-dom | `19.3.0` | 19.3.0 | 고정. `@types/react(-dom)` 19.3.0 도 `pnpm.overrides` 로 고정 |
-| eslint | `9.39.5` | 9.39.5 | **flat config**(`eslint.config.mjs`). `eslint-config-next` 16.4.0. `pnpm lint` = `eslint .`(저장소 전체, 0/0) · react-hooks v7 4규칙 error(§0-15) |
+| next | `16.4.6` | 16.4.6 | 16.x 전환 2026-09-21(§0-12), 16.4.6 2026-11-24(§0-40). **`pnpm audit` 0건**(11-24) |
+| react / react-dom | `19.3.1` | 19.3.1 | 고정. `@types/react(-dom)` 19.3.0 도 `pnpm.overrides` 로 고정 |
+| eslint | `9.39.5` | 9.39.5 | **flat config**(`eslint.config.mjs`). `eslint-config-next` 16.4.6. `pnpm lint` = `eslint .`(저장소 전체, 0/0) · react-hooks v7 4규칙 error(§0-15) |
 | fabric | `^7.4.0` | **7.4.0** | 2026-09-30 전환(§0-16). 6.9.x·7.x 의 `toJSON()` 은 **인자를 무시한다** — 스냅샷은 `lib/fabric/snapshot.ts`(QA-1). 제스처 판정은 `targetAt()` |
-| @napi-rs/canvas | `^1.0.10` | 1.0.10 | 2026-09-28(§0-15) — 그림자가 Chromium 과 일치(인쇄 그림자 짙어짐은 의도) |
-| @supabase/ssr · supabase-js | `0.12.7` · `2.117.3` | 0.12.7 · 2.117.3 | 2026-09-28(§0-15) — 쿠키 `getAll/setAll`, Database 타입 GenericSchema 화. 카카오 OAuth 실제 왕복 1회 확인은 오너 대기 |
+| @napi-rs/canvas | `1.0.13` | 1.0.13 | 1.0.13 2026-10-27(§0-27, 1.1 보류 §0-34) · 2026-09-28(§0-15) — 그림자가 Chromium 과 일치(인쇄 그림자 짙어짐은 의도) |
+| @supabase/ssr · supabase-js | `0.12.7` · `2.119.2` | 0.12.7 · 2.119.2 | 2026-09-28(§0-15) — 쿠키 `getAll/setAll`, Database 타입 GenericSchema 화. 카카오 OAuth 실제 왕복 1회 확인은 오너 대기 |
 | pdf-lib | `^1.17.1` | 1.17.1 | 최신 |
-| resend | `^6.32.1` | 6.32.1 | - |
-| zod | `^4.6.5` | 4.6.6 | 2026-10-12 v4(§0-23). `z.record` 는 키 스키마 필수 · `.uuid()` 는 RFC 엄격 |
-| zustand | `^5.0.15` | 5.0.15 | 2026-10-12 v5. selector 는 참조 안정 값만 반환할 것(새 객체 반환 시 무한 렌더 — `useShallow`) |
+| resend | `^6.39.0` | 6.39.0 | 2026-11-24(§0-40) — 실제 발송 미확인 |
+| zod | `^4.6.7` | 4.6.7 | 2026-10-12 v4(§0-23). `z.record` 는 키 스키마 필수 · `.uuid()` 는 RFC 엄격 |
+| zustand | `^5.1.0` | 5.1.0 | 2026-10-12 v5. selector 는 참조 안정 값만 반환할 것(새 객체 반환 시 무한 렌더 — `useShallow`) |
 | sharp | `^0.35.5` | **0.35.5** | 2026-09-17 승격(SEC-1). vips 8.18.6 / heif 1.23.2. `next` 가 따로 끌어오지 않는다 |
-| vitest · jsdom | `^5.0.3` · `^30.1.1` | 5.0.3 · 30.1.2 | 2026-10-12(§0-23). vitest 5 는 clearMocks 기본 true · vite ^6.4\|\|^7\|\|^8 필수 peer. jsdom 30 은 Node ^24.15 |
+| vitest · jsdom | `^5.1.1` · `^31.0.1` | 5.1.1 · 31.0.1 | 2026-10-12 v5·v30(§0-23), 11-24 5.1.1·31.0.1(§0-40). vitest 5 는 clearMocks 기본 true · vite ^6.4\|\|^7\|\|^8 필수 peer. jsdom 30 은 Node ^24.15 |
 | typescript | `^6.0.3` | 6.0.3 | 2026-09-28 |
 
 ---
 
 ## 테스트 현황
 
-**기준선 — `main`(`2360f3c`) 에서 2026-10-05 실측** (타입·린트·유닛. 나머지 행은 표기된 시점 값)
+**기준선 — `main`(`4a16c26`) 에서 2026-11-24 실측** (타입·린트·유닛은 로컬 darwin·Node 26, test:pdf·e2e·a11y·build 는 main CI `45366241445` 통과. 개수가 적힌 나머지 행은 표기된 시점 값)
 
 ```
 타입·린트:                pnpm typecheck 0 에러 · pnpm lint(eslint .) 0 error / 0 warning
                           (react-hooks v7 4규칙 error — §0-15)
-유닛 테스트 (Vitest):     89 파일 / 1,490 passed / 1 skipped
+유닛 테스트 (Vitest):     108 파일 / 1,709 passed / 1 skipped
 E2E 스모크 (Playwright):  desktop+mobile chromium 12/12 통과
 접근성 (axe-core):       WCAG 2.1 AA 25 passed / 1 skipped · 위반 0
 PDF 회귀(페이지수+해시): pnpm test:pdf — 5 케이스(photo-downscale 추가, 2026-10-05) / 약 500ms
